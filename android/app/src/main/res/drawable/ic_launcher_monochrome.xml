@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Monochrome silhouette of TRACE wave for themed icons -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M14,62 C26,46 36,40 46,50 C56,60 62,38 74,46 C84,52 92,40 98,36 L98,72 L14,72 Z"
+        android:fillAlpha="0.95" />
+    <path
+        android:pathData="M16,60 C28,46 38,42 48,50 C58,58 64,40 76,48 C86,54 94,42 100,38"
+        android:strokeWidth="4"
+        android:strokeColor="#FFFFFF"
+        android:strokeLineCap="round"
+        android:fillColor="#00000000" />
+</vector>
