@@ -15,7 +15,7 @@
 </p>
 
 <p align="center">
-  · <code>🇷🇺 русский UI</code>
+  <code>🇷🇺 русский UI</code>
   · <code>данные на устройстве</code>
   · <code>не диагностика</code>
 </p>
