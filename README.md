@@ -15,7 +15,6 @@
 </p>
 
 <p align="center">
-  <code>📦 com.moodlife.app</code>
   · <code>🇷🇺 русский UI</code>
   · <code>данные на устройстве</code>
   · <code>не диагностика</code>
