@@ -7,7 +7,6 @@
 </p>
 
 <p align="center">
-  <img alt="Platform" src="https://img.shields.io/badge/Android-11%2B-3DDC84?style=for-the-badge&logo=android&logoColor=white" />
   <img alt="minSdk" src="https://img.shields.io/badge/minSdk-30-1976D2?style=for-the-badge" />
   <img alt="targetSdk" src="https://img.shields.io/badge/targetSdk-35-1565C0?style=for-the-badge" />
   <img alt="Kotlin" src="https://img.shields.io/badge/Kotlin-Compose-7F52FF?style=for-the-badge&logo=kotlin&logoColor=white" />
