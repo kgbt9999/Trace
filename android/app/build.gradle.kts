@@ -1,4 +1,4 @@
-﻿plugins {
+plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
     id("org.jetbrains.kotlin.plugin.compose")
@@ -28,10 +28,6 @@ android {
         testInstrumentationRunner = "com.moodlife.app.HiltTestRunner"
         vectorDrawables { useSupportLibrary = true }
 
-        // Real phones only — fewer ABIs = less RAM during dex/native merge
-        ndk {
-            abiFilters += listOf("armeabi-v7a", "arm64-v8a")
-        }
     }
 
     lint {
@@ -51,7 +47,17 @@ android {
     }
 
     buildTypes {
+        debug {
+            // Emulator (x86_64) + phones — avoids INSTALL_FAILED_NO_MATCHING_ABIS
+            ndk {
+                abiFilters += listOf("armeabi-v7a", "arm64-v8a", "x86_64")
+            }
+        }
         release {
+            // Real phones only — fewer ABIs = less RAM during release merge
+            ndk {
+                abiFilters += listOf("armeabi-v7a", "arm64-v8a")
+            }
             signingConfig = if (keystorePropertiesFile.exists()) {
                 signingConfigs.getByName("release")
             } else {

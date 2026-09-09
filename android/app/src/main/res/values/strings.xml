@@ -241,6 +241,8 @@
     <string name="settings_export_formats">Отчёт за текущий месяц:</string>
     <string name="settings_export_ok">Файл готов к отправке</string>
     <string name="backup_share_subject">Trace — резервная копия</string>
+    <string name="export_share_subject">Trace — отчёт</string>
+    <string name="export_share_chooser">Отправить отчёт Trace</string>
     <string name="export_pdf_title">Trace — отчёт за %1$s %2$d</string>
     <string name="export_html_title">Trace — отчёт для врача, %1$s</string>
     <string name="export_html_heading">Trace — сводка для специалиста</string>

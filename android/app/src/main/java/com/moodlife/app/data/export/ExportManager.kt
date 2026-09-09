@@ -30,20 +30,20 @@ class ExportManager @Inject constructor(
     }
 
     suspend fun exportMonth(year: Int, month: Int, format: ExportFormat): ExportFile {
-        val label = "${year}-${month + 1}"
+        val label = "${year}-${(month + 1).toString().padStart(2, '0')}"
         return when (format) {
             ExportFormat.JSON -> exportFullBackup()
             ExportFormat.HTML -> {
                 val html = doctorExportGenerator.generateHtml(year, month)
-                writeCache("moodlife-report-$label.html", html, ExportFormat.HTML)
+                writeCache("Trace-report-$label.html", html, ExportFormat.HTML)
             }
             ExportFormat.CSV -> {
                 val entries = doctorExportGenerator.loadMonthEntries(year, month)
-                writeCache("moodlife-report-$label.csv", buildCsv(entries), ExportFormat.CSV)
+                writeCache("Trace-report-$label.csv", buildCsv(entries), ExportFormat.CSV)
             }
             ExportFormat.PDF -> {
                 val entries = doctorExportGenerator.loadMonthEntries(year, month)
-                val file = File(context.cacheDir, "moodlife-report-$label.pdf")
+                val file = File(context.cacheDir, "Trace-report-$label.pdf")
                 PdfReportRenderer(context).write(file, year, month, entries)
                 ExportFile(file, ExportFormat.PDF)
             }
@@ -52,9 +52,14 @@ class ExportManager @Inject constructor(
 
     fun shareIntent(file: File, format: ExportFormat): Intent {
         val uri = FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", file)
+        val subject = context.getString(R.string.export_share_subject)
         return Intent(Intent.ACTION_SEND).apply {
             type = format.mime
             putExtra(Intent.EXTRA_STREAM, uri)
+            putExtra(Intent.EXTRA_SUBJECT, subject)
+            putExtra(Intent.EXTRA_TITLE, subject)
+            putExtra(Intent.EXTRA_TEXT, subject)
+            clipData = android.content.ClipData.newUri(context.contentResolver, subject, uri)
             addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
         }
     }

@@ -1,4 +1,4 @@
-﻿# Сборка и раздача APK (Trace)
+# Сборка и раздача APK (Trace)
 
 ## Debug vs Release
 

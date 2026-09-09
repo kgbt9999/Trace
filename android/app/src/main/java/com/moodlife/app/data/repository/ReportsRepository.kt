@@ -40,7 +40,9 @@ class ReportsRepository @Inject constructor(
     }
 
     suspend fun buildInsights(): Triple<Boolean, List<InsightsEngine.InsightCard>, String> {
-        val entries = moodEntryDao.observeAll().first()
+        val today = DateUtils.todayIso()
+        val from = DateUtils.addDays(today, -365L)
+        val entries = moodEntryDao.observeRange(from, today).first()
         val days = entries.map {
             InsightsEngine.InsightInputDay(
                 it.date, it.depressed, it.elevated, it.anxious, it.irritable,
@@ -56,8 +58,13 @@ class ForecastRepository @Inject constructor(
     private val moodEntryDao: MoodEntryDao,
     private val periodRepository: PeriodRepository,
 ) {
-    fun observeForecast(dayCount: Int = 7): Flow<List<ForecastEngine.ForecastDay>> =
-        combine(moodEntryDao.observeAll(), periodRepository.observe()) { entries, period ->
+    fun observeForecast(dayCount: Int = 7): Flow<List<ForecastEngine.ForecastDay>> {
+        val today = DateUtils.todayIso()
+        val from = DateUtils.addDays(today, -180)
+        return combine(
+            moodEntryDao.observeRange(from, today),
+            periodRepository.observe(),
+        ) { entries, period ->
             val setting = period ?: defaultPeriod()
             val hist = ForecastEngine.buildHistory(
                 entries.map {
@@ -69,9 +76,10 @@ class ForecastRepository @Inject constructor(
                 setting.lastPeriodStart, setting.cycleLength, setting.periodLength, setting.irregular,
             )
             ForecastEngine.buildForecast(
-                DateUtils.todayIso(), hist, setting.lastPeriodStart,
+                today, hist, setting.lastPeriodStart,
                 setting.cycleLength, setting.periodLength, setting.irregular,
                 dayCount = dayCount,
             )
         }
+    }
 }

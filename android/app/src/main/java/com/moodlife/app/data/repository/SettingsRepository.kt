@@ -13,7 +13,7 @@ import javax.inject.Singleton
 class SettingsRepository @Inject constructor(private val settingDao: SettingDao) {
 
     fun observe(key: String): Flow<String?> =
-        settingDao.observeAll().map { list -> list.find { it.key == key }?.value }
+        settingDao.observe(key).map { it?.value }
 
     fun observeAllMap(): Flow<Map<String, String>> =
         settingDao.observeAll().map { list -> list.associate { it.key to it.value } }

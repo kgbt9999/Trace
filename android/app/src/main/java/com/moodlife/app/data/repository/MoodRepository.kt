@@ -18,6 +18,9 @@ class MoodRepository @Inject constructor(
 
     fun observeAll(): Flow<List<MoodEntryEntity>> = moodEntryDao.observeAll()
 
+    fun observeRange(from: String, to: String): Flow<List<MoodEntryEntity>> =
+        moodEntryDao.observeRange(from, to)
+
     suspend fun getEntry(date: String): MoodEntryEntity? = moodEntryDao.getByDate(date)
 
     suspend fun ensureEntry(date: String, fields: MoodFields): MoodEntryEntity {

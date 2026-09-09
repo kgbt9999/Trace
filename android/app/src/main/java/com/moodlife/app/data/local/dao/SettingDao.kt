@@ -12,6 +12,9 @@ interface SettingDao {
     @Query("SELECT * FROM settings WHERE `key` = :key LIMIT 1")
     suspend fun get(key: String): SettingEntity?
 
+    @Query("SELECT * FROM settings WHERE `key` = :key LIMIT 1")
+    fun observe(key: String): Flow<SettingEntity?>
+
     @Query("SELECT * FROM settings")
     fun observeAll(): Flow<List<SettingEntity>>
 

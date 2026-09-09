@@ -43,28 +43,38 @@ class NavHostViewModel @Inject constructor(
     val crisisState: StateFlow<CrisisChipUiState> = run {
         val today = DateUtils.todayIso()
         val yesterday = DateUtils.addDays(today, -1)
+        val crisisSettings = combine(
+            settingsRepository.observe(SettingsRepository.KEY_CRISIS_ON_WORSENING),
+            settingsRepository.observe(SettingsRepository.KEY_CRISIS_DOCTOR),
+            settingsRepository.observe(SettingsRepository.KEY_CRISIS_SUPPORT),
+            settingsRepository.observe(SettingsRepository.KEY_CRISIS_NOTES),
+            settingsRepository.observe(SettingsRepository.KEY_CRISIS_WISHES),
+        ) { on, doctor, support, notes, wishes ->
+            CrisisSettings(on, doctor.orEmpty(), support.orEmpty(), notes.orEmpty(), wishes.orEmpty())
+        }.combine(settingsRepository.observe(SettingsRepository.KEY_CRISIS_AVOID)) { base, avoid ->
+            base.copy(avoid = avoid.orEmpty())
+        }
         combine(
             sliceFlow(today),
             sliceFlow(yesterday),
-            settingsRepository.observeAllMap(),
+            crisisSettings,
         ) { todaySlice, yestSlice, settings ->
-            val enabled = WorseningDetector.isCrisisBadgeEnabled(
-                settings[SettingsRepository.KEY_CRISIS_ON_WORSENING],
-            )
+            val enabled = WorseningDetector.isCrisisBadgeEnabled(settings.onWorsening)
             val detected = WorseningDetector.detect(todaySlice, yestSlice)
-            val doctor = settings[SettingsRepository.KEY_CRISIS_DOCTOR].orEmpty()
-            val support = settings[SettingsRepository.KEY_CRISIS_SUPPORT].orEmpty()
-            val notes = settings[SettingsRepository.KEY_CRISIS_NOTES].orEmpty()
-            val wishes = settings[SettingsRepository.KEY_CRISIS_WISHES].orEmpty()
-            val avoid = settings[SettingsRepository.KEY_CRISIS_AVOID].orEmpty()
             CrisisChipUiState(
                 visible = enabled && detected.worsening,
-                empty = WorseningDetector.isCrisisPlanEmpty(doctor, support, notes, wishes, avoid),
-                doctor = doctor,
-                support = support,
-                notes = notes,
-                wishes = wishes,
-                avoid = avoid,
+                empty = WorseningDetector.isCrisisPlanEmpty(
+                    settings.doctor,
+                    settings.support,
+                    settings.notes,
+                    settings.wishes,
+                    settings.avoid,
+                ),
+                doctor = settings.doctor,
+                support = settings.support,
+                notes = settings.notes,
+                wishes = settings.wishes,
+                avoid = settings.avoid,
             )
         }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), CrisisChipUiState())
     }
@@ -101,5 +111,14 @@ class NavHostViewModel @Inject constructor(
         sleepQuality = entry.sleepQuality,
         symptomLogs = symptoms.map { WorseningDetector.IdValue(it.symptomId, it.severity) },
         warningTriggers = warnings.map { WorseningDetector.IdValue(it.warningSignId, it.intensity) },
+    )
+
+    private data class CrisisSettings(
+        val onWorsening: String?,
+        val doctor: String,
+        val support: String,
+        val notes: String,
+        val wishes: String,
+        val avoid: String = "",
     )
 }

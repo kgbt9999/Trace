@@ -1,7 +1,6 @@
 package com.moodlife.app.ui.components
 
 import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.animateContentSize
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -47,7 +46,7 @@ fun CollapsibleSection(
 ) {
     var expanded by rememberSaveable(title) { mutableStateOf(initiallyExpanded) }
     var showHelp by rememberSaveable(title) { mutableStateOf(false) }
-    MoodCard(modifier.animateContentSize(), contentPadding = false) {
+    MoodCard(modifier, contentPadding = false) {
         Row(
             Modifier
                 .fillMaxWidth()

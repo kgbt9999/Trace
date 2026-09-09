@@ -47,6 +47,7 @@ fun ReportsScreen(viewModel: ReportsViewModel = hiltViewModel()) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
     val shareLauncher = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) {}
     val mood = LocalMoodColors.current
+    val shareChooserTitle = stringResource(R.string.export_share_chooser)
 
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp)) {
         PageHeader(
@@ -100,7 +101,9 @@ fun ReportsScreen(viewModel: ReportsViewModel = hiltViewModel()) {
                 FilledTonalButton(
                     onClick = {
                         viewModel.exportMonth(format) { intent ->
-                            shareLauncher.launch(Intent.createChooser(intent, null))
+                            shareLauncher.launch(
+                                Intent.createChooser(intent, shareChooserTitle),
+                            )
                         }
                     },
                     modifier = Modifier.fillMaxWidth(),

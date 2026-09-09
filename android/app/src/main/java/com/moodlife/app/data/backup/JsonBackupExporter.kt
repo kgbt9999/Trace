@@ -30,7 +30,7 @@ class JsonBackupExporter @Inject constructor(
         )
         val root = JSONObject()
         root.put("exportedAt", System.currentTimeMillis())
-        root.put("app", "moodlife-android")
+        root.put("app", "trace-android")
         root.put("version", "0.1.0")
         for (table in tables) {
             val arr = JSONArray()
@@ -53,7 +53,7 @@ class JsonBackupExporter @Inject constructor(
             root.put(table, arr)
         }
         val stamp = SimpleDateFormat("yyyyMMdd-HHmmss", Locale.US).format(Date())
-        val file = File(context.cacheDir, "moodlife-backup-$stamp.json")
+        val file = File(context.cacheDir, "Trace-backup-$stamp.json")
         file.writeText(root.toString(2))
         settingsRepository.set(SettingsRepository.KEY_BACKUP_LAST, file.absolutePath)
         BackupFile(file, file.length())

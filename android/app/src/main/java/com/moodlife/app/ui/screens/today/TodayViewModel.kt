@@ -1,5 +1,6 @@
 package com.moodlife.app.ui.screens.today
 
+import androidx.compose.runtime.Immutable
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.moodlife.app.data.local.entity.DayNoteEntity
@@ -37,6 +38,9 @@ import com.moodlife.app.ui.navigation.DayNavigationState
 import com.moodlife.app.util.MedsUtils
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -45,6 +49,7 @@ import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
 import java.util.Locale
@@ -67,6 +72,7 @@ data class MedEditorTarget(
     val isRegular: Boolean = true,
 )
 
+@Immutable
 data class SymptomUiItem(
     val id: String,
     val name: String,
@@ -195,7 +201,7 @@ class TodayViewModel @Inject constructor(
     init {
         viewModelScope.launch {
             dayNavigation.openDay.collect { date ->
-                _userEdited = false
+                flushPendingEditsSuspend(forceClearEdited = true)
                 _selectedDate.value = date
             }
         }
@@ -307,7 +313,7 @@ class TodayViewModel @Inject constructor(
                         warningSignRepository.observeActive(),
                         warningLogs,
                     ) { factors, fLogs, signs, wLogs ->
-                        CatalogSnapshot(factors, fLogs, signs, wLogs)
+                        CatalogSnapshot(date, factors, fLogs, signs, wLogs)
                     }
                 }
             }.collect { snap -> applyCatalog(snap) }
@@ -365,15 +371,11 @@ class TodayViewModel @Inject constructor(
         if (_uiState.value.canGoNext) shiftDate(1)
     }
 
-    fun goToday() {
-        _userEdited = false
-        _selectedDate.value = DateUtils.todayIso()
-    }
+    fun goToday() = navigateToDate(DateUtils.todayIso())
 
     fun pickDate(iso: String) {
         if (iso > DateUtils.todayIso()) return
-        _userEdited = false
-        _selectedDate.value = iso
+        navigateToDate(iso)
     }
 
     fun openSources(sourceId: String? = null) {
@@ -395,15 +397,15 @@ class TodayViewModel @Inject constructor(
     fun onSubstanceUseChange(v: Int) = updateAxis("substanceUse", v)
     fun onRoutineScoreChange(v: Int) = updateAxis("routineScore", v)
     fun onSleepHoursChange(v: String) {
-        _userEdited = true
+        markUserEdited()
         _uiState.update { it.copy(sleepHoursText = v) }
     }
     fun onSleepTimeChange(v: String) {
-        _userEdited = true
+        markUserEdited()
         _uiState.update { it.copy(sleepTime = v) }
     }
     fun onWakeTimeChange(v: String) {
-        _userEdited = true
+        markUserEdited()
         _uiState.update { it.copy(wakeTime = v) }
     }
     fun onNewNoteTextChange(v: String) = _uiState.update { it.copy(newNoteText = v) }
@@ -622,12 +624,18 @@ class TodayViewModel @Inject constructor(
     }
 
     fun save() {
-        val state = _uiState.value
         viewModelScope.launch {
+            axisPersistJob?.cancel()
+            axisPersistJob = null
             _uiState.update { it.copy(isSaving = true, saveMessage = null) }
+            val gen = editGeneration
+            val state = _uiState.value
             try {
                 val saved = moodRepository.saveToday(state.date, state.toFields())
-                _userEdited = false
+                // Don't clear edits that landed while this save was in flight.
+                if (editGeneration == gen) {
+                    _userEdited = false
+                }
                 _uiState.update {
                     it.copy(
                         isSaving = false,
@@ -696,25 +704,41 @@ class TodayViewModel @Inject constructor(
     }
 
     fun toggleFactor(factorId: String) {
+        val factor = _uiState.value.factors.find { it.id == factorId } ?: return
+        val nextActive = !factor.active
+        val intensity = if (nextActive) TriggerBaselines.defaultIntensity(factor.name) else 0
+        _uiState.update { state ->
+            state.copy(
+                factors = state.factors.map {
+                    if (it.id == factorId) it.copy(active = nextActive, intensity = intensity) else it
+                },
+            )
+        }
+        syncSubstanceAxesFromFactor(factor.name, intensity)
         viewModelScope.launch {
             val entryId = ensureEntryForSideEffects() ?: return@launch
-            val factor = _uiState.value.factors.find { it.id == factorId } ?: return@launch
-            val nextActive = !factor.active
-            // Literature baseline (Colom & Vieta / Berk): marked substance/trigger → mid intensity
-            // until the user adjusts the scale; unmarked → 0.
-            val intensity = if (nextActive) TriggerBaselines.defaultIntensity(factor.name) else 0
             factorRepository.setLog(entryId, factorId, intensity)
-            syncSubstanceAxesFromFactor(factor.name, intensity)
         }
     }
 
     fun setFactorIntensity(factorId: String, intensity: Int) {
+        val factor = _uiState.value.factors.find { it.id == factorId } ?: return
+        val clamped = intensity.coerceIn(0, factor.scaleMax)
+        _uiState.update { state ->
+            state.copy(
+                factors = state.factors.map {
+                    if (it.id == factorId) {
+                        it.copy(active = clamped > 0, intensity = clamped)
+                    } else {
+                        it
+                    }
+                },
+            )
+        }
+        syncSubstanceAxesFromFactor(factor.name, clamped)
         viewModelScope.launch {
             val entryId = ensureEntryForSideEffects() ?: return@launch
-            val factor = _uiState.value.factors.find { it.id == factorId } ?: return@launch
-            val clamped = intensity.coerceIn(0, factor.scaleMax)
             factorRepository.setLog(entryId, factorId, clamped, factor.scaleMax)
-            syncSubstanceAxesFromFactor(factor.name, clamped)
         }
     }
 
@@ -751,11 +775,11 @@ class TodayViewModel @Inject constructor(
         val name = nameRaw.trim().lowercase()
         when {
             name == "алкоголь" || name.contains("алкогол") -> {
-                _userEdited = true
+                markUserEdited()
                 _uiState.update { it.copy(alcoholUse = intensity) }
             }
             name.contains("веществ") || name.contains("наркот") -> {
-                _userEdited = true
+                markUserEdited()
                 _uiState.update { it.copy(substanceUse = intensity) }
             }
         }
@@ -781,11 +805,34 @@ class TodayViewModel @Inject constructor(
         com.moodlife.app.domain.AxisScalePrefs.maxFor(_uiState.value.axisScalePrefs, key, fallback)
 
     fun toggleWarning(signId: String) {
+        val current = _uiState.value.warnings.find { it.id == signId }?.active == true
+        val nextActive = !current
+        _uiState.update { state ->
+            state.copy(
+                warnings = state.warnings.map {
+                    if (it.id == signId) it.copy(active = nextActive) else it
+                },
+            )
+        }
         viewModelScope.launch {
             val entryId = ensureEntryForSideEffects() ?: return@launch
-            val current = _uiState.value.warnings.find { it.id == signId }?.active == true
-            warningSignRepository.setTrigger(entryId, signId, if (current) 0 else 3)
+            warningSignRepository.setTrigger(entryId, signId, if (nextActive) 3 else 0)
         }
+    }
+
+    /** Call on ON_STOP / leaving Today so pending axis + prodrome edits are not lost. */
+    fun flushPendingEdits() {
+        viewModelScope.launch {
+            withContext(NonCancellable) { flushPendingEditsSuspend(forceClearEdited = false) }
+        }
+    }
+
+    private suspend fun flushPendingEditsSuspend(forceClearEdited: Boolean) {
+        flushAxisEdits()
+        flushSymptomWrites()
+        flushProdromeEdits()
+        // Day switch must clear even on failed persist so the new day is not blocked by old dirty flag.
+        if (forceClearEdited) _userEdited = false
     }
 
     fun dismissOnboarding() {
@@ -799,15 +846,15 @@ class TodayViewModel @Inject constructor(
     fun openSettingsTab() = dayNavigation.navigateToSettings("meds")
 
     fun updateSymptom(symptomId: String, severity: Int, scaleMax: Int) {
-        viewModelScope.launch {
-            val entryId = ensureEntryForSideEffects() ?: return@launch
-            symptomRepository.upsertLog(entryId, symptomId, severity, scaleMax)
-            val next = _uiState.value.symptoms.map {
-                if (it.id == symptomId) it.copy(severity = severity) else it
-            }
-            _uiState.update { it.copy(symptoms = next) }
-            applyProdromeFromSymptoms(entryId, next)
+        val current = _uiState.value.symptoms
+        if (current.find { it.id == symptomId }?.severity == severity) return
+        // Optimistic UI first — paint before Room round-trip.
+        val next = current.map {
+            if (it.id == symptomId) it.copy(severity = severity) else it
         }
+        _uiState.update { it.copy(symptoms = next) }
+        pendingSymptomWrites[symptomId] = PendingSymptomWrite(severity, scaleMax)
+        scheduleSymptomPersist()
     }
 
     fun addDayNote() {
@@ -848,19 +895,146 @@ class TodayViewModel @Inject constructor(
     }
 
     private var _userEdited = false
+    /** Bumps on every axis/sleep edit; save only clears _userEdited if generation still matches. */
+    private var editGeneration = 0L
+    private var prodromeJob: Job? = null
+    private var axisPersistJob: Job? = null
+    private var symptomPersistJob: Job? = null
+    private val pendingSymptomWrites = mutableMapOf<String, PendingSymptomWrite>()
+
+    private data class PendingSymptomWrite(val severity: Int, val scaleMax: Int)
+
+    private fun scheduleSymptomPersist() {
+        symptomPersistJob?.cancel()
+        symptomPersistJob = viewModelScope.launch {
+            delay(280)
+            flushSymptomWrites()
+            // Prodrome inference writes more rows — after symptom flush, debounce further.
+            val entryId = _uiState.value.moodEntryId ?: return@launch
+            prodromeJob?.cancel()
+            prodromeJob = launch {
+                delay(450)
+                applyProdromeFromSymptoms(entryId, _uiState.value.symptoms)
+            }
+        }
+    }
+
+    /** Flush debounced symptom severity writes so ON_STOP / day-change cannot drop taps. */
+    private suspend fun flushSymptomWrites() {
+        symptomPersistJob?.cancel()
+        symptomPersistJob = null
+        val batch = pendingSymptomWrites.toMap()
+        if (batch.isEmpty()) return
+        pendingSymptomWrites.clear()
+        val entryId = ensureEntryForSideEffects()
+        if (entryId == null) {
+            pendingSymptomWrites.putAll(batch)
+            return
+        }
+        for ((symptomId, write) in batch) {
+            symptomRepository.upsertLog(entryId, symptomId, write.severity, write.scaleMax)
+        }
+    }
 
     private fun shiftDate(days: Int) {
         val current = DateUtils.parseIso(_selectedDate.value)
         val next = current.plusDays(days.toLong())
         val today = LocalDate.now()
         if (next.isAfter(today)) return
-        _userEdited = false
-        _selectedDate.value = next.format(DateTimeFormatter.ISO_LOCAL_DATE)
+        navigateToDate(next.format(DateTimeFormatter.ISO_LOCAL_DATE))
+    }
+
+    private fun navigateToDate(iso: String) {
+        if (iso == _selectedDate.value) return
+        viewModelScope.launch {
+            flushPendingEditsSuspend(forceClearEdited = true)
+            _selectedDate.value = iso
+        }
+    }
+
+    private fun markUserEdited() {
+        _userEdited = true
+        editGeneration++
+        scheduleAxisPersist()
+    }
+
+    private fun scheduleAxisPersist() {
+        axisPersistJob?.cancel()
+        axisPersistJob = viewModelScope.launch {
+            delay(450)
+            persistAxesSilent()
+        }
+    }
+
+    /** Persist mood axes/sleep before leaving the day so process-death / day-switch cannot drop them. */
+    private suspend fun flushAxisEdits() {
+        axisPersistJob?.cancel()
+        axisPersistJob = null
+        if (_userEdited) {
+            persistAxesSilent()
+            // One retry if first persist failed (keeps _userEdited true on error).
+            if (_userEdited) persistAxesSilent()
+        }
+    }
+
+    /** Run debounced prodrome immediately so ON_STOP / day-change does not drop inferred triggers. */
+    private suspend fun flushProdromeEdits() {
+        val pending = prodromeJob ?: return
+        pending.cancel()
+        prodromeJob = null
+        val symptoms = _uiState.value.symptoms
+        if (symptoms.none { it.severity > 0 }) return
+        val entryId = _uiState.value.moodEntryId ?: ensureEntryForSideEffects() ?: return
+        applyProdromeFromSymptoms(entryId, symptoms)
+    }
+
+    private suspend fun persistAxesSilent() {
+        val gen = editGeneration
+        val state = _uiState.value
+        try {
+            val saved = moodRepository.saveToday(state.date, state.toFields())
+            if (editGeneration == gen) {
+                _userEdited = false
+            }
+            _uiState.update {
+                it.copy(
+                    episodePhase = saved.episodePhase,
+                    lastSavedAt = saved.updatedAt,
+                    moodEntryId = saved.id,
+                )
+            }
+        } catch (_: Exception) {
+            // Keep _userEdited so a later Save / flush can retry.
+        }
     }
 
     private suspend fun ensureEntryForSideEffects(): String? {
         val state = _uiState.value
+        // If axes/sleep were edited but not flushed yet, persist them with the side-effect write
+        // so a crash right after a symptom/factor tap cannot drop mood scales.
+        if (_userEdited) {
+            val gen = editGeneration
+            try {
+                val saved = moodRepository.saveToday(state.date, state.toFields())
+                if (editGeneration == gen) {
+                    _userEdited = false
+                    axisPersistJob?.cancel()
+                    axisPersistJob = null
+                }
+                _uiState.update {
+                    it.copy(
+                        episodePhase = saved.episodePhase,
+                        lastSavedAt = saved.updatedAt,
+                        moodEntryId = saved.id,
+                    )
+                }
+                return saved.id
+            } catch (_: Exception) {
+                // Fall through to ensure-or-reuse path.
+            }
+        }
         state.moodEntryId?.let { return it }
+        // Creating the day row also snapshots current axes (may be zeros if user only tapped side-effects).
         val entry = moodRepository.ensureEntry(state.date, state.toFields())
         _uiState.update { it.copy(moodEntryId = entry.id) }
         return entry.id
@@ -904,6 +1078,7 @@ class TodayViewModel @Inject constructor(
             val base = if (_userEdited && current.date == snap.date) {
                 current
             } else if (snap.entry != null) {
+                val sameDay = current.date == snap.date
                 current.copy(
                     depressed = snap.entry.depressed,
                     elevated = snap.entry.elevated,
@@ -913,9 +1088,13 @@ class TodayViewModel @Inject constructor(
                     concentration = snap.entry.concentration,
                     appetite = snap.entry.appetite,
                     sociability = snap.entry.sociability,
-                    sleepHoursText = snap.entry.sleepHours?.toString().orEmpty(),
-                    sleepTime = snap.entry.sleepTime.orEmpty(),
-                    wakeTime = snap.entry.wakeTime.orEmpty(),
+                    // Keep same-day HC/UI prefill when Room row still has null sleep fields.
+                    sleepHoursText = snap.entry.sleepHours?.toString()
+                        ?: current.sleepHoursText.takeIf { sameDay }.orEmpty(),
+                    sleepTime = snap.entry.sleepTime?.takeIf { it.isNotBlank() }
+                        ?: current.sleepTime.takeIf { sameDay }.orEmpty(),
+                    wakeTime = snap.entry.wakeTime?.takeIf { it.isNotBlank() }
+                        ?: current.wakeTime.takeIf { sameDay }.orEmpty(),
                     sleepQuality = snap.entry.sleepQuality,
                     functioning = snap.entry.functioning,
                     safetyCheck = snap.entry.safetyCheck,
@@ -944,11 +1123,34 @@ class TodayViewModel @Inject constructor(
                 isToday = snap.date == todayIso,
                 canGoNext = snap.date < todayIso,
                 medications = medItems,
-                symptoms = symptomItems,
+                symptoms = mergeSymptomItems(current.symptoms, symptomItems, sameDay = current.date == snap.date),
                 symptomCount = snap.symptoms.size,
                 dayNotes = notes,
             )
         }
+    }
+
+    /** Keep list identity when Room echoes the same severities — cuts Compose recomposition. */
+    private fun mergeSymptomItems(
+        current: List<SymptomUiItem>,
+        fromDb: List<SymptomUiItem>,
+        sameDay: Boolean,
+    ): List<SymptomUiItem> {
+        if (!sameDay || current.isEmpty()) return fromDb
+        val curById = current.associateBy { it.id }
+        val merged = fromDb.map { db ->
+            val ui = curById[db.id] ?: return@map db
+            if (ui.severity != db.severity) db.copy(severity = ui.severity) else db
+        }
+        if (merged.size == current.size &&
+            merged.zip(current).all { (a, b) ->
+                a.id == b.id && a.severity == b.severity && a.name == b.name &&
+                    a.scaleType == b.scaleType && a.scaleMax == b.scaleMax && a.color == b.color
+            }
+        ) {
+            return current
+        }
+        return merged
     }
 
     private fun applyCatalog(snap: CatalogSnapshot) {
@@ -975,14 +1177,66 @@ class TodayViewModel @Inject constructor(
                 active = (logBySign[s.id]?.intensity ?: 0) > 0,
             )
         }
-        _uiState.update { it.copy(factors = factorItems, warnings = warningItems) }
-        viewModelScope.launch {
-            val entryId = _uiState.value.moodEntryId
-            if (entryId != null) {
-                applyProdromeFromSymptoms(entryId, _uiState.value.symptoms, snap.signs)
+        _uiState.update { current ->
+            val sameDay = current.date == snap.date
+            current.copy(
+                factors = mergeFactorItems(current.factors, factorItems, sameDay),
+                warnings = mergeWarningItems(current.warnings, warningItems, sameDay),
+            )
+        }
+        // Hints only — never write triggers from catalog echo (avoids Room write→observe loops).
+        // Trigger writes stay on updateSymptom debounce + flushPendingEdits.
+        val symptoms = _uiState.value.symptoms
+        if (symptoms.any { it.severity > 0 }) {
+            publishProdromeHints(symptoms)
+        }
+    }
+
+    private fun mergeFactorItems(
+        current: List<FactorUiItem>,
+        fromDb: List<FactorUiItem>,
+        sameDay: Boolean,
+    ): List<FactorUiItem> {
+        if (!sameDay || current.isEmpty()) return fromDb
+        val curById = current.associateBy { it.id }
+        val merged = fromDb.map { db ->
+            val ui = curById[db.id] ?: return@map db
+            if (ui.intensity != db.intensity || ui.active != db.active) {
+                db.copy(active = ui.active, intensity = ui.intensity)
             } else {
-                publishProdromeHints(_uiState.value.symptoms)
+                db
             }
+        }
+        return if (
+            merged.size == current.size &&
+            merged.zip(current).all { (a, b) ->
+                a.id == b.id && a.intensity == b.intensity && a.active == b.active
+            }
+        ) {
+            current
+        } else {
+            merged
+        }
+    }
+
+    private fun mergeWarningItems(
+        current: List<WarningUiItem>,
+        fromDb: List<WarningUiItem>,
+        sameDay: Boolean,
+    ): List<WarningUiItem> {
+        if (!sameDay || current.isEmpty()) return fromDb
+        val curById = current.associateBy { it.id }
+        val merged = fromDb.map { db ->
+            val ui = curById[db.id] ?: return@map db
+            if (ui.active != db.active) db.copy(active = ui.active) else db
+        }
+        return if (
+            merged.size == current.size &&
+            merged.zip(current).all { (a, b) -> a.id == b.id && a.active == b.active }
+        ) {
+            current
+        } else {
+            merged
         }
     }
 
@@ -990,7 +1244,9 @@ class TodayViewModel @Inject constructor(
         val hints = ProdromeInference.hints(
             symptoms.map { ProdromeInference.SymptomSignal(it.name, it.severity, it.scaleMax) },
         )
-        _uiState.update { it.copy(prodromeHints = hints) }
+        _uiState.update { state ->
+            if (state.prodromeHints == hints) state else state.copy(prodromeHints = hints)
+        }
     }
 
     /**
@@ -1048,7 +1304,7 @@ class TodayViewModel @Inject constructor(
     }
 
     private fun updateAxis(key: String, raw: Int) {
-        _userEdited = true
+        markUserEdited()
         val max = when (key) {
             "functioning", "routineScore" -> 10
             "safetyCheck" -> 3
@@ -1095,7 +1351,7 @@ class TodayViewModel @Inject constructor(
     fun applySyncedSleep() {
         val sleep = _uiState.value.healthDays.firstOrNull { it.kind == "sleep" } ?: return
         val hours = sleep.sleepHours ?: return
-        _userEdited = true
+        markUserEdited()
         _uiState.update {
             it.copy(sleepHoursText = String.format(java.util.Locale.US, "%.1f", hours), userEdited = true)
         }
@@ -1132,6 +1388,7 @@ class TodayViewModel @Inject constructor(
     )
 
     private data class CatalogSnapshot(
+        val date: String,
         val factors: List<FactorEntity>,
         val factorLogs: List<FactorLogEntity>,
         val signs: List<EarlyWarningSignEntity>,

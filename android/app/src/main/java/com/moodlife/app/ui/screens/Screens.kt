@@ -26,18 +26,25 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.moodlife.app.R
 import com.moodlife.app.domain.CitationTopics
@@ -73,11 +80,27 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 
+private val SymptomYesNo = listOf("Нет", "Да")
+private val SymptomQual4Lmh = listOf("Нет", "Меньше обычного", "Как обычно", "Больше обычного")
+
 @Composable
 fun TodayScreen(
     viewModel: TodayViewModel = hiltViewModel(),
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
+    val lifecycleOwner = LocalLifecycleOwner.current
+    DisposableEffect(lifecycleOwner, viewModel) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_STOP) {
+                viewModel.flushPendingEdits()
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose {
+            lifecycleOwner.lifecycle.removeObserver(observer)
+            viewModel.flushPendingEdits()
+        }
+    }
 
     Column(
         modifier = Modifier
@@ -297,23 +320,15 @@ fun TodayScreen(
                         helpText = help,
                         onEdit = { viewModel.openSettingsSection("symptoms") },
                     ) {
-                        if (state.symptoms.isEmpty()) {
-                            Text(stringResource(R.string.today_symptoms_empty), style = MaterialTheme.typography.bodyMedium)
-                            FilledTonalButton(onClick = viewModel::seedBasicSymptoms) {
-                                Text(stringResource(R.string.today_seed_symptoms))
-                            }
-                        } else {
-                            state.symptoms.forEach { symptom ->
-                                SymptomRow(symptom, viewModel)
-                            }
-                        }
-                        CatalogAddRow(
-                            onAdd = viewModel::addSymptomQuick,
-                            label = stringResource(R.string.catalog_add_symptom),
-                            addLabel = stringResource(R.string.catalog_add),
-                            onOpenSettings = { viewModel.openSettingsSection("symptoms") },
-                            settingsLabel = stringResource(R.string.catalog_manage_settings),
-                            scaleType = state.newSymptomScale,
+                        TodaySymptomsBody(
+                            symptoms = state.symptoms,
+                            newSymptomScale = state.newSymptomScale,
+                            onUpdateSymptom = viewModel::updateSymptom,
+                            onSeedBasic = viewModel::seedBasicSymptoms,
+                            onAddSymptom = viewModel::addSymptomQuick,
+                            onOpenSettings = remember(viewModel) {
+                                { viewModel.openSettingsSection("symptoms") }
+                            },
                             onScaleTypeChange = viewModel::onNewSymptomScaleChange,
                         )
                     }
@@ -739,38 +754,87 @@ private fun trackableOptions(key: String): List<String> = when (key) {
 }
 
 @Composable
-private fun SymptomRow(symptom: SymptomUiItem, viewModel: TodayViewModel) {
-    val color = parseCssColor(symptom.color, LocalMoodColors.current.energy)
-    val onEdit = { viewModel.openSettingsSection("symptoms") }
+private fun TodaySymptomsBody(
+    symptoms: List<SymptomUiItem>,
+    newSymptomScale: String,
+    onUpdateSymptom: (String, Int, Int) -> Unit,
+    onSeedBasic: () -> Unit,
+    onAddSymptom: (String) -> Unit,
+    onOpenSettings: () -> Unit,
+    onScaleTypeChange: (String) -> Unit,
+) {
+    if (symptoms.isEmpty()) {
+        Text(stringResource(R.string.today_symptoms_empty), style = MaterialTheme.typography.bodyMedium)
+        FilledTonalButton(onClick = onSeedBasic) {
+            Text(stringResource(R.string.today_seed_symptoms))
+        }
+    } else {
+        symptoms.forEach { symptom ->
+            key(symptom.id) {
+                SymptomRow(
+                    symptom = symptom,
+                    onSeverityChange = onUpdateSymptom,
+                    onEdit = onOpenSettings,
+                )
+            }
+        }
+    }
+    CatalogAddRow(
+        onAdd = onAddSymptom,
+        label = stringResource(R.string.catalog_add_symptom),
+        addLabel = stringResource(R.string.catalog_add),
+        onOpenSettings = onOpenSettings,
+        settingsLabel = stringResource(R.string.catalog_manage_settings),
+        scaleType = newSymptomScale,
+        onScaleTypeChange = onScaleTypeChange,
+    )
+}
+
+@Composable
+private fun SymptomRow(
+    symptom: SymptomUiItem,
+    onSeverityChange: (String, Int, Int) -> Unit,
+    onEdit: () -> Unit,
+) {
+    var severity by remember(symptom.id) { mutableIntStateOf(symptom.severity) }
+    LaunchedEffect(symptom.severity) { severity = symptom.severity }
+    val fallbackColor = LocalMoodColors.current.energy
+    val color = remember(symptom.color) { parseCssColor(symptom.color, fallbackColor) }
+    val onValueChange = remember(symptom.id, symptom.scaleMax, onSeverityChange) {
+        { value: Int ->
+            severity = value
+            onSeverityChange(symptom.id, value, symptom.scaleMax)
+        }
+    }
     when (symptom.scaleType) {
         "yesno" -> ScaleInput(
             label = symptom.name,
-            value = symptom.severity,
-            onValueChange = { viewModel.updateSymptom(symptom.id, it, symptom.scaleMax) },
+            value = severity,
+            onValueChange = onValueChange,
             color = color,
-            options = listOf("Нет", "Да"),
+            options = SymptomYesNo,
             onEditLabel = onEdit,
         )
         "qual4-i" -> ScaleInput(
             label = symptom.name,
-            value = symptom.severity,
-            onValueChange = { viewModel.updateSymptom(symptom.id, it, symptom.scaleMax) },
+            value = severity,
+            onValueChange = onValueChange,
             color = color,
             options = MoodScales.QUAL_LABELS_I,
             onEditLabel = onEdit,
         )
         "qual4-lmh" -> ScaleInput(
             label = symptom.name,
-            value = symptom.severity,
-            onValueChange = { viewModel.updateSymptom(symptom.id, it, symptom.scaleMax) },
+            value = severity,
+            onValueChange = onValueChange,
             color = color,
-            options = listOf("Нет", "Меньше обычного", "Как обычно", "Больше обычного"),
+            options = SymptomQual4Lmh,
             onEditLabel = onEdit,
         )
         else -> ScaleInput(
             label = symptom.name,
-            value = symptom.severity,
-            onValueChange = { viewModel.updateSymptom(symptom.id, it, symptom.scaleMax) },
+            value = severity,
+            onValueChange = onValueChange,
             color = color,
             max = symptom.scaleMax,
             onEditLabel = onEdit,

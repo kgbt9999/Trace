@@ -61,7 +61,14 @@ class CalendarViewModel @Inject constructor(
     private val _showDayIconPicker = MutableStateFlow(false)
 
     val uiState: StateFlow<CalendarUiState> = combine(
-        combine(_yearMonth, _selected, moodRepository.observeAll()) { ym, selected, entries ->
+        combine(
+            _yearMonth,
+            _selected,
+            _yearMonth.flatMapLatest { (y, m) ->
+                val (from, to) = DateUtils.monthRange(y, m)
+                moodRepository.observeRange(from, to)
+            },
+        ) { ym, selected, entries ->
             CalendarPartial(ym, selected, entries)
         },
         periodRepository.observe(),

@@ -35,7 +35,9 @@ class JsonBackupImporter @Inject constructor(
 
     private fun importJson(text: String): ImportResult {
         val root = JSONObject(text)
-        if (root.optString("app") != "moodlife-android" && !root.has("mood_entries")) {
+        val appId = root.optString("app")
+        val knownApp = appId == "trace-android" || appId == "moodlife-android"
+        if (!knownApp && !root.has("mood_entries")) {
             return ImportResult(false, "Неверный формат JSON")
         }
         val db = database.openHelper.writableDatabase

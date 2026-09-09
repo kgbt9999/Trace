@@ -27,6 +27,7 @@ import com.moodlife.app.data.repository.WarningSignRepository
 import com.moodlife.app.data.repository.WeatherRepository
 import com.moodlife.app.domain.ProdromeInference
 import com.moodlife.app.ui.navigation.DayNavigationState
+import com.moodlife.app.util.DateUtils
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -247,7 +248,9 @@ class SettingsViewModel @Inject constructor(
 
     /** Observational hints from recent day symptom marks — not a diagnosis. */
     fun refreshProdromeHints() = viewModelScope.launch {
-        val entries = moodRepository.observeAll().first()
+        val today = DateUtils.todayIso()
+        val from = DateUtils.addDays(today, -14L)
+        val entries = moodRepository.observeRange(from, today).first()
             .sortedByDescending { it.date }
             .take(5)
         val symptoms = symptomRepository.observeActive().first()
