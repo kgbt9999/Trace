@@ -1,0 +1,42 @@
+# Gradle / Android
+.gradle/
+**/build/
+local.properties
+*.iml
+.idea/
+.kotlin/
+captures/
+.externalNativeBuild/
+.cxx/
+
+# Signing — never commit
+keystore.properties
+*.jks
+*.keystore
+
+# Outputs
+*.apk
+*.aab
+*.ap_
+*.hprof
+output.json
+
+# OS / IDE
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+
+# Logs / temp
+*.log
+compile_*.txt
+_tmp_*
+
+# Tooling
+.cursor/
+.cursorignore
+
+# Secrets
+.env
+.env.*
+google-services.json
