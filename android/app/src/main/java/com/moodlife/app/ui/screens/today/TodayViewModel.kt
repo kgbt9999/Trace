@@ -134,6 +134,8 @@ data class TodayUiState(
     val sleepHoursText: String = "",
     val sleepTime: String = "",
     val wakeTime: String = "",
+    /** True when user typed sleep hours manually — skip auto wake−bed. */
+    val sleepHoursManual: Boolean = false,
     val sleepQuality: Int = 0,
     val functioning: Int = 0,
     val safetyCheck: Int = 0,
@@ -398,16 +400,29 @@ class TodayViewModel @Inject constructor(
     fun onRoutineScoreChange(v: Int) = updateAxis("routineScore", v)
     fun onSleepHoursChange(v: String) {
         markUserEdited()
-        _uiState.update { it.copy(sleepHoursText = v) }
+        _uiState.update { it.copy(sleepHoursText = v, sleepHoursManual = true) }
     }
     fun onSleepTimeChange(v: String) {
         markUserEdited()
         _uiState.update { it.copy(sleepTime = v) }
+        maybeAutoSleepHours()
     }
     fun onWakeTimeChange(v: String) {
         markUserEdited()
         _uiState.update { it.copy(wakeTime = v) }
+        maybeAutoSleepHours()
     }
+
+    /** wake − bed; crosses midnight when wake < bed. Respects [TodayUiState.sleepHoursManual]. */
+    private fun maybeAutoSleepHours() {
+        val state = _uiState.value
+        if (state.sleepHoursManual) return
+        val hours = calcSleepHours(state.sleepTime, state.wakeTime) ?: return
+        _uiState.update {
+            it.copy(sleepHoursText = String.format(java.util.Locale.US, "%.1f", hours))
+        }
+    }
+
     fun onNewNoteTextChange(v: String) = _uiState.update { it.copy(newNoteText = v) }
     fun onNewSymptomScaleChange(v: String) = _uiState.update { it.copy(newSymptomScale = v) }
 
@@ -478,13 +493,18 @@ class TodayViewModel @Inject constructor(
                 _uiState.update { it.copy(medEditor = null, saveMessage = "med_added") }
             } else {
                 val entity = medicationRepository.getById(existingId) ?: return@launch
+                // Name / schedule / mode → catalog. Dosage for selected day → log override only.
                 medicationRepository.updateMedication(
                     entity.copy(
                         name = trimmed,
-                        dosage = dosage.trim().ifBlank { null },
                         isRegular = isRegular,
                         intakeTimes = MedsUtils.serializeIntakeTimes(slots),
                     ),
+                )
+                medicationRepository.updateLogDosage(
+                    medicationId = existingId,
+                    date = _uiState.value.date,
+                    dosage = dosage,
                 )
                 _uiState.update { it.copy(medEditor = null, saveMessage = "catalog_updated") }
             }
@@ -666,6 +686,7 @@ class TodayViewModel @Inject constructor(
                     depressed = 0, elevated = 0, anxious = 0, irritable = 0,
                     energy = 0, concentration = 0, appetite = 0, sociability = 0,
                     sleepHoursText = "", sleepTime = "", wakeTime = "",
+                    sleepHoursManual = false,
                     sleepQuality = 0, functioning = 0, safetyCheck = 0,
                     alcoholUse = 0, substanceUse = 0, routineScore = 0,
                     episodePhase = null, lastSavedAt = null, moodEntryId = null,
@@ -907,13 +928,13 @@ class TodayViewModel @Inject constructor(
     private fun scheduleSymptomPersist() {
         symptomPersistJob?.cancel()
         symptomPersistJob = viewModelScope.launch {
-            delay(280)
+            delay(120)
             flushSymptomWrites()
             // Prodrome inference writes more rows — after symptom flush, debounce further.
             val entryId = _uiState.value.moodEntryId ?: return@launch
             prodromeJob?.cancel()
             prodromeJob = launch {
-                delay(450)
+                delay(200)
                 applyProdromeFromSymptoms(entryId, _uiState.value.symptoms)
             }
         }
@@ -961,7 +982,7 @@ class TodayViewModel @Inject constructor(
     private fun scheduleAxisPersist() {
         axisPersistJob?.cancel()
         axisPersistJob = viewModelScope.launch {
-            delay(450)
+            delay(200)
             persistAxesSilent()
         }
     }
@@ -1053,7 +1074,14 @@ class TodayViewModel @Inject constructor(
                     scheduled = slots,
                 )
             }
-            MedUiItem(med.id, med.name, med.dosage, slots, takenMap, med.isRegular)
+            MedUiItem(
+                med.id,
+                med.name,
+                medicationRepository.effectiveDosage(med, log),
+                slots,
+                takenMap,
+                med.isRegular,
+            )
         }
         val logBySymptom = snap.symptomLogs.associateBy { it.symptomId }
         val symptomItems = snap.symptoms.map { s ->
@@ -1095,6 +1123,10 @@ class TodayViewModel @Inject constructor(
                         ?: current.sleepTime.takeIf { sameDay }.orEmpty(),
                     wakeTime = snap.entry.wakeTime?.takeIf { it.isNotBlank() }
                         ?: current.wakeTime.takeIf { sameDay }.orEmpty(),
+                    sleepHoursManual = when {
+                        !sameDay -> snap.entry.sleepHours != null
+                        else -> current.sleepHoursManual || snap.entry.sleepHours != null
+                    },
                     sleepQuality = snap.entry.sleepQuality,
                     functioning = snap.entry.functioning,
                     safetyCheck = snap.entry.safetyCheck,
@@ -1110,6 +1142,7 @@ class TodayViewModel @Inject constructor(
                     depressed = 0, elevated = 0, anxious = 0, irritable = 0,
                     energy = 0, concentration = 0, appetite = 0, sociability = 0,
                     sleepHoursText = "", sleepTime = "", wakeTime = "",
+                    sleepHoursManual = false,
                     sleepQuality = 0, functioning = 0, safetyCheck = 0,
                     alcoholUse = 0, substanceUse = 0, routineScore = 0,
                     episodePhase = null, lastSavedAt = null, moodEntryId = null,
@@ -1396,6 +1429,23 @@ class TodayViewModel @Inject constructor(
     )
 
     companion object {
+        fun calcSleepHours(bed: String, wake: String): Float? {
+            val bedMin = parseHmMinutes(bed) ?: return null
+            val wakeMin = parseHmMinutes(wake) ?: return null
+            var diff = wakeMin - bedMin
+            if (diff <= 0) diff += 24 * 60
+            return diff / 60f
+        }
+
+        private fun parseHmMinutes(raw: String): Int? {
+            val parts = raw.trim().split(':')
+            if (parts.size < 2) return null
+            val h = parts[0].toIntOrNull() ?: return null
+            val m = parts[1].take(2).toIntOrNull() ?: return null
+            if (h !in 0..23 || m !in 0..59) return null
+            return h * 60 + m
+        }
+
         private fun buildInitialState(date: String) = TodayUiState(
             date = date,
             dateLabel = formatDateLabel(date),

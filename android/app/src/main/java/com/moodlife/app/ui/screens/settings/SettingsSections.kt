@@ -1730,13 +1730,18 @@ private fun OtherSettingsSection(viewModel: SettingsViewModel) {
             description = stringResource(R.string.reports_charts_settings_desc),
         ) {
             listOf(
+                "dashboard" to R.string.reports_dashboard_title,
                 "burden" to R.string.reports_burden_title,
                 "radar" to R.string.reports_radar_title,
                 "mood" to R.string.reports_mood_chart_title,
                 "sleep" to R.string.reports_sleep_chart,
+                "sleep_mood" to R.string.reports_scatter_title,
                 "energy" to R.string.reports_energy_chart,
                 "alcohol" to R.string.reports_alcohol_chart,
                 "safety" to R.string.reports_safety_chart,
+                "heatmap" to R.string.reports_heatmap_title,
+                "medgrid" to R.string.reports_med_intake_title,
+                "priority" to R.string.reports_priority_title,
             ).forEach { (id, res) ->
                 Row(
                     Modifier.fillMaxWidth().heightIn(min = 44.dp),

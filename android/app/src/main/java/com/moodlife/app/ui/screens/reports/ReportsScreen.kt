@@ -35,8 +35,13 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.moodlife.app.R
 import com.moodlife.app.data.export.ExportFormat
 import com.moodlife.app.ui.components.ChartSeries
+import com.moodlife.app.ui.components.MedAdherenceGrid
+import com.moodlife.app.ui.components.MoodHeatmapChart
 import com.moodlife.app.ui.components.MultiLineChart
+import com.moodlife.app.ui.components.ParameterPriorityScheme
 import com.moodlife.app.ui.components.RadarChart
+import com.moodlife.app.ui.components.ReportsDashboardCard
+import com.moodlife.app.ui.components.SleepMoodScatterChart
 import com.moodlife.app.ui.components.MoodCard
 import com.moodlife.app.ui.components.PageHeader
 import com.moodlife.app.ui.theme.LocalMoodColors
@@ -115,6 +120,17 @@ fun ReportsScreen(viewModel: ReportsViewModel = hiltViewModel()) {
                 }
             }
         }
+        }
+        if ("dashboard" in state.visibleCharts) {
+            Spacer(Modifier.height(12.dp))
+            MoodCard {
+                ReportsDashboardCard(
+                    avgDepressed = state.avgDepressed,
+                    avgElevated = state.avgElevated,
+                    avgSleep = state.avgSleepHours,
+                    entryCount = state.entryCount,
+                )
+            }
         }
         if (state.entryCount > 0 && "burden" in state.visibleCharts) {
             Spacer(Modifier.height(12.dp))
@@ -233,6 +249,19 @@ fun ReportsScreen(viewModel: ReportsViewModel = hiltViewModel()) {
                 )
             }
         }
+        if ("sleep_mood" in state.visibleCharts && state.sleepMoodPoints.isNotEmpty()) {
+            Spacer(Modifier.height(12.dp))
+            MoodCard {
+                Text(stringResource(R.string.reports_scatter_title), style = MaterialTheme.typography.titleMedium)
+                Text(
+                    stringResource(R.string.reports_scatter_hint),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(top = 4.dp, bottom = 8.dp),
+                )
+                SleepMoodScatterChart(points = state.sleepMoodPoints)
+            }
+        }
         if ("energy" in state.visibleCharts && (state.energySeries.isNotEmpty() || state.functioningSeries.isNotEmpty())) {
             Spacer(Modifier.height(12.dp))
             MoodCard {
@@ -290,6 +319,45 @@ fun ReportsScreen(viewModel: ReportsViewModel = hiltViewModel()) {
                     maxY = 3f,
                     modifier = Modifier.padding(top = 8.dp),
                 )
+            }
+        }
+        if ("heatmap" in state.visibleCharts && state.heatCells.isNotEmpty()) {
+            Spacer(Modifier.height(12.dp))
+            MoodCard {
+                Text(stringResource(R.string.reports_heatmap_title), style = MaterialTheme.typography.titleMedium)
+                Text(
+                    stringResource(R.string.reports_heatmap_hint),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(top = 4.dp, bottom = 8.dp),
+                )
+                MoodHeatmapChart(cells = state.heatCells)
+            }
+        }
+        if ("medgrid" in state.visibleCharts && state.medDayFractions.isNotEmpty()) {
+            Spacer(Modifier.height(12.dp))
+            MoodCard {
+                Text(stringResource(R.string.reports_med_intake_title), style = MaterialTheme.typography.titleMedium)
+                Text(
+                    stringResource(R.string.reports_med_intake_hint),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(top = 4.dp, bottom = 8.dp),
+                )
+                state.adherencePercent?.let { pct ->
+                    Text(
+                        stringResource(R.string.reports_adherence, pct),
+                        style = MaterialTheme.typography.bodyMedium,
+                        modifier = Modifier.padding(bottom = 8.dp),
+                    )
+                }
+                MedAdherenceGrid(dayFractions = state.medDayFractions)
+            }
+        }
+        if ("priority" in state.visibleCharts) {
+            Spacer(Modifier.height(12.dp))
+            MoodCard {
+                ParameterPriorityScheme()
             }
         }
         Spacer(Modifier.height(12.dp))

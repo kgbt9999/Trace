@@ -683,7 +683,11 @@ private fun TrackableSection(
                     onValueChange = { applyTrackableValue(item.key, it, viewModel) },
                     color = color,
                     max = max,
-                    anchors = if (max == 5) axis?.anchors ?: MoodScales.INTENSITY_ANCHORS_COMPACT else null,
+                    anchors = if (max == 5) {
+                        state.checkInConfig.axes.find { it.id == item.key }?.anchors()
+                            ?: axis?.anchors
+                            ?: MoodScales.INTENSITY_ANCHORS_COMPACT
+                    } else null,
                     hint = axisHint(item.key),
                     citationSourceId = sourceId,
                     onOpenSources = { viewModel.openSources(sourceId) },

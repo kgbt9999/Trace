@@ -81,6 +81,22 @@ fun OnboardingCard(
             ) {
                 Text(stringResource(R.string.onboarding_add_med))
             }
+            Text(
+                stringResource(R.string.onboarding_tip_sleep),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(top = 4.dp),
+            )
+            Text(
+                stringResource(R.string.onboarding_tip_meds),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Text(
+                stringResource(R.string.onboarding_tip_physical),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
         }
     }
 }

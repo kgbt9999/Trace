@@ -27,6 +27,9 @@ class MedicationRepository @Inject constructor(
     fun observeLogsForDate(date: String): Flow<List<MedicationLogEntity>> =
         medicationLogDao.observeForDate(date)
 
+    fun observeLogsRange(from: String, to: String): Flow<List<MedicationLogEntity>> =
+        medicationLogDao.observeRange(from, to)
+
     suspend fun addMedication(name: String, dosage: String? = null): MedicationEntity {
         val now = System.currentTimeMillis()
         val med = MedicationEntity(
@@ -134,11 +137,39 @@ class MedicationRepository @Inject constructor(
             date = date,
             taken = allTaken,
             slotsTaken = MedsUtils.serializeSlotsTaken(slots),
+            dosageOverride = existing?.dosageOverride,
             createdAt = existing?.createdAt ?: now,
             updatedAt = now,
         )
         medicationLogDao.upsert(log)
     }
+
+    /**
+     * Sets dosage for a single calendar day only.
+     * Does not change [MedicationEntity.dosage] (catalog default).
+     */
+    suspend fun updateLogDosage(medicationId: String, date: String, dosage: String?) {
+        val existing = medicationLogDao.getByMedAndDate(medicationId, date)
+        val now = System.currentTimeMillis()
+        val override = dosage?.trim()?.takeIf { it.isNotEmpty() }
+        medicationLogDao.upsert(
+            MedicationLogEntity(
+                id = existing?.id ?: UUID.randomUUID().toString(),
+                medicationId = medicationId,
+                moodEntryId = existing?.moodEntryId,
+                date = date,
+                taken = existing?.taken == true,
+                slotsTaken = existing?.slotsTaken ?: "{}",
+                dosageOverride = override,
+                createdAt = existing?.createdAt ?: now,
+                updatedAt = now,
+            ),
+        )
+    }
+
+    /** Effective dosage shown for a day: log override, else catalog. */
+    fun effectiveDosage(med: MedicationEntity, log: MedicationLogEntity?): String? =
+        log?.dosageOverride?.takeIf { it.isNotBlank() } ?: med.dosage
 }
 
 @Singleton

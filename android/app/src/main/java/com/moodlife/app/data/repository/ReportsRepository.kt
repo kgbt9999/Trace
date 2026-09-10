@@ -39,6 +39,47 @@ class ReportsRepository @Inject constructor(
         ) { logs, meds -> MonthBurden.adherence(logs, meds) }
     }
 
+    fun observeMonthMedDayFractions(year: Int, month: Int): Flow<List<Pair<String, Float?>>> {
+        val (from, to) = DateUtils.monthRange(year, month)
+        return combine(
+            medicationLogDao.observeRange(from, to),
+            medicationDao.observeActive(),
+        ) { logs, meds ->
+            if (meds.isEmpty()) return@combine emptyList()
+            val byDate = logs.groupBy { it.date }
+            val start = java.time.LocalDate.parse(from)
+            val end = java.time.LocalDate.parse(to)
+            buildList {
+                var d = start
+                while (!d.isAfter(end)) {
+                    val iso = d.toString()
+                    val dayLogs = byDate[iso].orEmpty()
+                    var taken = 0
+                    var scheduled = 0
+                    meds.forEach { med ->
+                        val log = dayLogs.find { it.medicationId == med.id }
+                        val slots = com.moodlife.app.util.MedsUtils.parseIntakeTimes(med.intakeTimes)
+                        val timed = slots.filter { it != "by-scheme" }
+                        if (timed.isEmpty()) {
+                            scheduled += 1
+                            if (log?.taken == true) taken += 1
+                        } else {
+                            scheduled += timed.size
+                            taken += timed.count { slot ->
+                                com.moodlife.app.util.MedsUtils.isSlotTaken(
+                                    log?.taken == true, log?.slotsTaken, slot, timed,
+                                )
+                            }
+                        }
+                    }
+                    val frac = if (scheduled <= 0) null else taken.toFloat() / scheduled
+                    add(iso.takeLast(2).trimStart('0').ifEmpty { "0" } to frac)
+                    d = d.plusDays(1)
+                }
+            }
+        }
+    }
+
     suspend fun buildInsights(): Triple<Boolean, List<InsightsEngine.InsightCard>, String> {
         val today = DateUtils.todayIso()
         val from = DateUtils.addDays(today, -365L)

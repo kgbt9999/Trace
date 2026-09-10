@@ -41,6 +41,9 @@ interface ExternalHealthDayDao {
     @Query("SELECT * FROM external_health_days WHERE date = :date ORDER BY kind")
     fun observeForDate(date: String): Flow<List<ExternalHealthDayEntity>>
 
+    @Query("SELECT * FROM external_health_days WHERE date BETWEEN :from AND :to ORDER BY date, kind")
+    fun observeRange(from: String, to: String): Flow<List<ExternalHealthDayEntity>>
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun upsert(entity: ExternalHealthDayEntity)
 

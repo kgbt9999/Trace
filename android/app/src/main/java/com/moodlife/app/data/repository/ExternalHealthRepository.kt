@@ -14,6 +14,9 @@ class ExternalHealthRepository @Inject constructor(
 ) {
     fun observeForDate(date: String): Flow<List<ExternalHealthDayEntity>> = dao.observeForDate(date)
 
+    fun observeRange(from: String, to: String): Flow<List<ExternalHealthDayEntity>> =
+        dao.observeRange(from, to)
+
     suspend fun upsertAll(days: List<ExternalHealthDayEntity>) = dao.upsertAll(days)
 
     /** Merge non-null fields into existing (date, source, kind) row. */

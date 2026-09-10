@@ -63,6 +63,8 @@ import com.moodlife.app.ui.navigation.NavHostViewModel
 import com.moodlife.app.ui.screens.TodayScreen
 import com.moodlife.app.ui.screens.calendar.CalendarScreen
 import com.moodlife.app.ui.screens.forecast.ForecastScreen
+import com.moodlife.app.ui.screens.meds.MedsScreen
+import com.moodlife.app.ui.screens.physical.PhysicalScreen
 import com.moodlife.app.ui.screens.reports.ReportsScreen
 import com.moodlife.app.ui.screens.guide.GuideScreen
 import com.moodlife.app.ui.screens.selfhelp.SelfHelpScreen
@@ -74,6 +76,8 @@ import com.moodlife.app.ui.theme.ThemeViewModel
 enum class MoodLifeTab(val route: String, val labelRes: Int) {
     Today("today", R.string.tab_today),
     Calendar("calendar", R.string.tab_calendar),
+    Meds("meds", R.string.tab_meds),
+    Physical("physical", R.string.tab_physical),
     Reports("reports", R.string.tab_reports),
     Forecast("forecast", R.string.tab_forecast),
     SelfHelp("selfhelp", R.string.tab_selfhelp),
@@ -92,6 +96,8 @@ fun MoodLifeNavHost(
     val tabs = buildList {
         add(MoodLifeTab.Today)
         add(MoodLifeTab.Calendar)
+        add(MoodLifeTab.Meds)
+        add(MoodLifeTab.Physical)
         add(MoodLifeTab.Reports)
         add(MoodLifeTab.Forecast)
         if (selfHelpEnabled) add(MoodLifeTab.SelfHelp)
@@ -166,6 +172,8 @@ fun MoodLifeNavHost(
             ) {
                 composable(MoodLifeTab.Today.route) { TodayScreen() }
                 composable(MoodLifeTab.Calendar.route) { CalendarScreen() }
+                composable(MoodLifeTab.Meds.route) { MedsScreen() }
+                composable(MoodLifeTab.Physical.route) { PhysicalScreen() }
                 composable(MoodLifeTab.Reports.route) { ReportsScreen() }
                 composable(MoodLifeTab.Forecast.route) { ForecastScreen() }
                 composable(MoodLifeTab.SelfHelp.route) { SelfHelpScreen() }

@@ -27,6 +27,7 @@ import com.moodlife.app.data.repository.PeriodRepository
 import com.moodlife.app.data.repository.SettingsRepository
 import com.moodlife.app.domain.HcSourceCatalog
 import dagger.hilt.android.qualifiers.ApplicationContext
+import kotlinx.coroutines.suspendCancellableCoroutine
 import org.json.JSONArray
 import java.time.Instant
 import java.time.ZoneId
@@ -34,6 +35,7 @@ import java.time.format.DateTimeFormatter
 import java.time.temporal.ChronoUnit
 import javax.inject.Inject
 import javax.inject.Singleton
+import kotlin.coroutines.resume
 import kotlin.reflect.KClass
 
 /**
@@ -113,9 +115,46 @@ class HealthConnectManager @Inject constructor(
         return requiredPermissions.all { it in granted }
     }
 
+    /**
+     * Launches the Health Connect permission UI via [ComponentActivity]'s
+     * [androidx.activity.result.ActivityResultRegistry]. Prefer the Compose
+     * [PermissionController.createRequestPermissionResultContract] launcher in UI;
+     * this path covers Activity/ViewModel callers.
+     */
     suspend fun requestPermissions(activity: ComponentActivity): Boolean {
         if (!isAvailable()) return false
-        return hasPermissions()
+        if (hasPermissions()) return true
+        return suspendCancellableCoroutine { cont ->
+            val key = "hc_perm_${System.currentTimeMillis()}"
+            lateinit var launcher: androidx.activity.result.ActivityResultLauncher<Set<String>>
+            launcher = activity.activityResultRegistry.register(
+                key,
+                androidx.health.connect.client.PermissionController.createRequestPermissionResultContract(),
+            ) { granted ->
+                try {
+                    launcher.unregister()
+                } catch (_: Exception) {
+                }
+                if (cont.isActive) {
+                    cont.resume(granted.any { it in requiredPermissions })
+                }
+            }
+            cont.invokeOnCancellation {
+                try {
+                    launcher.unregister()
+                } catch (_: Exception) {
+                }
+            }
+            try {
+                launcher.launch(requiredPermissions)
+            } catch (_: Exception) {
+                try {
+                    launcher.unregister()
+                } catch (_: Exception) {
+                }
+                if (cont.isActive) cont.resume(false)
+            }
+        }
     }
 
     suspend fun loadStatus(): HcStatus {

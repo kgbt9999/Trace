@@ -29,6 +29,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberModalBottomSheetState
@@ -115,13 +116,12 @@ fun CalendarScreen(viewModel: CalendarViewModel = hiltViewModel()) {
         TextButton(onClick = viewModel::openCycleSettings, modifier = Modifier.padding(top = 4.dp)) {
             Text(stringResource(R.string.calendar_cycle_settings))
         }
-        Text(
-            stringResource(R.string.calendar_user_icon_legend),
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.padding(top = 8.dp, bottom = 4.dp),
-        )
-        CalendarLegend(Modifier.padding(top = 4.dp))
+        TextButton(onClick = viewModel::toggleLegend, modifier = Modifier.padding(top = 0.dp)) {
+            Text(stringResource(R.string.calendar_legend_toggle))
+        }
+        if (state.showLegend) {
+            CalendarLegend(Modifier.padding(top = 4.dp))
+        }
     }
 
     state.selectedDate?.let { date ->
@@ -208,6 +208,15 @@ fun CalendarScreen(viewModel: CalendarViewModel = hiltViewModel()) {
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.padding(top = 4.dp),
                 )
+                if (state.showLegend) {
+                    Text(
+                        stringResource(R.string.calendar_user_icon_legend),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(top = 6.dp),
+                    )
+                    CalendarLegend(Modifier.padding(top = 6.dp))
+                }
                 Row(
                     Modifier.fillMaxWidth().padding(top = 8.dp),
                     verticalAlignment = Alignment.CenterVertically,
@@ -231,6 +240,18 @@ fun CalendarScreen(viewModel: CalendarViewModel = hiltViewModel()) {
                         TextButton(onClick = viewModel::clearDayIcon) {
                             Text(stringResource(R.string.calendar_user_icon_clear))
                         }
+                    }
+                }
+                if (dayIcon != null) {
+                    OutlinedTextField(
+                        value = state.iconNoteDraft,
+                        onValueChange = viewModel::onIconNoteChange,
+                        label = { Text(stringResource(R.string.calendar_icon_note_hint)) },
+                        modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+                        singleLine = true,
+                    )
+                    TextButton(onClick = viewModel::saveIconNote) {
+                        Text(stringResource(R.string.today_save))
                     }
                 }
 
@@ -422,6 +443,18 @@ private fun androidx.compose.foundation.layout.RowScope.CalendarDayCell(
                     Text("💭", fontSize = 7.sp)
                 } else if (cycleMarkers?.isOvulation == true) {
                     Text("✨", fontSize = 7.sp)
+                }
+                when (iso?.let { state.medStatusByDate[it] }) {
+                    MedDayStatus.ALL -> Box(
+                        Modifier.size(6.dp).clip(CircleShape).background(Color(0xFF2BBFA0)),
+                    )
+                    MedDayStatus.PARTIAL -> Box(
+                        Modifier.size(6.dp).clip(CircleShape).background(Color(0xFFE8A838)),
+                    )
+                    MedDayStatus.MISSED -> Box(
+                        Modifier.size(6.dp).clip(CircleShape).background(Color(0xFFE57373)),
+                    )
+                    else -> Unit
                 }
             }
     }

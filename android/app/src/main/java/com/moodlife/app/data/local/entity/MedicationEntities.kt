@@ -33,6 +33,8 @@ data class MedicationLogEntity(
     val date: String,
     val taken: Boolean = false,
     val slotsTaken: String = "{}",
+    /** Per-day dosage override; display uses this ?: [MedicationEntity.dosage]. */
+    val dosageOverride: String? = null,
     val createdAt: Long,
     val updatedAt: Long,
 )

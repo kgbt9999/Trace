@@ -25,6 +25,7 @@ import com.moodlife.app.data.repository.SettingsRepository
 import com.moodlife.app.data.repository.SymptomRepository
 import com.moodlife.app.data.repository.WarningSignRepository
 import com.moodlife.app.data.repository.WeatherRepository
+import com.moodlife.app.data.secure.SecureSecretsStore
 import com.moodlife.app.domain.ProdromeInference
 import com.moodlife.app.ui.navigation.DayNavigationState
 import com.moodlife.app.util.DateUtils
@@ -54,9 +55,9 @@ data class SettingsUiState(
     val crisisWishes: String = "",
     val crisisAvoid: String = "",
     val crisisOnWorsening: Boolean = true,
-    val weatherLat: String = "55.75",
-    val weatherLon: String = "37.62",
-    val weatherCity: String = "Москва",
+    val weatherLat: String = "",
+    val weatherLon: String = "",
+    val weatherCity: String = "",
     val yandexApiKey: String = "",
     val hcAvailable: Boolean = false,
     val hcHasPermissions: Boolean = false,
@@ -82,6 +83,7 @@ class SettingsViewModel @Inject constructor(
     private val factorRepository: FactorRepository,
     private val warningSignRepository: WarningSignRepository,
     private val settingsRepository: SettingsRepository,
+    private val secureSecretsStore: SecureSecretsStore,
     private val weatherRepository: WeatherRepository,
     private val healthConnectManager: HealthConnectManager,
     private val driveBackupManager: DriveBackupManager,
@@ -94,7 +96,7 @@ class SettingsViewModel @Inject constructor(
 ) : ViewModel() {
 
     private val _crisis = MutableStateFlow(CrisisForm())
-    private val _weather = MutableStateFlow(WeatherForm("55.75", "37.62", "Москва", ""))
+    private val _weather = MutableStateFlow(WeatherForm("", "", "", ""))
     private val _hc = MutableStateFlow(
         HealthConnectManager.HcStatus(
             available = false,
@@ -203,7 +205,7 @@ class SettingsViewModel @Inject constructor(
             )
             _crisisOn.value = settingsRepository.get(SettingsRepository.KEY_CRISIS_ON_WORSENING) != "false"
             val loc = settingsRepository.get(SettingsRepository.KEY_WEATHER_LOCATION)
-            val yandex = settingsRepository.get(SettingsRepository.KEY_YANDEX_WEATHER_API_KEY).orEmpty()
+            val yandex = secureSecretsStore.getYandexWeatherApiKey()
             if (loc != null) {
                 val parts = loc.split(",")
                 if (parts.size == 2) {
@@ -504,7 +506,9 @@ class SettingsViewModel @Inject constructor(
     fun setReportsCharts(ids: Set<String>) = viewModelScope.launch {
         settingsRepository.set(
             SettingsRepository.KEY_REPORTS_CHARTS,
-            ids.joinToString(",").ifBlank { "radar,mood,sleep,energy,alcohol,safety,burden" },
+            ids.joinToString(",").ifBlank {
+                "dashboard,radar,mood,sleep,sleep_mood,energy,alcohol,safety,burden,heatmap,medgrid,priority"
+            },
         )
     }
 
@@ -547,7 +551,9 @@ class SettingsViewModel @Inject constructor(
             _message.value = "weather_invalid"
             return@launch
         }
-        settingsRepository.set(SettingsRepository.KEY_YANDEX_WEATHER_API_KEY, yandexKey.trim())
+        secureSecretsStore.setYandexWeatherApiKey(yandexKey.trim())
+        // Ensure plaintext Room copy is cleared if it still exists.
+        settingsRepository.set(SettingsRepository.KEY_YANDEX_WEATHER_API_KEY, "")
         weatherRepository.setLocation(latN, lonN, city.ifBlank { null })
         _weather.value = WeatherForm(lat, lon, city, yandexKey.trim())
         val result = weatherRepository.refreshForecast()

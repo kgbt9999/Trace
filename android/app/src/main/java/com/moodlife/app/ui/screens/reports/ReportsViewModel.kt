@@ -38,6 +38,8 @@ data class ReportsUiState(
     val entryCount: Int = 0,
     val avgSleepHours: Float? = null,
     val avgFunctioning: Float? = null,
+    val avgDepressed: Float? = null,
+    val avgElevated: Float? = null,
     val daysDepressed: Int = 0,
     val daysElevated: Int = 0,
     val daysMixed: Int = 0,
@@ -50,8 +52,16 @@ data class ReportsUiState(
     val alcoholSeries: List<Pair<String, Float>> = emptyList(),
     val routineSeries: List<Pair<String, Float>> = emptyList(),
     val safetySeries: List<Pair<String, Float>> = emptyList(),
+    val medDayFractions: List<Pair<String, Float?>> = emptyList(),
+    val heatCells: List<com.moodlife.app.ui.components.HeatCell> = emptyList(),
+    val sleepMoodPoints: List<com.moodlife.app.ui.components.SleepMoodPoint> = emptyList(),
     val exportMessage: String? = null,
-    val visibleCharts: Set<String> = setOf("radar", "mood", "sleep", "energy", "alcohol", "safety", "burden"),
+    val visibleCharts: Set<String> = DEFAULT_VISIBLE_CHARTS,
+)
+
+private val DEFAULT_VISIBLE_CHARTS = setOf(
+    "dashboard", "radar", "mood", "sleep", "sleep_mood", "energy", "alcohol", "safety",
+    "burden", "heatmap", "medgrid", "priority",
 )
 
 @OptIn(ExperimentalCoroutinesApi::class)
@@ -65,9 +75,7 @@ class ReportsViewModel @Inject constructor(
     private val _yearMonth = MutableStateFlow(LocalDate.now().year to (LocalDate.now().monthValue - 1))
     private val _insights = MutableStateFlow(Triple(false, emptyList<InsightsEngine.InsightCard>(), ""))
     private val _exportMessage = MutableStateFlow<String?>(null)
-    private val _visibleCharts = MutableStateFlow(
-        setOf("radar", "mood", "sleep", "energy", "alcohol", "safety", "burden"),
-    )
+    private val _visibleCharts = MutableStateFlow(DEFAULT_VISIBLE_CHARTS)
 
     val uiState: StateFlow<ReportsUiState> = combine(
         _yearMonth,
@@ -90,6 +98,20 @@ class ReportsViewModel @Inject constructor(
             RadarAxis("Общение", avg { it.sociability }, 3f),
         )
         val burden = MonthBurden.counts(entries.map { it.depressed to it.elevated })
+        val heatCells = entries.map { e ->
+            val d = LocalDate.parse(e.date)
+            val weekIndex = ((d.dayOfMonth - 1) / 7)
+            val weekday = (d.dayOfWeek.value - 1).coerceIn(0, 6)
+            val dep = e.depressed
+            val elev = e.elevated
+            com.moodlife.app.ui.components.HeatCell(
+                weekIndex = weekIndex,
+                weekday = weekday,
+                intensity = maxOf(dep, elev).toFloat().coerceIn(0f, 5f) / 5f,
+                depressedDominant = dep > elev,
+                elevatedDominant = elev > dep,
+            )
+        }
         ReportsUiState(
             year = year,
             month = month,
@@ -105,6 +127,8 @@ class ReportsViewModel @Inject constructor(
             entryCount = entries.size,
             avgSleepHours = entries.mapNotNull { it.sleepHours?.toFloat() }.average().takeIf { !it.isNaN() }?.toFloat(),
             avgFunctioning = entries.map { it.functioning }.average().takeIf { entries.isNotEmpty() }?.toFloat(),
+            avgDepressed = entries.map { it.depressed }.average().takeIf { entries.isNotEmpty() }?.toFloat(),
+            avgElevated = entries.map { it.elevated }.average().takeIf { entries.isNotEmpty() }?.toFloat(),
             daysDepressed = burden.depressed,
             daysElevated = burden.elevated,
             daysMixed = burden.mixed,
@@ -115,6 +139,13 @@ class ReportsViewModel @Inject constructor(
             alcoholSeries = entries.map { it.date.substring(8) to it.alcoholUse.toFloat() },
             routineSeries = entries.map { it.date.substring(8) to it.routineScore.toFloat() },
             safetySeries = entries.map { it.date.substring(8) to it.safetyCheck.toFloat() },
+            heatCells = heatCells,
+            sleepMoodPoints = entries.mapNotNull { e ->
+                val hours = e.sleepHours ?: return@mapNotNull null
+                // Map 0–5 spad/подъём → polarity −3…+3 (подъём positive, спад negative).
+                val polarity = ((e.elevated - e.depressed).toFloat() / 5f) * 3f
+                com.moodlife.app.ui.components.SleepMoodPoint(hours, polarity.coerceIn(-3f, 3f))
+            },
             exportMessage = exportMsg,
             visibleCharts = charts,
             bedtimeSpreadMin = MonthBurden.bedtimeSpreadMinutes(entries.mapNotNull { it.sleepTime }),
@@ -123,6 +154,10 @@ class ReportsViewModel @Inject constructor(
         _yearMonth.flatMapLatest { (y, m) -> reportsRepository.observeMonthAdherence(y, m) },
     ) { state, adherence ->
         state.copy(adherencePercent = adherence.percent)
+    }.combine(
+        _yearMonth.flatMapLatest { (y, m) -> reportsRepository.observeMonthMedDayFractions(y, m) },
+    ) { state, fractions ->
+        state.copy(medDayFractions = fractions)
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), ReportsUiState())
 
     init {

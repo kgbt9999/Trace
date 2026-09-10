@@ -7,6 +7,7 @@ import com.moodlife.app.data.network.OpenMeteoApi
 import com.moodlife.app.data.network.OpenMeteoGeocodingApi
 import com.moodlife.app.data.network.OpenMeteoDaily
 import com.moodlife.app.data.network.YandexWeatherApi
+import com.moodlife.app.data.secure.SecureSecretsStore
 import com.moodlife.app.domain.WeatherCodeInfo
 import com.moodlife.app.domain.WeatherCodes
 import kotlinx.coroutines.flow.Flow
@@ -19,6 +20,7 @@ import javax.inject.Singleton
 class WeatherRepository @Inject constructor(
     private val weatherDayDao: WeatherDayDao,
     private val settingsRepository: SettingsRepository,
+    private val secureSecretsStore: SecureSecretsStore,
     private val openMeteoApi: OpenMeteoApi,
     private val geocodingApi: OpenMeteoGeocodingApi,
     private val yandexWeatherApi: YandexWeatherApi,
@@ -83,7 +85,7 @@ class WeatherRepository @Inject constructor(
     }
 
     private suspend fun fetchYandex(lat: Double, lon: Double): RefreshResult? {
-        val key = settingsRepository.get(SettingsRepository.KEY_YANDEX_WEATHER_API_KEY)?.trim().orEmpty()
+        val key = secureSecretsStore.getYandexWeatherApiKey()
         if (key.isBlank()) return null
         return try {
             val response = yandexWeatherApi.forecast(key, lat, lon)

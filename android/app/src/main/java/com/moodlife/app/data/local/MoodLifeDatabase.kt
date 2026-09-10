@@ -58,7 +58,7 @@ import com.moodlife.app.data.local.entity.WeatherDayEntity
         ExternalHealthDayEntity::class,
         SettingEntity::class,
     ],
-    version = 3,
+    version = 4,
     exportSchema = false,
 )
 abstract class MoodLifeDatabase : RoomDatabase() {
@@ -100,6 +100,18 @@ abstract class MoodLifeDatabase : RoomDatabase() {
             override fun migrate(db: SupportSQLiteDatabase) {
                 db.execSQL(
                     "ALTER TABLE factors ADD COLUMN scaleType TEXT NOT NULL DEFAULT '0-5'",
+                )
+            }
+        }
+
+        /**
+         * v3 → v4: per-day medication dosage override on logs.
+         * Catalog [MedicationEntity.dosage] stays the default; day edit writes override only.
+         */
+        val MIGRATION_3_4: Migration = object : Migration(3, 4) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    "ALTER TABLE medication_logs ADD COLUMN dosageOverride TEXT DEFAULT NULL",
                 )
             }
         }
