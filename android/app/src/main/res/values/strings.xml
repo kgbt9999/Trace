@@ -1,6 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">Trace</string>
+    <string name="hc_privacy_title">Trace и Health Connect</string>
+    <string name="hc_privacy_body">Trace читает из Health Connect только те типы данных, которые вы явно разрешите (шаги, сон, вес, активность, питание, цикл и связанные показатели).\n\nДанные сохраняются локально на устройстве и используются для сводок в разделах «Календарь» и «Сегодня». Trace не ставит диагнозов и не меняет лечение.\n\nВы можете отозвать разрешения в настройках Health Connect в любой момент. Экспорт и удаление данных — по вашему действию в настройках Trace.</string>
     <string name="app_tagline">ДНЕВНИК СОСТОЯНИЯ</string>
     <string name="disclaimer">Trace — инструмент самонаблюдения, не медицинская диагностика и не замена врачу. При ухудшении состояния или суицидальных мыслях обратитесь к специалисту или в службу экстренной помощи.</string>
 
@@ -8,7 +10,7 @@
     <string name="tab_today">Сегодня</string>
     <string name="tab_calendar">Календарь</string>
     <string name="tab_meds">Лекарства</string>
-    <string name="tab_physical">Физическое</string>
+    <string name="tab_physical">Физическое состояние</string>
     <string name="tab_reports">Отчёты</string>
     <string name="tab_forecast">Прогноз</string>
     <string name="tab_settings">Настройки</string>
@@ -32,7 +34,6 @@
     <string name="today_title">Сегодня</string>
     <string name="today_save">Сохранить</string>
     <string name="today_saving">Сохранение…</string>
-    <string name="today_placeholder">Ежедневная оценка — в разработке</string>
     <string name="today_mood_section">Основные оси (0–5)</string>
     <string name="today_extra_section">Дополнительно</string>
     <string name="today_clinical_section">Сон и дела</string>
@@ -135,7 +136,7 @@
     <string name="onboarding_add_med">Добавить препарат</string>
     <string name="onboarding_tip_sleep">Сон: укажите отбой и подъём — часы посчитаются сами (можно поправить вручную).</string>
     <string name="onboarding_tip_meds">Лекарства: отметки по дням на вкладке «Лекарства»; доза за день не меняет каталог для всех дней.</string>
-    <string name="onboarding_tip_physical">Физическое: синхронизация Health Connect за 30 дней — шаги, сон, вес (если разрешите).</string>
+    <string name="onboarding_tip_physical">Физическое состояние: день/неделя/месяц/квартал — питание КБЖУ, тело, цикл, активность, сон.</string>
     <string name="meds_tab_subtitle">Приём за неделю и сегодня. Это ваши отметки, не оценка терапии.</string>
     <string name="meds_tab_week_title">Неделя</string>
     <string name="meds_tab_week_hint">Зелёный — все слоты, жёлтый — частично, красный — пропуск.</string>
@@ -145,30 +146,118 @@
     <string name="meds_tab_empty">Нет активных препаратов. Добавьте в настройках.</string>
     <string name="meds_tab_open_today">Отметить в «Сегодня»</string>
     <string name="meds_tab_manage">Управление списком</string>
-    <string name="physical_tab_subtitle">Сводка внешних данных за 30 дней (Health Connect).</string>
-    <string name="physical_tab_hint">Данные с устройства и приложений через Health Connect. Не диагноз.</string>
+    <string name="physical_tab_subtitle">Сводка физического состояния: питание, тело, цикл, активность и сон.</string>
+    <string name="physical_tab_hint">Данные с устройства и приложений через Health Connect, плюс записи дневника. Не диагноз.</string>
     <string name="physical_range">Период: %1$s</string>
     <string name="physical_hc_missing">Health Connect не установлен.</string>
     <string name="physical_hc_need_perm">Нужны разрешения на чтение данных.</string>
     <string name="physical_open_hc">Открыть Health Connect</string>
     <string name="physical_request_perm">Запросить разрешения</string>
-    <string name="physical_sync">Синхронизировать 30 дней</string>
+    <string name="physical_sync">Синхронизировать</string>
     <string name="physical_syncing">Синхронизация…</string>
-    <string name="physical_empty">Пока нет данных. Синхронизируйте Health Connect.</string>
+    <string name="physical_empty">Пока нет данных за выбранный период.</string>
+    <string name="physical_last_sync">Последняя синхронизация: %1$s · записей: %2$d</string>
+    <string name="physical_partial_perms">Частичные разрешения Health Connect: %1$d из %2$d. Синхронизируются только доступные типы данных.</string>
     <string name="physical_sync_ok">Обновлено записей: %1$s</string>
     <string name="physical_sync_skipped">Синхронизация пропущена (нет HC или разрешений).</string>
     <string name="physical_sync_fail">Не удалось синхронизировать.</string>
+    <string name="physical_period_day">День</string>
+    <string name="physical_period_week">Неделя</string>
+    <string name="physical_period_month">Месяц</string>
+    <string name="physical_period_quarter">Квартал</string>
+    <string name="physical_prev_period">Предыдущий период</string>
+    <string name="physical_next_period">Следующий период</string>
+    <string name="physical_nutrition_title">Питание (КБЖУ)</string>
+    <string name="physical_nutrition_hint">Белки, жиры, углеводы и калории из Health Connect. Нормы — только если вы задали цели ниже.</string>
+    <string name="physical_nutrition_empty">Нет данных о питании за период.</string>
+    <string name="physical_nutrition_avg_note">За неделю/месяц/квартал: макросы и ккал — средние; сожжено — сумма.</string>
+    <string name="physical_macro_protein">Белки</string>
+    <string name="physical_macro_fat">Жиры</string>
+    <string name="physical_macro_carbs">Углеводы</string>
+    <string name="physical_kcal_norm">норма</string>
+    <string name="physical_kcal_burned">сожжено</string>
+    <string name="physical_kcal_unit">ккал</string>
+    <string name="physical_body_title">Тело</string>
+    <string name="physical_height">Рост</string>
+    <string name="physical_weight">Вес</string>
+    <string name="physical_cycle_title">Женский календарь</string>
+    <string name="physical_cycle_empty">Нет настроек цикла. Укажите дату начала в настройках.</string>
+    <string name="physical_cycle_day">День цикла: %1$d</string>
+    <string name="physical_cycle_phase">Фаза: %1$s</string>
+    <string name="physical_activity_title">Активность</string>
+    <string name="physical_cardio">Кардио (мин)</string>
+    <string name="physical_steps">Шаги</string>
+    <string name="physical_activity_sum_note">За период длиннее дня: шаги и кардио — сумма.</string>
+    <string name="physical_sleep_title">Сон</string>
+    <string name="physical_sleep_duration">Длительность: %1$s ч</string>
+    <string name="physical_sleep_bedtime">Отбой: %1$s</string>
+    <string name="physical_sleep_wake">Подъём: %1$s</string>
+    <string name="physical_sleep_quality">Качество: %1$s</string>
+    <string name="physical_goals_title">Цели КБЖУ (необязательно)</string>
+    <string name="physical_goals_hint">Простые пользовательские цели для прогресс-баров. Не медицинская норма и не рекомендация.</string>
+    <string name="physical_goal_kcal">Норма ккал</string>
+    <string name="physical_goal_protein">Белки, г</string>
+    <string name="physical_goal_fat">Жиры, г</string>
+    <string name="physical_goal_carbs">Углеводы, г</string>
+    <string name="physical_goals_save">Сохранить цели</string>
+    <string name="physical_height_edit_title">Рост</string>
+    <string name="physical_height_save">Сохранить рост</string>
     <string name="reports_med_intake_title">Приём лекарств</string>
     <string name="reports_med_intake_hint">Слоты из журнала за месяц. Не оценка терапии и не рекомендация менять схему.</string>
     <string name="reports_heatmap_title">Тепловая карта настроения</string>
     <string name="reports_heatmap_hint">Интенсивность спада/подъёма по дням недели. Паттерн ≠ диагноз.</string>
     <string name="reports_dashboard_title">Сводка месяца</string>
-    <string name="reports_dashboard_hint">Средние по дневнику: спад, подъём, сон. Нейтральные метки.</string>
+    <string name="reports_dashboard_hint">Средние по дневнику: полярность настроения, сон, отметки приёма. Нейтральные метки, не диагноз.</string>
+    <string name="reports_kpi_avg_mood">Среднее настроение</string>
+    <string name="reports_kpi_avg_sleep">Сон (ср. ч)</string>
+    <string name="reports_kpi_meds">Приём лекарств</string>
+    <string name="reports_kpi_mood_elevated">лёгкий подъём</string>
+    <string name="reports_kpi_mood_low">лёгкий спад</string>
+    <string name="reports_kpi_mood_neutral">около нуля</string>
+    <string name="reports_kpi_sleep_low">ниже обычного</string>
+    <string name="reports_kpi_sleep_ok">в обычном диапазоне</string>
+    <string name="reports_kpi_med_misses">%1$d пропуск(ов)</string>
+    <string name="reports_kpi_med_ok">без пропусков в журнале</string>
+    <string name="reports_mood_sleep_title">Настроение и сон</string>
+    <string name="reports_mood_sleep_hint">Полярность (−3…+3) и сон (ч/2 на той же шкале). Наблюдение, не причинность.</string>
+    <string name="reports_mood_sleep_mood">Настроение</string>
+    <string name="reports_mood_sleep_sleep">Сон (ч/2)</string>
+    <string name="reports_level2_title">Тревога и активность</string>
+    <string name="reports_level2_hint">Уровень 2: тревога и силы (0–10), ниже — раздражение. Не диагноз.</string>
+    <string name="reports_level3_title">Дополнительные оси</string>
+    <string name="reports_level3_hint">Уровень 3: внимание, общение, аппетит — удобно смотреть раз в неделю.</string>
+    <string name="reports_med_legend_taken">Принял</string>
+    <string name="reports_med_legend_missed">Пропустил</string>
+    <string name="reports_med_legend_none">Нет данных</string>
+    <string name="reports_med_taken_list_title">Что принято по дням</string>
     <string name="calendar_icon_note_hint">Краткое значение значка (только для себя)</string>
-    <string name="calendar_legend_toggle">Легенда</string>
+    <string name="calendar_day_meds_title">Принятые лекарства</string>
+    <string name="calendar_day_meds_empty">Нет отметок приёма за этот день.</string>
+    <string name="calendar_meds_section_title">Лекарства</string>
+    <string name="calendar_meds_section_hint">%1$s — в клетке: название, доза и принято/запланировано. Не оценка терапии.</string>
+    <string name="calendar_physical_section_title">Физическое состояние</string>
     <string name="backup_monthly_channel">Резервные копии</string>
     <string name="backup_monthly_title">Резервная копия сохранена</string>
     <string name="backup_monthly_text">Файл: Documents/Trace/backups/</string>
+    <string name="backup_weekly_channel">Еженедельные копии</string>
+    <string name="backup_weekly_title">Еженедельная копия сохранена</string>
+    <string name="backup_weekly_text">Полный JSON в выбранную папку:</string>
+    <string name="settings_weekly_backup_title">Еженедельная копия в папку</string>
+    <string name="settings_weekly_backup_desc">Полный восстанавливаемый JSON-бэкап раз в неделю. По умолчанию выключено. Папку выбираете вы (SAF).</string>
+    <string name="settings_weekly_backup_toggle">Включить автокопию</string>
+    <string name="settings_weekly_backup_need_folder">Сначала выберите папку.</string>
+    <string name="settings_weekly_backup_folder">Папка: %1$s</string>
+    <string name="settings_weekly_backup_pick_folder">Выбрать папку</string>
+    <string name="settings_weekly_backup_last">Последняя копия: %1$s</string>
+    <string name="settings_weekly_backup_never">ещё не было</string>
+    <string name="settings_weekly_backup_now">Сделать копию сейчас</string>
+    <string name="settings_weekly_backup_folder_ok">Папка сохранена</string>
+    <string name="settings_weekly_backup_on">Еженедельная копия включена</string>
+    <string name="settings_weekly_backup_off">Еженедельная копия выключена</string>
+    <string name="settings_weekly_backup_need_setup">Нужны папка и включённый переключатель</string>
+    <string name="settings_weekly_backup_queued">Копия поставлена в очередь</string>
+    <string name="hint_pav_help">ПАВ — психоактивные вещества (алкоголь и другие): пользовательская шкала самоотчёта для отслеживания триггеров. Не обвинение и не диагноз.</string>
+    <string name="hint_pav_scale">ПАВ / вещества: самоотчёт. Подписи вроде «заметно» — ступени шкалы (по умолчанию или ваши). Не клиническая оценка.</string>
 
     <string name="reports_scatter_title">Сон и настроение</string>
     <string name="reports_scatter_hint">Каждая точка — день с часами сна и полярностью (подъём − спад). Связь в данных, не диагноз и не причинность.</string>
@@ -356,7 +445,9 @@
     <string name="guide_today_title">Вкладка «Сегодня»</string>
     <string name="guide_today_body">Ежедневная запись: оси настроения, сон, лекарства, симптомы, триггеры и продромы. Разделы можно сворачивать. Автосохранение при нажатии «Сохранить».</string>
     <string name="guide_calendar_title">Календарь</string>
-    <string name="guide_calendar_body">Обзор месяца: цвет дня по настроению, погода, фазы цикла. Настройка цикла — в «Настройки → Менструация». Нажмите день для деталей.</string>
+    <string name="guide_calendar_body">Обзор месяца: цвет дня по настроению, погода, фазы цикла. Ниже — лекарства (имя+доза) и физическое состояние (день/неделя/месяц/квартал: КБЖУ, тело, цикл, активность, сон). Нажмите день для деталей.</string>
+    <string name="guide_calendar_legend_title">Как читать календарь</string>
+    <string name="guide_calendar_legend_body">В клетке: Д — спад, П — подъём, С — смешанный, Т/Р — тревога/раздражение, · — без выраженного спада или подъёма. Внизу клетки — фаза луны (все восемь). Полоска — дни цикла. Цвет клетки отражает настроение; зелёная/жёлтая/красная точка — статус приёма лекарств за день. Личный значок ставится только на выбранный день («Поставить значок»).</string>
     <string name="guide_reports_title">Отчёты</string>
     <string name="guide_reports_body">Графики, дни спада/подъёма и средние за месяц. Экспорт в JSON, HTML, CSV и PDF — для врача или архива. Паттерны требуют ~14 дней записей.</string>
     <string name="guide_forecast_title">Прогноз</string>
@@ -571,7 +662,7 @@
 
     <string name="settings_weather_city_search">Поиск города (от ~10 тыс. жителей)</string>
     <string name="settings_weather_city_search_hint">Начните вводить название. Для мелких населённых пунктов — координаты ниже.</string>
-    <string name="settings_weather_coords_hint">Если города нет в поиске — введите широту и долготу вручную.</string>
+    <string name="settings_weather_coords_hint">Если города нет в поиске — введите широту и долготу вручную (например из Google Maps / OpenStreetMap: долгое нажатие на точку → координаты в карточке места).</string>
 
     <string name="settings_hc_apps_note">Trace читает данные через Health Connect. Подключите в HC приложения вроде Google Fit / шагомеры, Sleep as Android / Sleep Cycle, весы Unique Health, Flo/Clue и трекеры питания — затем выдайте разрешения здесь. Прямого доступа к чужим приложениям Android не даёт.</string>
     <string name="settings_hc_install">Установить / открыть Health Connect</string>
@@ -579,12 +670,6 @@
 
     <string name="settings_backup_cloud_hint">Экспорт JSON — полный бэкап. CSV — таблица дней (те же колонки, что в отчёте). PDF — отчёт с графиками для врача.</string>
     <string name="settings_backup_export_cloud">Сохранить бэкап в облако / файлы</string>
-
-    <string name="calendar_placeholder">Календарь — в разработке</string>
-    <string name="reports_placeholder">Отчёты — в разработке</string>
-    <string name="forecast_placeholder">Прогноз — в разработке</string>
-    <string name="settings_placeholder">Настройки — в разработке</string>
-    <string name="sources_placeholder">Источники и цитаты — в разработке</string>
 
     <!-- Feature pass: TRACE / Today / import / self-help -->
     <string name="today_add_med_settings">Добавить в Настройках → Препараты</string>
@@ -610,12 +695,12 @@
     <string name="tab_selfhelp">Упражнения</string>
     <string name="selfhelp_title">Упражнения самопомощи</string>
     <string name="selfhelp_subtitle">Проверенные техники из психообразования при БАР. Не диагноз и не замена врачу.</string>
-    <string name="selfhelp_disclaimer">Поддерживающие практики по литературе (Colom &amp; Vieta, Berk, Miklowitz, White &amp; Preston, Aiken &amp; Phelps, CANMAT/ISBD, DBT-навыки, IPSRT). Не меняйте лекарства сами. Не диагноз.</string>
+    <string name="selfhelp_disclaimer">Поддерживающие практики по литературе (Colom &amp; Vieta, Berk, Miklowitz, White &amp; Preston, Aiken &amp; Phelps, CANMAT/ISBD, DBT, IPSRT; Michalak 2016, Janney 2014, Levrat 2024, Lo 2024). Опционально. Не меняйте лекарства сами. Не диагноз.</string>
     <string name="selfhelp_minutes">~%1$d мин</string>
     <string name="selfhelp_source">Источник: %1$s</string>
     <string name="selfhelp_caution">Важно: %1$s</string>
-    <string name="selfhelp_enable_tab">Показывать вкладку «Упражнения»</string>
-    <string name="selfhelp_enable_hint">Можно скрыть вкладку внизу, если сейчас не нужна.</string>
+    <string name="selfhelp_enable_tab">Дублировать «Упражнения» в нижней панели</string>
+    <string name="selfhelp_enable_hint">Иконка упражнений всегда в верхней панели (слева от «?»). Нижнюю вкладку можно включить отдельно.</string>
 
     <string name="forecast_share">Поделиться прогнозом</string>
     <string name="forecast_share_subject">Прогноз Trace</string>
@@ -623,9 +708,9 @@
 
     <string name="reports_export_hint">Выберите формат отчёта. JSON — полный бэкап; HTML/PDF — для врача; CSV — таблица дней.</string>
     <string name="reports_export_json_hint">Полный архив записей</string>
-    <string name="reports_export_html_hint">Печать / браузер</string>
+    <string name="reports_export_html_hint">Для врача: сводка, графики, лекарства по дням, пояснение ПАВ</string>
+    <string name="reports_export_pdf_hint">PDF: все графики, журнал, лекарства по дням</string>
     <string name="reports_export_csv_hint">Таблица для Excel</string>
-    <string name="reports_export_pdf_hint">PDF с графиками</string>
     <string name="reports_anxiety_chart">Тревога и раздражение</string>
     <string name="reports_safety_chart">Безопасность</string>
     <string name="reports_safety_chart_hint">Шкала 0-3 по дням. Наблюдение, не оценка риска врачом.</string>

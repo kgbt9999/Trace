@@ -73,6 +73,9 @@ data class SettingsUiState(
     val cycleIrregular: Boolean = false,
     val integrationMessage: String? = null,
     val prodromeHints: List<com.moodlife.app.domain.ProdromeInference.Hint> = emptyList(),
+    val weeklyBackupEnabled: Boolean = false,
+    val weeklyBackupFolderLabel: String? = null,
+    val weeklyBackupLastStatus: String? = null,
 )
 
 @HiltViewModel
@@ -191,7 +194,20 @@ class SettingsViewModel @Inject constructor(
             prodromeHints = emptyList(), // filled via combine with _prodromeHints below
         )
     }.let { base ->
-        combine(base, _prodromeHints) { state, hints -> state.copy(prodromeHints = hints) }
+        combine(
+            base,
+            _prodromeHints,
+            settingsRepository.observe(SettingsRepository.KEY_WEEKLY_BACKUP_ENABLED),
+            settingsRepository.observe(SettingsRepository.KEY_WEEKLY_BACKUP_TREE_URI),
+            settingsRepository.observe(SettingsRepository.KEY_WEEKLY_BACKUP_LAST),
+        ) { state, hints, enabled, treeUri, last ->
+            state.copy(
+                prodromeHints = hints,
+                weeklyBackupEnabled = enabled == "true",
+                weeklyBackupFolderLabel = treeUri?.takeIf { it.isNotBlank() }?.let { shortUriLabel(it) },
+                weeklyBackupLastStatus = last,
+            )
+        }
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), SettingsUiState())
 
     init {
@@ -507,7 +523,7 @@ class SettingsViewModel @Inject constructor(
         settingsRepository.set(
             SettingsRepository.KEY_REPORTS_CHARTS,
             ids.joinToString(",").ifBlank {
-                "dashboard,radar,mood,sleep,sleep_mood,energy,alcohol,safety,burden,heatmap,medgrid,priority"
+                "dashboard,mood_sleep,medgrid,heatmap,scatter,level2,level3,radar,priority,burden"
             },
         )
     }
@@ -632,6 +648,44 @@ class SettingsViewModel @Inject constructor(
             }
         } catch (_: Exception) {
             _message.value = "import_fail"
+        }
+    }
+
+    fun setWeeklyBackupFolder(uri: Uri) = viewModelScope.launch {
+        com.moodlife.app.workers.WeeklyFolderBackupWorker.takePersistablePermission(context, uri)
+        settingsRepository.set(SettingsRepository.KEY_WEEKLY_BACKUP_TREE_URI, uri.toString())
+        com.moodlife.app.workers.WeeklyFolderBackupWorker.syncSchedule(context, settingsRepository)
+        _message.value = "weekly_folder_ok"
+    }
+
+    fun setWeeklyBackupEnabled(enabled: Boolean) = viewModelScope.launch {
+        settingsRepository.set(
+            SettingsRepository.KEY_WEEKLY_BACKUP_ENABLED,
+            if (enabled) "true" else "false",
+        )
+        com.moodlife.app.workers.WeeklyFolderBackupWorker.syncSchedule(context, settingsRepository)
+        _message.value = if (enabled) "weekly_on" else "weekly_off"
+    }
+
+    fun runWeeklyBackupNow() = viewModelScope.launch {
+        val enabled = settingsRepository.get(SettingsRepository.KEY_WEEKLY_BACKUP_ENABLED) == "true"
+        val uri = settingsRepository.get(SettingsRepository.KEY_WEEKLY_BACKUP_TREE_URI)
+        if (!enabled || uri.isNullOrBlank()) {
+            _message.value = "weekly_need_setup"
+            return@launch
+        }
+        val request = androidx.work.OneTimeWorkRequestBuilder<com.moodlife.app.workers.WeeklyFolderBackupWorker>()
+            .build()
+        androidx.work.WorkManager.getInstance(context).enqueue(request)
+        _message.value = "weekly_queued"
+    }
+
+    private fun shortUriLabel(uri: String): String {
+        return try {
+            val path = Uri.parse(uri).lastPathSegment?.substringAfter(':') ?: uri
+            path.takeLast(48)
+        } catch (_: Exception) {
+            uri.takeLast(48)
         }
     }
 

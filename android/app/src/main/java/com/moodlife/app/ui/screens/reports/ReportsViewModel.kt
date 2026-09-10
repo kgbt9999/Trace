@@ -31,6 +31,10 @@ data class ReportsUiState(
     val elevatedSeries: List<Pair<String, Float>> = emptyList(),
     val anxiousSeries: List<Pair<String, Float>> = emptyList(),
     val irritableSeries: List<Pair<String, Float>> = emptyList(),
+    val concentrationSeries: List<Pair<String, Float>> = emptyList(),
+    val sociabilitySeries: List<Pair<String, Float>> = emptyList(),
+    val appetiteSeries: List<Pair<String, Float>> = emptyList(),
+    val polaritySeries: List<Pair<String, Float>> = emptyList(),
     val radarAxes: List<RadarAxis> = emptyList(),
     val insightsReady: Boolean = false,
     val insights: List<InsightsEngine.InsightCard> = emptyList(),
@@ -40,11 +44,13 @@ data class ReportsUiState(
     val avgFunctioning: Float? = null,
     val avgDepressed: Float? = null,
     val avgElevated: Float? = null,
+    val avgPolarity: Float? = null,
     val daysDepressed: Int = 0,
     val daysElevated: Int = 0,
     val daysMixed: Int = 0,
     val daysOther: Int = 0,
     val adherencePercent: Int? = null,
+    val missedMedSlots: Int? = null,
     val bedtimeSpreadMin: Int? = null,
     val sleepSeries: List<Pair<String, Float>> = emptyList(),
     val energySeries: List<Pair<String, Float>> = emptyList(),
@@ -53,6 +59,7 @@ data class ReportsUiState(
     val routineSeries: List<Pair<String, Float>> = emptyList(),
     val safetySeries: List<Pair<String, Float>> = emptyList(),
     val medDayFractions: List<Pair<String, Float?>> = emptyList(),
+    val medTakenLines: List<String> = emptyList(),
     val heatCells: List<com.moodlife.app.ui.components.HeatCell> = emptyList(),
     val sleepMoodPoints: List<com.moodlife.app.ui.components.SleepMoodPoint> = emptyList(),
     val exportMessage: String? = null,
@@ -60,8 +67,8 @@ data class ReportsUiState(
 )
 
 private val DEFAULT_VISIBLE_CHARTS = setOf(
-    "dashboard", "radar", "mood", "sleep", "sleep_mood", "energy", "alcohol", "safety",
-    "burden", "heatmap", "medgrid", "priority",
+    "dashboard", "mood_sleep", "medgrid", "heatmap", "scatter",
+    "level2", "level3", "radar", "priority", "burden",
 )
 
 @OptIn(ExperimentalCoroutinesApi::class)
@@ -112,6 +119,11 @@ class ReportsViewModel @Inject constructor(
                 elevatedDominant = elev > dep,
             )
         }
+        val polaritySeries = entries.map {
+            val polarity = ((it.elevated - it.depressed).toFloat() / 5f) * 3f
+            it.date.substring(8) to polarity.coerceIn(-3f, 3f)
+        }
+        val avgPol = polaritySeries.map { it.second }.average().takeIf { entries.isNotEmpty() }?.toFloat()
         ReportsUiState(
             year = year,
             month = month,
@@ -120,6 +132,10 @@ class ReportsViewModel @Inject constructor(
             elevatedSeries = entries.map { it.date.substring(8) to it.elevated.toFloat() },
             anxiousSeries = entries.map { it.date.substring(8) to it.anxious.toFloat() },
             irritableSeries = entries.map { it.date.substring(8) to it.irritable.toFloat() },
+            concentrationSeries = entries.map { it.date.substring(8) to it.concentration.toFloat() },
+            sociabilitySeries = entries.map { it.date.substring(8) to it.sociability.toFloat() },
+            appetiteSeries = entries.map { it.date.substring(8) to it.appetite.toFloat() },
+            polaritySeries = polaritySeries,
             radarAxes = radarAxes,
             insightsReady = ins.first,
             insights = ins.second,
@@ -129,6 +145,7 @@ class ReportsViewModel @Inject constructor(
             avgFunctioning = entries.map { it.functioning }.average().takeIf { entries.isNotEmpty() }?.toFloat(),
             avgDepressed = entries.map { it.depressed }.average().takeIf { entries.isNotEmpty() }?.toFloat(),
             avgElevated = entries.map { it.elevated }.average().takeIf { entries.isNotEmpty() }?.toFloat(),
+            avgPolarity = avgPol,
             daysDepressed = burden.depressed,
             daysElevated = burden.elevated,
             daysMixed = burden.mixed,
@@ -142,7 +159,6 @@ class ReportsViewModel @Inject constructor(
             heatCells = heatCells,
             sleepMoodPoints = entries.mapNotNull { e ->
                 val hours = e.sleepHours ?: return@mapNotNull null
-                // Map 0–5 spad/подъём → polarity −3…+3 (подъём positive, спад negative).
                 val polarity = ((e.elevated - e.depressed).toFloat() / 5f) * 3f
                 com.moodlife.app.ui.components.SleepMoodPoint(hours, polarity.coerceIn(-3f, 3f))
             },
@@ -153,11 +169,18 @@ class ReportsViewModel @Inject constructor(
     }.combine(
         _yearMonth.flatMapLatest { (y, m) -> reportsRepository.observeMonthAdherence(y, m) },
     ) { state, adherence ->
-        state.copy(adherencePercent = adherence.percent)
+        state.copy(
+            adherencePercent = adherence.percent,
+            missedMedSlots = (adherence.scheduled - adherence.taken).coerceAtLeast(0).takeIf { adherence.scheduled > 0 },
+        )
     }.combine(
         _yearMonth.flatMapLatest { (y, m) -> reportsRepository.observeMonthMedDayFractions(y, m) },
     ) { state, fractions ->
         state.copy(medDayFractions = fractions)
+    }.combine(
+        _yearMonth.flatMapLatest { (y, m) -> reportsRepository.observeMonthMedTakenLines(y, m) },
+    ) { state, lines ->
+        state.copy(medTakenLines = lines)
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), ReportsUiState())
 
     init {

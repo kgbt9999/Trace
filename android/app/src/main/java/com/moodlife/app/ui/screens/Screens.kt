@@ -342,6 +342,12 @@ fun TodayScreen(
                             stringResource(R.string.today_factors_unified_hint),
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.padding(bottom = 4.dp),
+                        )
+                        Text(
+                            stringResource(R.string.hint_pav_help),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
                             modifier = Modifier.padding(bottom = 8.dp),
                         )
                         if (state.factors.isEmpty()) {
@@ -366,6 +372,11 @@ fun TodayScreen(
                                 )
                                 items.filter { it.active }.forEach { factor ->
                                     val max = factor.scaleMax
+                                    val factorHint = when {
+                                        com.moodlife.app.domain.TriggerBaselines.isSubstanceLike(factor.name) ->
+                                            stringResource(R.string.hint_pav_scale)
+                                        else -> stringResource(R.string.today_factor_intensity_hint)
+                                    }
                                     when (factor.scaleType) {
                                         "yesno" -> ScaleInput(
                                             label = stringResource(R.string.today_factor_intensity, factor.name),
@@ -373,7 +384,7 @@ fun TodayScreen(
                                             onValueChange = { viewModel.setFactorIntensity(factor.id, it) },
                                             color = parseCssColor(factor.color),
                                             options = listOf("Нет", "Да"),
-                                            hint = stringResource(R.string.today_factor_intensity_hint),
+                                            hint = factorHint,
                                         )
                                         "qual4-i" -> ScaleInput(
                                             label = stringResource(R.string.today_factor_intensity, factor.name),
@@ -381,7 +392,7 @@ fun TodayScreen(
                                             onValueChange = { viewModel.setFactorIntensity(factor.id, it) },
                                             color = parseCssColor(factor.color),
                                             options = MoodScales.QUAL_LABELS_I,
-                                            hint = stringResource(R.string.today_factor_intensity_hint),
+                                            hint = factorHint,
                                         )
                                         else -> ScaleInput(
                                             label = stringResource(R.string.today_factor_intensity, factor.name),
@@ -390,7 +401,7 @@ fun TodayScreen(
                                             color = parseCssColor(factor.color),
                                             max = max,
                                             anchors = if (max == 5) MoodScales.INTENSITY_ANCHORS_COMPACT else null,
-                                            hint = stringResource(R.string.today_factor_intensity_hint),
+                                            hint = factorHint,
                                         )
                                     }
                                 }
@@ -622,9 +633,10 @@ private fun TrackableSection(
     ChipToggleRow(
         items = items.map { item ->
             val value = trackableValue(item.key, state)
+            val axisCfg = state.checkInConfig.axes.find { it.id == item.key }
             ChipToggleItem(
                 id = item.key,
-                label = trackableLabel(item.key),
+                label = trackableLabel(item.key, axisCfg?.label),
                 active = value > 0,
                 color = if (item.key == "safetyCheck") LocalMoodColors.current.safety else scaleColor,
             )
@@ -648,7 +660,8 @@ private fun TrackableSection(
     items.filter { trackableValue(it.key, state) > 0 }.forEach { item ->
         val value = trackableValue(item.key, state)
         val sourceId = CitationTopics.sourceIdForAxis(item.key)
-        val label = trackableLabel(item.key)
+        val axisCfg = state.checkInConfig.axes.find { it.id == item.key }
+        val label = trackableLabel(item.key, axisCfg?.label)
         val color = if (item.key == "safetyCheck") LocalMoodColors.current.safety else scaleColor
         when (item.scaleType) {
             "options" -> {
@@ -677,17 +690,18 @@ private fun TrackableSection(
             else -> {
                 val max = TodayTrackables.maxFor(item.scaleType, 5)
                 val axis = MoodScales.MOOD_AXES.find { it.key == item.key }
+                val customAnchors = axisCfg?.anchors()
                 ScaleInput(
                     label = label,
                     value = value.coerceIn(0, max),
                     onValueChange = { applyTrackableValue(item.key, it, viewModel) },
                     color = color,
                     max = max,
-                    anchors = if (max == 5) {
-                        state.checkInConfig.axes.find { it.id == item.key }?.anchors()
-                            ?: axis?.anchors
-                            ?: MoodScales.INTENSITY_ANCHORS_COMPACT
-                    } else null,
+                    anchors = when {
+                        customAnchors != null -> customAnchors
+                        max == 5 -> axis?.anchors ?: MoodScales.INTENSITY_ANCHORS_COMPACT
+                        else -> null
+                    },
                     hint = axisHint(item.key),
                     citationSourceId = sourceId,
                     onOpenSources = { viewModel.openSources(sourceId) },
@@ -698,20 +712,24 @@ private fun TrackableSection(
 }
 
 @Composable
-private fun trackableLabel(key: String): String = when (key) {
-    "depressed" -> stringResource(R.string.axis_depressed)
-    "elevated" -> stringResource(R.string.axis_elevated)
-    "anxious" -> stringResource(R.string.axis_anxious)
-    "irritable" -> stringResource(R.string.axis_irritable)
-    "energy" -> stringResource(R.string.axis_energy)
-    "concentration" -> stringResource(R.string.axis_concentration)
-    "appetite" -> stringResource(R.string.axis_appetite)
-    "sociability" -> stringResource(R.string.axis_sociability)
-    "sleepQuality" -> stringResource(R.string.axis_sleep_quality)
-    "functioning" -> stringResource(R.string.axis_functioning)
-    "safetyCheck" -> stringResource(R.string.axis_safety)
-    "routineScore" -> stringResource(R.string.axis_routine)
-    else -> key
+private fun trackableLabel(key: String, customLabel: String?): String {
+    val trimmed = customLabel?.trim().orEmpty()
+    if (trimmed.isNotEmpty()) return trimmed
+    return when (key) {
+        "depressed" -> stringResource(R.string.axis_depressed)
+        "elevated" -> stringResource(R.string.axis_elevated)
+        "anxious" -> stringResource(R.string.axis_anxious)
+        "irritable" -> stringResource(R.string.axis_irritable)
+        "energy" -> stringResource(R.string.axis_energy)
+        "concentration" -> stringResource(R.string.axis_concentration)
+        "appetite" -> stringResource(R.string.axis_appetite)
+        "sociability" -> stringResource(R.string.axis_sociability)
+        "sleepQuality" -> stringResource(R.string.axis_sleep_quality)
+        "functioning" -> stringResource(R.string.axis_functioning)
+        "safetyCheck" -> stringResource(R.string.axis_safety)
+        "routineScore" -> stringResource(R.string.axis_routine)
+        else -> key
+    }
 }
 
 private fun trackableValue(key: String, state: com.moodlife.app.ui.screens.today.TodayUiState): Int = when (key) {

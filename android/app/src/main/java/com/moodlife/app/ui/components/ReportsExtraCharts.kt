@@ -24,7 +24,7 @@ import androidx.compose.ui.unit.dp
 import com.moodlife.app.R
 import com.moodlife.app.ui.theme.LocalMoodColors
 
-/** Month adherence cells: taken / scheduled per day (neutral KPI, not therapy advice). */
+/** Month adherence cells: taken / missed / no data (neutral KPI, not therapy advice). */
 @Composable
 fun MedAdherenceGrid(
     dayFractions: List<Pair<String, Float?>>,
@@ -40,9 +40,8 @@ fun MedAdherenceGrid(
             ) {
                 week.forEach { (label, frac) ->
                     val color = when {
-                        frac == null -> MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f)
+                        frac == null -> Color(0xFF3A3F46)
                         frac >= 0.99f -> Color(0xFF2BBFA0)
-                        frac > 0f -> Color(0xFFE8A838)
                         else -> Color(0xFFE57373)
                     }
                     Box(
@@ -61,6 +60,27 @@ fun MedAdherenceGrid(
                 }
             }
         }
+        Row(
+            Modifier.fillMaxWidth().padding(top = 8.dp),
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            LegendSwatch(Color(0xFF2BBFA0), stringResource(R.string.reports_med_legend_taken))
+            LegendSwatch(Color(0xFFE57373), stringResource(R.string.reports_med_legend_missed))
+            LegendSwatch(Color(0xFF3A3F46), stringResource(R.string.reports_med_legend_none))
+        }
+    }
+}
+
+@Composable
+private fun LegendSwatch(color: Color, label: String) {
+    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+        Box(
+            Modifier
+                .clip(RoundedCornerShape(3.dp))
+                .background(color)
+                .padding(horizontal = 6.dp, vertical = 6.dp),
+        )
+        Text(label, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
 }
 
@@ -124,9 +144,10 @@ data class HeatCell(
 
 @Composable
 fun ReportsDashboardCard(
-    avgDepressed: Float?,
-    avgElevated: Float?,
+    avgPolarity: Float?,
     avgSleep: Float?,
+    adherencePercent: Int?,
+    missedSlots: Int?,
     entryCount: Int,
     modifier: Modifier = Modifier,
 ) {
@@ -139,25 +160,201 @@ fun ReportsDashboardCard(
             modifier = Modifier.padding(top = 4.dp, bottom = 10.dp),
         )
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            DashKpi("Спад", avgDepressed?.let { String.format("%.1f", it) } ?: "—", Modifier.weight(1f))
-            DashKpi("Подъём", avgElevated?.let { String.format("%.1f", it) } ?: "—", Modifier.weight(1f))
-            DashKpi("Сон", avgSleep?.let { String.format("%.1f ч", it) } ?: "—", Modifier.weight(1f))
-            DashKpi("Дней", "$entryCount", Modifier.weight(1f))
+            val polarityLabel = avgPolarity?.let {
+                when {
+                    it >= 1f -> stringResource(R.string.reports_kpi_mood_elevated)
+                    it <= -1f -> stringResource(R.string.reports_kpi_mood_low)
+                    else -> stringResource(R.string.reports_kpi_mood_neutral)
+                }
+            } ?: "—"
+            DashKpi(
+                stringResource(R.string.reports_kpi_avg_mood),
+                avgPolarity?.let { String.format("%+.1f", it) } ?: "—",
+                polarityLabel,
+                Modifier.weight(1f),
+            )
+            val sleepHint = avgSleep?.let {
+                if (it < 6f) stringResource(R.string.reports_kpi_sleep_low)
+                else stringResource(R.string.reports_kpi_sleep_ok)
+            } ?: "—"
+            DashKpi(
+                stringResource(R.string.reports_kpi_avg_sleep),
+                avgSleep?.let { String.format("%.1f", it) } ?: "—",
+                sleepHint,
+                Modifier.weight(1f),
+            )
+            val medHint = when {
+                missedSlots == null -> "—"
+                missedSlots > 0 -> stringResource(R.string.reports_kpi_med_misses, missedSlots)
+                else -> stringResource(R.string.reports_kpi_med_ok)
+            }
+            DashKpi(
+                stringResource(R.string.reports_kpi_meds),
+                adherencePercent?.let { "$it%" } ?: "—",
+                medHint,
+                Modifier.weight(1f),
+            )
         }
+        Text(
+            stringResource(R.string.reports_entries_count, entryCount),
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(top = 8.dp),
+        )
     }
 }
 
 @Composable
-private fun DashKpi(label: String, value: String, modifier: Modifier = Modifier) {
+private fun DashKpi(label: String, value: String, hint: String, modifier: Modifier = Modifier) {
     Column(
         modifier
-            .clip(RoundedCornerShape(10.dp))
+            .clip(RoundedCornerShape(12.dp))
             .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f))
-            .padding(10.dp),
+            .padding(12.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         Text(label, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        Text(value, style = MaterialTheme.typography.titleSmall)
+        Text(value, style = MaterialTheme.typography.titleLarge)
+        Text(
+            hint,
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(top = 2.dp),
+        )
+    }
+}
+
+/**
+ * Mood polarity (−3…+3) + sleep hours/2 overlay — Level 1 chart.
+ */
+@Composable
+fun MoodSleepPolarityChart(
+    moodPoints: List<Pair<String, Float>>,
+    sleepPoints: List<Pair<String, Float>>,
+    modifier: Modifier = Modifier,
+) {
+    if (moodPoints.isEmpty() && sleepPoints.isEmpty()) return
+    val moodColor = Color(0xFF5B9BD5)
+    val sleepColor = Color(0xFFE8A838)
+    val grid = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f)
+    val labels = (moodPoints.map { it.first } + sleepPoints.map { it.first }).distinct()
+    Column(modifier.fillMaxWidth()) {
+        Box(
+            Modifier
+                .fillMaxWidth()
+                .aspectRatio(1.55f)
+                .clip(RoundedCornerShape(12.dp))
+                .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.22f)),
+        ) {
+            Canvas(Modifier.fillMaxSize().padding(12.dp)) {
+                val minY = -3.5f
+                val maxY = 3.5f
+                val w = size.width
+                val h = size.height
+                val n = labels.size.coerceAtLeast(1)
+                fun xAt(i: Int) = if (n <= 1) w / 2f else i * w / (n - 1)
+                fun yAt(v: Float) = h - ((v.coerceIn(minY, maxY) - minY) / (maxY - minY)) * h
+                listOf(-3f, -1f, 0f, 1f, 3f).forEach { tick ->
+                    val y = yAt(tick)
+                    drawLine(grid, Offset(0f, y), Offset(w, y), strokeWidth = 1f)
+                }
+                val moodIdx = moodPoints.associate { it.first to it.second }
+                val sleepIdx = sleepPoints.associate { it.first to it.second }
+                val moodPts = labels.mapIndexedNotNull { i, key ->
+                    moodIdx[key]?.let { Offset(xAt(i), yAt(it)) }
+                }
+                for (i in 1 until moodPts.size) {
+                    drawLine(moodColor, moodPts[i - 1], moodPts[i], strokeWidth = 3.5f)
+                }
+                moodPts.forEach { drawCircle(moodColor, radius = 4.dp.toPx(), center = it) }
+                val sleepPts = labels.mapIndexedNotNull { i, key ->
+                    sleepIdx[key]?.let { hours ->
+                        // Map sleep hours onto polarity axis as hours/2 for overlay readability.
+                        Offset(xAt(i), yAt((hours / 2f).coerceIn(minY, maxY)))
+                    }
+                }
+                for (i in 1 until sleepPts.size) {
+                    drawLine(sleepColor, sleepPts[i - 1], sleepPts[i], strokeWidth = 2.5f)
+                }
+                sleepPts.forEach { drawCircle(sleepColor, radius = 3.5.dp.toPx(), center = it) }
+            }
+        }
+        Row(
+            Modifier.fillMaxWidth().padding(top = 6.dp),
+            horizontalArrangement = Arrangement.spacedBy(14.dp),
+        ) {
+            LegendSwatch(moodColor, stringResource(R.string.reports_mood_sleep_mood))
+            LegendSwatch(sleepColor, stringResource(R.string.reports_mood_sleep_sleep))
+        }
+        Row(
+            Modifier.fillMaxWidth().padding(top = 4.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+        ) {
+            Text("+3", style = MaterialTheme.typography.labelSmall, color = Color(0xFF64B5F6))
+            Text("+1", style = MaterialTheme.typography.labelSmall, color = Color(0xFF81C784))
+            Text("0", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text("−1", style = MaterialTheme.typography.labelSmall, color = Color(0xFFE8A838))
+            Text("−3", style = MaterialTheme.typography.labelSmall, color = Color(0xFFE57373))
+        }
+    }
+}
+
+/** Grouped bars for Level 2 (anxiety / energy) on 0–10. */
+@Composable
+fun GroupedBarChart(
+    seriesA: List<Pair<String, Float>>,
+    seriesB: List<Pair<String, Float>>,
+    labelA: String,
+    labelB: String,
+    colorA: Color,
+    colorB: Color,
+    maxY: Float = 10f,
+    modifier: Modifier = Modifier,
+) {
+    val labels = (seriesA.map { it.first } + seriesB.map { it.first }).distinct()
+    if (labels.isEmpty()) return
+    val mapA = seriesA.toMap()
+    val mapB = seriesB.toMap()
+    Column(modifier.fillMaxWidth()) {
+        Box(
+            Modifier
+                .fillMaxWidth()
+                .aspectRatio(1.6f)
+                .clip(RoundedCornerShape(12.dp))
+                .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.22f)),
+        ) {
+            Canvas(Modifier.fillMaxSize().padding(12.dp)) {
+                val w = size.width
+                val h = size.height
+                val n = labels.size
+                val groupW = w / n.coerceAtLeast(1)
+                val barW = groupW * 0.32f
+                labels.forEachIndexed { i, key ->
+                    val cx = i * groupW + groupW / 2f
+                    val a = (mapA[key] ?: 0f).coerceIn(0f, maxY)
+                    val b = (mapB[key] ?: 0f).coerceIn(0f, maxY)
+                    val ha = (a / maxY) * h
+                    val hb = (b / maxY) * h
+                    drawRect(
+                        color = colorA,
+                        topLeft = Offset(cx - barW - 2.dp.toPx(), h - ha),
+                        size = androidx.compose.ui.geometry.Size(barW, ha),
+                    )
+                    drawRect(
+                        color = colorB,
+                        topLeft = Offset(cx + 2.dp.toPx(), h - hb),
+                        size = androidx.compose.ui.geometry.Size(barW, hb),
+                    )
+                }
+            }
+        }
+        Row(
+            Modifier.fillMaxWidth().padding(top = 6.dp),
+            horizontalArrangement = Arrangement.spacedBy(14.dp),
+        ) {
+            LegendSwatch(colorA, labelA)
+            LegendSwatch(colorB, labelB)
+        }
     }
 }
 

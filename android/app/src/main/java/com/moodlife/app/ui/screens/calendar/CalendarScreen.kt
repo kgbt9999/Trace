@@ -1,5 +1,6 @@
 package com.moodlife.app.ui.screens.calendar
 
+import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -25,10 +26,12 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -44,8 +47,10 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.health.connect.client.PermissionController
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.moodlife.app.R
@@ -55,14 +60,25 @@ import com.moodlife.app.domain.MoodDayColors
 import com.moodlife.app.domain.MoonPhaseCalc
 import com.moodlife.app.ui.components.MoodCard
 import com.moodlife.app.ui.components.PageHeader
+import com.moodlife.app.ui.components.PhysicalDateNav
+import com.moodlife.app.ui.components.PhysicalPeriodToggles
+import com.moodlife.app.ui.components.PhysicalStateSections
+import com.moodlife.app.ui.screens.physical.PhysicalViewModel
 import com.moodlife.app.ui.theme.LocalMoodColors
 import com.moodlife.app.util.DateUtils
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
-fun CalendarScreen(viewModel: CalendarViewModel = hiltViewModel()) {
+fun CalendarScreen(
+    viewModel: CalendarViewModel = hiltViewModel(),
+    physicalViewModel: PhysicalViewModel = hiltViewModel(),
+) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
+    val physical by physicalViewModel.uiState.collectAsStateWithLifecycle()
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    val hcLauncher = rememberLauncherForActivityResult(
+        PermissionController.createRequestPermissionResultContract(),
+    ) { physicalViewModel.onPermissionsGranted() }
 
     Column(
         Modifier
@@ -116,12 +132,25 @@ fun CalendarScreen(viewModel: CalendarViewModel = hiltViewModel()) {
         TextButton(onClick = viewModel::openCycleSettings, modifier = Modifier.padding(top = 4.dp)) {
             Text(stringResource(R.string.calendar_cycle_settings))
         }
-        TextButton(onClick = viewModel::toggleLegend, modifier = Modifier.padding(top = 0.dp)) {
-            Text(stringResource(R.string.calendar_legend_toggle))
-        }
-        if (state.showLegend) {
-            CalendarLegend(Modifier.padding(top = 4.dp))
-        }
+
+        Spacer(Modifier.height(16.dp))
+        CalendarMedsMonthSection(
+            monthLabel = state.monthLabel,
+            weeks = state.medMonthCells,
+            onManage = viewModel::openMedsSettings,
+        )
+
+        Spacer(Modifier.height(16.dp))
+        CalendarPhysicalSection(
+            physical = physical,
+            onOpenHc = physicalViewModel::openHealthConnect,
+            onRequestPerm = { hcLauncher.launch(physicalViewModel.hcPermissions) },
+            onSync = physicalViewModel::sync,
+            onOpenSettings = viewModel::openHcSettings,
+            onPeriod = physicalViewModel::setPeriod,
+            onPrev = physicalViewModel::prevPeriod,
+            onNext = physicalViewModel::nextPeriod,
+        )
     }
 
     state.selectedDate?.let { date ->
@@ -133,7 +162,6 @@ fun CalendarScreen(viewModel: CalendarViewModel = hiltViewModel()) {
             Column(Modifier.padding(horizontal = 20.dp, vertical = 8.dp).padding(bottom = 28.dp)) {
                 Text(DateUtils.formatRu(DateUtils.parseIso(date)), style = MaterialTheme.typography.titleLarge)
 
-                // Laconic context line
                 val contextBits = buildList {
                     add("${moon.icon} ${moon.label}")
                     weather?.let { add("${it.icon.orEmpty()} ${it.tempAvg.toInt()}°") }
@@ -185,6 +213,34 @@ fun CalendarScreen(viewModel: CalendarViewModel = hiltViewModel()) {
                     )
                 }
 
+                Text(
+                    stringResource(R.string.calendar_day_meds_title),
+                    style = MaterialTheme.typography.titleSmall,
+                    modifier = Modifier.padding(top = 14.dp),
+                )
+                if (state.selectedDayMeds.isEmpty()) {
+                    Text(
+                        stringResource(R.string.calendar_day_meds_empty),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(top = 4.dp),
+                    )
+                } else {
+                    state.selectedDayMeds.forEach { med ->
+                        val dose = med.dosage?.takeIf { it.isNotBlank() }
+                        Text(
+                            buildString {
+                                append(med.name)
+                                if (dose != null) append(" · ").append(dose)
+                                append(" · ").append(med.slotsDetail)
+                                append(" (").append(med.takenSlots).append('/').append(med.scheduledSlots).append(')')
+                            },
+                            style = MaterialTheme.typography.bodyMedium,
+                            modifier = Modifier.padding(top = 4.dp),
+                        )
+                    }
+                }
+
                 if (state.selectedNotes.isNotEmpty()) {
                     Text(
                         stringResource(R.string.calendar_notes_title),
@@ -202,21 +258,6 @@ fun CalendarScreen(viewModel: CalendarViewModel = hiltViewModel()) {
 
                 Spacer(Modifier.height(14.dp))
                 Text(stringResource(R.string.calendar_user_icon_title), style = MaterialTheme.typography.titleSmall)
-                Text(
-                    stringResource(R.string.calendar_user_icon_how),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(top = 4.dp),
-                )
-                if (state.showLegend) {
-                    Text(
-                        stringResource(R.string.calendar_user_icon_legend),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.padding(top = 6.dp),
-                    )
-                    CalendarLegend(Modifier.padding(top = 6.dp))
-                }
                 Row(
                     Modifier.fillMaxWidth().padding(top = 8.dp),
                     verticalAlignment = Alignment.CenterVertically,
@@ -242,20 +283,13 @@ fun CalendarScreen(viewModel: CalendarViewModel = hiltViewModel()) {
                         }
                     }
                 }
-                if (dayIcon != null) {
-                    OutlinedTextField(
-                        value = state.iconNoteDraft,
-                        onValueChange = viewModel::onIconNoteChange,
-                        label = { Text(stringResource(R.string.calendar_icon_note_hint)) },
-                        modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
-                        singleLine = true,
-                    )
-                    TextButton(onClick = viewModel::saveIconNote) {
-                        Text(stringResource(R.string.today_save))
-                    }
-                }
-
                 if (state.showDayIconPicker) {
+                    Text(
+                        stringResource(R.string.calendar_user_icon_how),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(top = 8.dp),
+                    )
                     Text(
                         stringResource(R.string.calendar_user_icon_pick_day),
                         style = MaterialTheme.typography.labelMedium,
@@ -284,6 +318,18 @@ fun CalendarScreen(viewModel: CalendarViewModel = hiltViewModel()) {
                             }
                     }
                 }
+                if (dayIcon != null) {
+                    OutlinedTextField(
+                        value = state.iconNoteDraft,
+                        onValueChange = viewModel::onIconNoteChange,
+                        label = { Text(stringResource(R.string.calendar_icon_note_hint)) },
+                        modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+                        singleLine = true,
+                    )
+                    TextButton(onClick = viewModel::saveIconNote) {
+                        Text(stringResource(R.string.today_save))
+                    }
+                }
 
                 Spacer(Modifier.height(16.dp))
                 Button(onClick = { viewModel.openInToday(date) }, modifier = Modifier.fillMaxWidth().height(48.dp)) {
@@ -295,46 +341,192 @@ fun CalendarScreen(viewModel: CalendarViewModel = hiltViewModel()) {
 }
 
 @Composable
-private fun SummaryChip(label: String, value: Int) {
-    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-        Text(label, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        Text("$value", style = MaterialTheme.typography.titleMedium)
-    }
-}
-
-@Composable
-private fun CalendarLegend(modifier: Modifier = Modifier) {
-    val palette = LocalMoodColors.current
-    MoodCard(modifier) {
-        Text(stringResource(R.string.calendar_legend_title), style = MaterialTheme.typography.titleSmall)
+private fun CalendarMedsMonthSection(
+    monthLabel: String,
+    weeks: List<List<MedMonthCell>>,
+    onManage: () -> Unit,
+) {
+    MoodCard {
+        Text(stringResource(R.string.calendar_meds_section_title), style = MaterialTheme.typography.titleMedium)
         Text(
-            stringResource(R.string.calendar_legend_glyphs),
+            stringResource(R.string.calendar_meds_section_hint, monthLabel),
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.padding(top = 6.dp),
-            lineHeight = MaterialTheme.typography.bodySmall.lineHeight * 1.35f,
+            modifier = Modifier.padding(top = 4.dp, bottom = 10.dp),
         )
-        Row(
-            Modifier.padding(top = 10.dp).fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(12.dp),
-        ) {
-            LegendDot(palette.depressed, stringResource(R.string.calendar_legend_low))
-            LegendDot(palette.elevated, stringResource(R.string.calendar_legend_high))
-            LegendDot(palette.cycle, stringResource(R.string.calendar_legend_period))
+        if (weeks.isEmpty()) {
+            Text(
+                stringResource(R.string.meds_tab_empty),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        } else {
+            weeks.forEach { week ->
+                Row(
+                    Modifier.fillMaxWidth().padding(vertical = 2.dp),
+                    horizontalArrangement = Arrangement.spacedBy(3.dp),
+                ) {
+                    week.forEach { cell ->
+                        MedMonthDayCell(cell, Modifier.weight(1f))
+                    }
+                }
+            }
+        }
+        OutlinedButton(onClick = onManage, modifier = Modifier.fillMaxWidth().padding(top = 10.dp)) {
+            Text(stringResource(R.string.meds_tab_manage))
         }
     }
 }
 
 @Composable
-private fun LegendDot(color: Color, label: String) {
-    Row(verticalAlignment = Alignment.CenterVertically) {
-        Box(Modifier.size(10.dp).clip(CircleShape).background(color))
+private fun MedMonthDayCell(cell: MedMonthCell, modifier: Modifier = Modifier) {
+    val dayNum = cell.date?.substringAfterLast('-')?.trimStart('0')
+    val bg = when (cell.status) {
+        MedDayStatus.ALL -> Color(0xFF2BBFA0).copy(alpha = 0.22f)
+        MedDayStatus.PARTIAL -> Color(0xFFE8A838).copy(alpha = 0.22f)
+        MedDayStatus.MISSED -> Color(0xFFE57373).copy(alpha = 0.22f)
+        MedDayStatus.NONE -> MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.25f)
+    }
+    val visible = cell.lines.filter { it.scheduledSlots > 0 || it.takenSlots > 0 }
+    Column(
+        modifier
+            .aspectRatio(0.55f)
+            .clip(RoundedCornerShape(8.dp))
+            .background(bg)
+            .padding(horizontal = 2.dp, vertical = 3.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
         Text(
-            label,
-            style = MaterialTheme.typography.labelMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.padding(start = 6.dp),
+            dayNum ?: "",
+            style = MaterialTheme.typography.labelSmall,
+            fontWeight = FontWeight.SemiBold,
+            maxLines = 1,
+            fontSize = 9.sp,
         )
+        visible.take(3).forEach { line ->
+            val dose = line.dosage?.trim()?.takeIf { it.isNotEmpty() }
+            Text(
+                buildString {
+                    append(line.name.trim().take(10))
+                    if (dose != null) {
+                        append('\n')
+                        append(dose.take(12))
+                    }
+                    append('\n')
+                    append(line.takenSlots)
+                    append('/')
+                    append(line.scheduledSlots)
+                },
+                style = MaterialTheme.typography.labelSmall,
+                fontSize = 7.sp,
+                lineHeight = 8.sp,
+                maxLines = 3,
+                overflow = TextOverflow.Ellipsis,
+                textAlign = TextAlign.Center,
+                color = MaterialTheme.colorScheme.onSurface,
+                modifier = Modifier.padding(top = 1.dp).fillMaxWidth(),
+            )
+        }
+        if (visible.size > 3) {
+            Text(
+                "+${visible.size - 3}",
+                fontSize = 7.sp,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+    }
+}
+
+@Composable
+private fun CalendarPhysicalSection(
+    physical: com.moodlife.app.ui.screens.physical.PhysicalUiState,
+    onOpenHc: () -> Unit,
+    onRequestPerm: () -> Unit,
+    onSync: () -> Unit,
+    onOpenSettings: () -> Unit,
+    onPeriod: (com.moodlife.app.domain.PhysicalPeriod) -> Unit,
+    onPrev: () -> Unit,
+    onNext: () -> Unit,
+) {
+    MoodCard {
+        Text(stringResource(R.string.calendar_physical_section_title), style = MaterialTheme.typography.titleMedium)
+        Text(
+            stringResource(R.string.physical_tab_hint),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(top = 4.dp),
+        )
+        PhysicalPeriodToggles(
+            selected = physical.period,
+            onSelect = onPeriod,
+            modifier = Modifier.padding(top = 10.dp),
+        )
+        PhysicalDateNav(
+            label = physical.rangeLabel,
+            onPrev = onPrev,
+            onNext = onNext,
+        )
+        when {
+            !physical.available -> {
+                Text(
+                    stringResource(R.string.physical_hc_missing),
+                    style = MaterialTheme.typography.bodyMedium,
+                    modifier = Modifier.padding(top = 8.dp),
+                )
+                OutlinedButton(onClick = onOpenHc, modifier = Modifier.fillMaxWidth().padding(top = 8.dp)) {
+                    Text(stringResource(R.string.physical_open_hc))
+                }
+            }
+            !physical.hasPermissions -> {
+                Text(
+                    stringResource(R.string.physical_hc_need_perm),
+                    style = MaterialTheme.typography.bodyMedium,
+                    modifier = Modifier.padding(top = 8.dp),
+                )
+                FilledTonalButton(onClick = onRequestPerm, modifier = Modifier.fillMaxWidth().padding(top = 8.dp)) {
+                    Text(stringResource(R.string.physical_request_perm))
+                }
+            }
+            else -> {
+                FilledTonalButton(
+                    onClick = onSync,
+                    enabled = !physical.syncing,
+                    modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+                ) {
+                    Text(
+                        if (physical.syncing) stringResource(R.string.physical_syncing)
+                        else stringResource(R.string.physical_sync),
+                    )
+                }
+            }
+        }
+        physical.message?.let { msg ->
+            Text(
+                physicalMessage(msg),
+                style = MaterialTheme.typography.bodySmall,
+                modifier = Modifier.padding(top = 8.dp),
+            )
+        }
+        Spacer(Modifier.height(8.dp))
+        PhysicalStateSections(summary = physical.summary)
+        TextButton(onClick = onOpenSettings, modifier = Modifier.padding(top = 4.dp)) {
+            Text(stringResource(R.string.settings_health_connect))
+        }
+    }
+}
+
+@Composable
+private fun physicalMessage(code: String): String = when {
+    code.startsWith("synced_") -> stringResource(R.string.physical_sync_ok, code.removePrefix("synced_"))
+    code == "skipped" -> stringResource(R.string.physical_sync_skipped)
+    else -> stringResource(R.string.physical_sync_fail)
+}
+
+@Composable
+private fun SummaryChip(label: String, value: Int) {
+    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+        Text(label, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Text("$value", style = MaterialTheme.typography.titleMedium)
     }
 }
 
@@ -403,64 +595,63 @@ private fun androidx.compose.foundation.layout.RowScope.CalendarDayCell(
                 modifier = Modifier.align(Alignment.TopCenter).padding(top = 4.dp),
             )
         }
-            if (glyph != null) {
-                Text(
-                    glyph,
-                    fontSize = 11.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.onSurface,
-                    modifier = Modifier.align(Alignment.Center),
-                )
-            } else if (personalIcon != null) {
-                Text(
-                    personalIcon,
-                    fontSize = 12.sp,
-                    modifier = Modifier.align(Alignment.Center),
-                )
+        if (glyph != null) {
+            Text(
+                glyph,
+                fontSize = 11.sp,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.onSurface,
+                modifier = Modifier.align(Alignment.Center),
+            )
+        } else if (personalIcon != null) {
+            Text(
+                personalIcon,
+                fontSize = 12.sp,
+                modifier = Modifier.align(Alignment.Center),
+            )
+        }
+        Row(
+            Modifier.align(Alignment.BottomCenter).padding(bottom = 3.dp),
+            horizontalArrangement = Arrangement.spacedBy(1.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            if (personalIcon != null && glyph != null) {
+                Text(personalIcon, fontSize = 7.sp)
             }
-            Row(
-                Modifier.align(Alignment.BottomCenter).padding(bottom = 3.dp),
-                horizontalArrangement = Arrangement.spacedBy(1.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                if (personalIcon != null && glyph != null) {
-                    Text(personalIcon, fontSize = 7.sp)
-                }
-                iso?.let { state.weatherByDate[it] }?.icon?.let { wIcon ->
-                    Text(wIcon.take(2), fontSize = 7.sp)
-                }
-                if (moon != null) {
-                    Text(moon.icon, fontSize = 8.sp)
-                }
-                if (isPeriod) {
-                    Box(
-                        Modifier
-                            .size(width = 10.dp, height = 3.dp)
-                            .clip(RoundedCornerShape(50))
-                            .background(palette.cycle),
-                    )
-                } else if (cycleMarkers?.isPms == true) {
-                    Text("💭", fontSize = 7.sp)
-                } else if (cycleMarkers?.isOvulation == true) {
-                    Text("✨", fontSize = 7.sp)
-                }
-                when (iso?.let { state.medStatusByDate[it] }) {
-                    MedDayStatus.ALL -> Box(
-                        Modifier.size(6.dp).clip(CircleShape).background(Color(0xFF2BBFA0)),
-                    )
-                    MedDayStatus.PARTIAL -> Box(
-                        Modifier.size(6.dp).clip(CircleShape).background(Color(0xFFE8A838)),
-                    )
-                    MedDayStatus.MISSED -> Box(
-                        Modifier.size(6.dp).clip(CircleShape).background(Color(0xFFE57373)),
-                    )
-                    else -> Unit
-                }
+            iso?.let { state.weatherByDate[it] }?.icon?.let { wIcon ->
+                Text(wIcon.take(2), fontSize = 7.sp)
             }
+            if (moon != null) {
+                Text(moon.icon, fontSize = 8.sp)
+            }
+            if (isPeriod) {
+                Box(
+                    Modifier
+                        .size(width = 10.dp, height = 3.dp)
+                        .clip(RoundedCornerShape(50))
+                        .background(palette.cycle),
+                )
+            } else if (cycleMarkers?.isPms == true) {
+                Text("💭", fontSize = 7.sp)
+            } else if (cycleMarkers?.isOvulation == true) {
+                Text("✨", fontSize = 7.sp)
+            }
+            when (iso?.let { state.medStatusByDate[it] }) {
+                MedDayStatus.ALL -> Box(
+                    Modifier.size(6.dp).clip(CircleShape).background(Color(0xFF2BBFA0)),
+                )
+                MedDayStatus.PARTIAL -> Box(
+                    Modifier.size(6.dp).clip(CircleShape).background(Color(0xFFE8A838)),
+                )
+                MedDayStatus.MISSED -> Box(
+                    Modifier.size(6.dp).clip(CircleShape).background(Color(0xFFE57373)),
+                )
+                else -> Unit
+            }
+        }
     }
 }
 
-/** Short in-cell marker: Д/П/С/Т/Р or · for quiet day. */
 private fun dayGlyph(entry: MoodEntryEntity): String {
     val dep = entry.depressed >= 2
     val elev = entry.elevated >= 2
@@ -486,17 +677,6 @@ private fun dayBriefLabel(entry: MoodEntryEntity): String {
         entry.irritable >= 3 -> "День с раздражением"
         else -> "Без выраженного спада или подъёма"
     }
-}
-
-private fun phaseLabel(phase: String): String = when (phase) {
-    "euthymic" -> "Эйтимия"
-    "prodromal_depression" -> "Продром депрессии"
-    "prodromal_mania" -> "Продром мании"
-    "acute_depression" -> "Острая депрессия"
-    "acute_mania" -> "Острый подъём"
-    "mixed" -> "Смешанный эпизод"
-    "recovery" -> "Восстановление"
-    else -> phase
 }
 
 private fun cycleMarkersFor(date: String, state: CalendarUiState) =

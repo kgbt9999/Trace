@@ -55,6 +55,9 @@ fun SettingsScreen(
     val importLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         uri?.let(viewModel::importBackup)
     }
+    val folderLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocumentTree()) { uri ->
+        uri?.let(viewModel::setWeeklyBackupFolder)
+    }
 
     Column(
         Modifier
@@ -114,6 +117,7 @@ fun SettingsScreen(
                         },
                         onImportFlo = { floLauncher.launch(arrayOf("application/json", "text/plain", "*/*")) },
                         onRequestHcPermissions = { hcLauncher.launch(viewModel.hcPermissions) },
+                        onPickWeeklyFolder = { folderLauncher.launch(null) },
                         onShowClearDialog = { showClearDialog = true },
                     )
                 }
@@ -152,6 +156,7 @@ fun SettingsScreen(
                 },
                 onImportFlo = { floLauncher.launch(arrayOf("application/json", "text/plain", "*/*")) },
                 onRequestHcPermissions = { hcLauncher.launch(viewModel.hcPermissions) },
+                onPickWeeklyFolder = { folderLauncher.launch(null) },
                 onShowClearDialog = { showClearDialog = true },
             )
         }
@@ -187,6 +192,11 @@ private fun integrationMessageText(msg: String): String = when {
     msg == "backup_fail" -> stringResource(R.string.settings_backup_fail)
     msg == "import_ok" -> stringResource(R.string.settings_backup_import_ok)
     msg == "import_fail" || msg.startsWith("import_fail:") -> stringResource(R.string.settings_backup_import_fail)
+    msg == "weekly_folder_ok" -> stringResource(R.string.settings_weekly_backup_folder_ok)
+    msg == "weekly_on" -> stringResource(R.string.settings_weekly_backup_on)
+    msg == "weekly_off" -> stringResource(R.string.settings_weekly_backup_off)
+    msg == "weekly_need_setup" -> stringResource(R.string.settings_weekly_backup_need_setup)
+    msg == "weekly_queued" -> stringResource(R.string.settings_weekly_backup_queued)
     msg == "clear_ok" -> stringResource(R.string.settings_clear_ok)
     msg == "clear_fail" -> stringResource(R.string.settings_clear_fail)
     msg == "flo_empty" -> stringResource(R.string.settings_flo_empty)

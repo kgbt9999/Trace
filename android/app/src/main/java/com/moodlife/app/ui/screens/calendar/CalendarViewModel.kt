@@ -5,6 +5,8 @@ import androidx.lifecycle.viewModelScope
 import com.moodlife.app.data.local.dao.DayNoteDao
 import com.moodlife.app.data.local.dao.WeatherDayDao
 import com.moodlife.app.data.local.entity.DayNoteEntity
+import com.moodlife.app.data.local.entity.MedicationEntity
+import com.moodlife.app.data.local.entity.MedicationLogEntity
 import com.moodlife.app.data.local.entity.MoodEntryEntity
 import com.moodlife.app.data.local.entity.PeriodSettingEntity
 import com.moodlife.app.data.local.entity.WeatherDayEntity
@@ -33,6 +35,22 @@ import javax.inject.Inject
 
 enum class MedDayStatus { NONE, PARTIAL, ALL, MISSED }
 
+/** One medication line for a day sheet or month cell. */
+data class DayMedLine(
+    val medicationId: String,
+    val name: String,
+    val dosage: String?,
+    val takenSlots: Int,
+    val scheduledSlots: Int,
+    val slotsDetail: String,
+)
+
+data class MedMonthCell(
+    val date: String?,
+    val lines: List<DayMedLine>,
+    val status: MedDayStatus,
+)
+
 data class CalendarUiState(
     val year: Int = LocalDate.now().year,
     val month: Int = LocalDate.now().monthValue - 1,
@@ -43,12 +61,14 @@ data class CalendarUiState(
     val dayIcons: Map<String, String> = emptyMap(),
     val dayIconNotes: Map<String, String> = emptyMap(),
     val medStatusByDate: Map<String, MedDayStatus> = emptyMap(),
+    val medLinesByDate: Map<String, List<DayMedLine>> = emptyMap(),
+    val medMonthCells: List<List<MedMonthCell>> = emptyList(),
+    val selectedDayMeds: List<DayMedLine> = emptyList(),
     val period: PeriodSettingEntity? = null,
     val selectedDate: String? = null,
     val selectedNotes: List<DayNoteEntity> = emptyList(),
     val todayIso: String = DateUtils.todayIso(),
     val showDayIconPicker: Boolean = false,
-    val showLegend: Boolean = false,
     val iconNoteDraft: String = "",
 )
 
@@ -67,7 +87,6 @@ class CalendarViewModel @Inject constructor(
     private val _yearMonth = MutableStateFlow(LocalDate.now().year to (LocalDate.now().monthValue - 1))
     private val _selected = MutableStateFlow<String?>(null)
     private val _showDayIconPicker = MutableStateFlow(false)
-    private val _showLegend = MutableStateFlow(false)
     private val _iconNoteDraft = MutableStateFlow("")
 
     val uiState: StateFlow<CalendarUiState> = combine(
@@ -94,23 +113,47 @@ class CalendarViewModel @Inject constructor(
             weatherDayDao.observeRange(from, to)
         },
         settingsRepository.observe(SettingsRepository.KEY_CALENDAR_DAY_ICONS),
-        combine(_selected, _showDayIconPicker, _showLegend, _iconNoteDraft) { a, b, c, d ->
-            Quad(a, b, c, d)
+        combine(_selected, _showDayIconPicker, _iconNoteDraft) { a, b, c ->
+            Triple(a, b, c)
         },
     ) { partial, period, weatherDays, iconsRaw, selPack ->
         val parsed = CalendarDayIcons.parseDetailed(iconsRaw)
+        val (from, to) = DateUtils.monthRange(partial.ym.first, partial.ym.second)
+        val medLines = medLinesMap(from, to, partial.medLogs, partial.meds)
+        val medStatus = medLines.mapValues { (_, lines) ->
+            val scheduled = lines.sumOf { it.scheduledSlots }
+            val taken = lines.sumOf { it.takenSlots }
+            when {
+                scheduled <= 0 -> MedDayStatus.NONE
+                taken >= scheduled -> MedDayStatus.ALL
+                taken > 0 -> MedDayStatus.PARTIAL
+                else -> MedDayStatus.MISSED
+            }
+        }
+        val matrix = DateUtils.monthMatrix(partial.ym.first, partial.ym.second)
+        val medMonthCells = matrix.map { week ->
+            week.map { iso ->
+                MedMonthCell(
+                    date = iso,
+                    lines = iso?.let { medLines[it] }.orEmpty(),
+                    status = iso?.let { medStatus[it] } ?: MedDayStatus.NONE,
+                )
+            }
+        }
         buildCalendarState(
             partial.ym,
-            selPack.a,
+            selPack.first,
             partial.entries,
             period,
             weatherDays,
             parsed.icons,
             parsed.notes,
-            medStatusMap(partial.medLogs, partial.meds),
-            selPack.b,
-            selPack.c,
-            selPack.d,
+            medStatus,
+            medLines,
+            medMonthCells,
+            selPack.first?.let { medLines[it] }.orEmpty(),
+            selPack.second,
+            selPack.third,
             emptyList(),
         )
     }.combine(
@@ -135,7 +178,8 @@ class CalendarViewModel @Inject constructor(
     }
 
     fun openCycleSettings() = dayNavigation.navigateToSettings("cycle")
-    fun toggleLegend() = _showLegend.update { !it }
+    fun openMedsSettings() = dayNavigation.navigateToSettings("meds")
+    fun openHcSettings() = dayNavigation.navigateToSettings("integrations")
 
     fun openDayIconPicker() { _showDayIconPicker.value = true }
     fun dismissDayIconPicker() { _showDayIconPicker.value = false }
@@ -203,35 +247,55 @@ class CalendarViewModel @Inject constructor(
         _showDayIconPicker.value = false
     }
 
-    private fun medStatusMap(
-        logs: List<com.moodlife.app.data.local.entity.MedicationLogEntity>,
-        meds: List<com.moodlife.app.data.local.entity.MedicationEntity>,
-    ): Map<String, MedDayStatus> {
+    private fun medLinesMap(
+        from: String,
+        to: String,
+        logs: List<MedicationLogEntity>,
+        meds: List<MedicationEntity>,
+    ): Map<String, List<DayMedLine>> {
         if (meds.isEmpty()) return emptyMap()
         val byDate = logs.groupBy { it.date }
-        return byDate.mapValues { (_, dayLogs) ->
-            var taken = 0
-            var scheduled = 0
-            meds.forEach { med ->
-                val log = dayLogs.find { it.medicationId == med.id }
-                val slots = MedsUtils.parseIntakeTimes(med.intakeTimes)
-                val timed = slots.filter { it != "by-scheme" }
-                if (timed.isEmpty()) {
-                    scheduled += 1
-                    if (log?.taken == true) taken += 1
-                } else {
-                    scheduled += timed.size
-                    taken += timed.count { slot ->
-                        MedsUtils.isSlotTaken(log?.taken == true, log?.slotsTaken, slot, timed)
-                    }
+        val start = LocalDate.parse(from)
+        val end = LocalDate.parse(to)
+        val result = linkedMapOf<String, List<DayMedLine>>()
+        var d = start
+        while (!d.isAfter(end)) {
+            val iso = d.toString()
+            result[iso] = dayMedLines(byDate[iso].orEmpty(), meds)
+            d = d.plusDays(1)
+        }
+        return result
+    }
+
+    private fun dayMedLines(
+        dayLogs: List<MedicationLogEntity>,
+        meds: List<MedicationEntity>,
+    ): List<DayMedLine> {
+        return meds.map { med ->
+            val log = dayLogs.find { it.medicationId == med.id }
+            val slots = MedsUtils.parseIntakeTimes(med.intakeTimes)
+            val timed = slots.filter { it != "by-scheme" }
+            val scheduled = if (timed.isEmpty()) 1 else timed.size
+            val takenSlotLabels = if (timed.isEmpty()) {
+                if (log?.taken == true) listOf("день") else emptyList()
+            } else {
+                timed.filter { slot ->
+                    MedsUtils.isSlotTaken(log?.taken == true, log?.slotsTaken, slot, timed)
                 }
             }
-            when {
-                scheduled <= 0 -> MedDayStatus.NONE
-                taken >= scheduled -> MedDayStatus.ALL
-                taken > 0 -> MedDayStatus.PARTIAL
-                else -> MedDayStatus.MISSED
-            }
+            val taken = takenSlotLabels.size
+            DayMedLine(
+                medicationId = med.id,
+                name = med.name,
+                dosage = medicationRepository.effectiveDosage(med, log),
+                takenSlots = taken,
+                scheduledSlots = scheduled,
+                slotsDetail = when {
+                    taken == 0 -> "0/$scheduled"
+                    timed.isEmpty() -> "принято"
+                    else -> takenSlotLabels.joinToString(", ")
+                },
+            )
         }
     }
 
@@ -244,13 +308,17 @@ class CalendarViewModel @Inject constructor(
         dayIcons: Map<String, String>,
         dayIconNotes: Map<String, String>,
         medStatusByDate: Map<String, MedDayStatus>,
+        medLinesByDate: Map<String, List<DayMedLine>>,
+        medMonthCells: List<List<MedMonthCell>>,
+        selectedDayMeds: List<DayMedLine>,
         showDayIconPicker: Boolean,
-        showLegend: Boolean,
         iconNoteDraft: String,
         notes: List<DayNoteEntity>,
     ): CalendarUiState {
         val (year, month) = ym
         val (from, to) = DateUtils.monthRange(year, month)
+        // Day sheet: only medications marked taken that day.
+        val sheetMeds = selectedDayMeds.filter { it.takenSlots > 0 }
         return CalendarUiState(
             year = year,
             month = month,
@@ -261,12 +329,14 @@ class CalendarViewModel @Inject constructor(
             dayIcons = dayIcons,
             dayIconNotes = dayIconNotes,
             medStatusByDate = medStatusByDate,
+            medLinesByDate = medLinesByDate,
+            medMonthCells = medMonthCells,
+            selectedDayMeds = sheetMeds,
             period = period,
             selectedDate = selected,
             selectedNotes = notes,
             todayIso = DateUtils.todayIso(),
             showDayIconPicker = showDayIconPicker,
-            showLegend = showLegend,
             iconNoteDraft = iconNoteDraft,
         )
     }
@@ -275,9 +345,7 @@ class CalendarViewModel @Inject constructor(
         val ym: Pair<Int, Int>,
         val selected: String?,
         val entries: List<MoodEntryEntity>,
-        val medLogs: List<com.moodlife.app.data.local.entity.MedicationLogEntity>,
-        val meds: List<com.moodlife.app.data.local.entity.MedicationEntity>,
+        val medLogs: List<MedicationLogEntity>,
+        val meds: List<MedicationEntity>,
     )
-
-    private data class Quad<A, B, C, D>(val a: A, val b: B, val c: C, val d: D)
 }

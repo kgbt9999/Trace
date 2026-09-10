@@ -97,6 +97,7 @@ fun SettingsSectionContent(
     onImportBackup: () -> Unit,
     onImportFlo: () -> Unit,
     onRequestHcPermissions: () -> Unit,
+    onPickWeeklyFolder: () -> Unit,
     onShowClearDialog: () -> Unit,
 ) {
     when (section) {
@@ -113,7 +114,13 @@ fun SettingsSectionContent(
         )
         SettingsSection.Appearance -> AppearanceSettingsSection(themeViewModel)
         SettingsSection.Data -> DataSettingsSection(
-            onExportBackup, onExportFormat, onImportBackup, onShowClearDialog,
+            state = state,
+            viewModel = viewModel,
+            onExportBackup = onExportBackup,
+            onExportFormat = onExportFormat,
+            onImportBackup = onImportBackup,
+            onPickWeeklyFolder = onPickWeeklyFolder,
+            onShowClearDialog = onShowClearDialog,
         )
         SettingsSection.Other -> OtherSettingsSection(viewModel)
     }
@@ -1247,9 +1254,12 @@ private fun AppearanceSettingsSection(themeViewModel: ThemeViewModel) {
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun DataSettingsSection(
+    state: SettingsUiState,
+    viewModel: SettingsViewModel,
     onExportBackup: () -> Unit,
     onExportFormat: (ExportFormat) -> Unit,
     onImportBackup: () -> Unit,
+    onPickWeeklyFolder: () -> Unit,
     onShowClearDialog: () -> Unit,
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -1279,6 +1289,57 @@ private fun DataSettingsSection(
                         Text(stringResource(format.labelRes))
                     }
                 }
+            }
+        }
+        SettingsCard(
+            title = stringResource(R.string.settings_weekly_backup_title),
+            description = stringResource(R.string.settings_weekly_backup_desc),
+        ) {
+            Row(
+                Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    stringResource(R.string.settings_weekly_backup_toggle),
+                    style = MaterialTheme.typography.bodyMedium,
+                    modifier = Modifier.weight(1f).padding(end = 8.dp),
+                )
+                Switch(
+                    checked = state.weeklyBackupEnabled,
+                    onCheckedChange = viewModel::setWeeklyBackupEnabled,
+                    enabled = state.weeklyBackupFolderLabel != null,
+                )
+            }
+            if (state.weeklyBackupFolderLabel == null) {
+                Text(
+                    stringResource(R.string.settings_weekly_backup_need_folder),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(top = 4.dp),
+                )
+            } else {
+                Text(
+                    stringResource(R.string.settings_weekly_backup_folder, state.weeklyBackupFolderLabel),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(top = 4.dp),
+                )
+            }
+            OutlinedButton(onClick = onPickWeeklyFolder, modifier = Modifier.fillMaxWidth().padding(top = 8.dp)) {
+                Text(stringResource(R.string.settings_weekly_backup_pick_folder))
+            }
+            Text(
+                stringResource(
+                    R.string.settings_weekly_backup_last,
+                    state.weeklyBackupLastStatus ?: stringResource(R.string.settings_weekly_backup_never),
+                ),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(top = 8.dp),
+            )
+            TextButton(onClick = viewModel::runWeeklyBackupNow, modifier = Modifier.padding(top = 4.dp)) {
+                Text(stringResource(R.string.settings_weekly_backup_now))
             }
         }
         SettingsCard(
@@ -1315,7 +1376,16 @@ private fun LayoutSettingsSection(viewModel: SettingsViewModel) {
     var config by remember {
         mutableStateOf(com.moodlife.app.domain.CheckInConfig.default())
     }
+    // Local draft strings so typing stays snappy; config/parse happens on commit + debounce.
+    var stepLabelDrafts by remember { mutableStateOf(mapOf<String, String>()) }
+    var configHydrated by remember { mutableStateOf(false) }
+    var configDirty by remember { mutableStateOf(false) }
+    fun updateConfig(next: com.moodlife.app.domain.CheckInConfig) {
+        config = next
+        configDirty = true
+    }
     LaunchedEffect(checkInConfigRaw, checkInScheme, checkInAxesRaw) {
+        if (configDirty) return@LaunchedEffect
         val parsed = com.moodlife.app.domain.CheckInConfig.parse(checkInConfigRaw)
         if (parsed != null) {
             config = parsed
@@ -1327,6 +1397,15 @@ private fun LayoutSettingsSection(viewModel: SettingsViewModel) {
                 axes,
             )
         }
+        stepLabelDrafts = config.axes.associate { it.id to it.stepLabels.joinToString(", ") }
+        configHydrated = true
+    }
+    // Debounced persist — Today picks up step/axis labels without waiting for Save.
+    LaunchedEffect(config) {
+        if (!configHydrated || !configDirty) return@LaunchedEffect
+        kotlinx.coroutines.delay(350)
+        viewModel.saveCheckInConfig(config)
+        configDirty = false
     }
     LaunchedEffect(Unit) {
         viewModel.loadTodaySections { prefs = it }
@@ -1346,10 +1425,12 @@ private fun LayoutSettingsSection(viewModel: SettingsViewModel) {
                     OutlinedTextField(
                         value = slot.label,
                         onValueChange = { label ->
-                            config = config.copy(
-                                slots = config.slots.toMutableList().also {
-                                    it[index] = slot.copy(label = label)
-                                },
+                            updateConfig(
+                                config.copy(
+                                    slots = config.slots.toMutableList().also {
+                                        it[index] = slot.copy(label = label)
+                                    },
+                                ),
                             )
                         },
                         label = { Text(stringResource(R.string.checkins_slot_label)) },
@@ -1359,7 +1440,7 @@ private fun LayoutSettingsSection(viewModel: SettingsViewModel) {
                     TextButton(
                         onClick = {
                             if (config.slots.size > 1) {
-                                config = config.copy(slots = config.slots.filterIndexed { i, _ -> i != index })
+                                updateConfig(config.copy(slots = config.slots.filterIndexed { i, _ -> i != index }))
                             }
                         },
                         enabled = config.slots.size > 1,
@@ -1369,8 +1450,10 @@ private fun LayoutSettingsSection(viewModel: SettingsViewModel) {
             OutlinedButton(
                 onClick = {
                     val id = "slot_${System.currentTimeMillis() % 100000}"
-                    config = config.copy(
-                        slots = config.slots + com.moodlife.app.domain.CheckInSlot(id, "Слот ${config.slots.size + 1}"),
+                    updateConfig(
+                        config.copy(
+                            slots = config.slots + com.moodlife.app.domain.CheckInSlot(id, "Слот ${config.slots.size + 1}"),
+                        ),
                     )
                 },
                 modifier = Modifier.fillMaxWidth(),
@@ -1384,10 +1467,12 @@ private fun LayoutSettingsSection(viewModel: SettingsViewModel) {
                         OutlinedTextField(
                             value = axis.label,
                             onValueChange = { label ->
-                                config = config.copy(
-                                    axes = config.axes.toMutableList().also {
-                                        it[index] = axis.copy(label = label)
-                                    },
+                                updateConfig(
+                                    config.copy(
+                                        axes = config.axes.toMutableList().also {
+                                            it[index] = axis.copy(label = label)
+                                        },
+                                    ),
                                 )
                             },
                             label = { Text(stringResource(R.string.checkins_axis_label)) },
@@ -1397,7 +1482,7 @@ private fun LayoutSettingsSection(viewModel: SettingsViewModel) {
                         TextButton(
                             onClick = {
                                 if (config.axes.size > 1) {
-                                    config = config.copy(axes = config.axes.filterIndexed { i, _ -> i != index })
+                                    updateConfig(config.copy(axes = config.axes.filterIndexed { i, _ -> i != index }))
                                 }
                             },
                             enabled = config.axes.size > 1,
@@ -1411,10 +1496,12 @@ private fun LayoutSettingsSection(viewModel: SettingsViewModel) {
                             value = axis.min.toString(),
                             onValueChange = { v ->
                                 val n = v.toIntOrNull() ?: return@OutlinedTextField
-                                config = config.copy(
-                                    axes = config.axes.toMutableList().also {
-                                        it[index] = axis.copy(min = n.coerceIn(0, 20))
-                                    },
+                                updateConfig(
+                                    config.copy(
+                                        axes = config.axes.toMutableList().also {
+                                            it[index] = axis.copy(min = n.coerceIn(0, 20))
+                                        },
+                                    ),
                                 )
                             },
                             label = { Text("min") },
@@ -1426,10 +1513,12 @@ private fun LayoutSettingsSection(viewModel: SettingsViewModel) {
                             value = axis.max.toString(),
                             onValueChange = { v ->
                                 val n = v.toIntOrNull() ?: return@OutlinedTextField
-                                config = config.copy(
-                                    axes = config.axes.toMutableList().also {
-                                        it[index] = axis.copy(max = n.coerceIn(axis.min + 1, 20))
-                                    },
+                                updateConfig(
+                                    config.copy(
+                                        axes = config.axes.toMutableList().also {
+                                            it[index] = axis.copy(max = n.coerceIn(axis.min + 1, 20))
+                                        },
+                                    ),
                                 )
                             },
                             label = { Text("max") },
@@ -1439,13 +1528,16 @@ private fun LayoutSettingsSection(viewModel: SettingsViewModel) {
                         )
                     }
                     OutlinedTextField(
-                        value = axis.stepLabels.joinToString(", "),
+                        value = stepLabelDrafts[axis.id] ?: axis.stepLabels.joinToString(", "),
                         onValueChange = { raw ->
+                            stepLabelDrafts = stepLabelDrafts + (axis.id to raw)
                             val labels = raw.split(',').map { it.trim() }.filter { it.isNotEmpty() }
-                            config = config.copy(
-                                axes = config.axes.toMutableList().also {
-                                    it[index] = axis.copy(stepLabels = labels)
-                                },
+                            updateConfig(
+                                config.copy(
+                                    axes = config.axes.toMutableList().also {
+                                        it[index] = axis.copy(stepLabels = labels)
+                                    },
+                                ),
                             )
                         },
                         label = { Text(stringResource(R.string.checkins_step_labels)) },
@@ -1457,13 +1549,15 @@ private fun LayoutSettingsSection(viewModel: SettingsViewModel) {
             OutlinedButton(
                 onClick = {
                     val id = "custom_${System.currentTimeMillis() % 100000}"
-                    config = config.copy(
-                        axes = config.axes + com.moodlife.app.domain.CheckInAxisConfig(
-                            id = id,
-                            label = "Ось ${config.axes.size + 1}",
-                            min = 0,
-                            max = 5,
-                            stepLabels = com.moodlife.app.domain.MoodScales.INTENSITY_ANCHORS_COMPACT,
+                    updateConfig(
+                        config.copy(
+                            axes = config.axes + com.moodlife.app.domain.CheckInAxisConfig(
+                                id = id,
+                                label = "Ось ${config.axes.size + 1}",
+                                min = 0,
+                                max = 5,
+                                stepLabels = com.moodlife.app.domain.MoodScales.INTENSITY_ANCHORS_COMPACT,
+                            ),
                         ),
                     )
                 },
@@ -1471,7 +1565,10 @@ private fun LayoutSettingsSection(viewModel: SettingsViewModel) {
             ) { Text(stringResource(R.string.checkins_add_axis)) }
 
             Button(
-                onClick = { viewModel.saveCheckInConfig(config) },
+                onClick = {
+                    configDirty = false
+                    viewModel.saveCheckInConfig(config)
+                },
                 modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
             ) { Text(stringResource(R.string.checkins_save_config)) }
 
@@ -1487,12 +1584,14 @@ private fun LayoutSettingsSection(viewModel: SettingsViewModel) {
             ).forEach { (id, res) ->
                 TextButton(
                     onClick = {
-                        config = com.moodlife.app.domain.CheckInConfig.fromScheme(
+                        val next = com.moodlife.app.domain.CheckInConfig.fromScheme(
                             id,
                             config.axes.map { it.id }.toSet().ifEmpty {
                                 setOf("depressed", "elevated", "anxious", "irritable")
                             },
                         )
+                        stepLabelDrafts = next.axes.associate { it.id to it.stepLabels.joinToString(", ") }
+                        updateConfig(next)
                         viewModel.setCheckInScheme(id)
                     },
                 ) { Text(stringResource(res)) }
@@ -1609,7 +1708,7 @@ private fun OtherSettingsSection(viewModel: SettingsViewModel) {
     val context = LocalContext.current
     val selfHelpRaw by viewModel.observeSelfHelpTab().collectAsStateWithLifecycle(initialValue = null)
     val chartsRaw by viewModel.observeReportsCharts().collectAsStateWithLifecycle(initialValue = null)
-    val selfHelpOn = selfHelpRaw != "false"
+    val selfHelpOn = selfHelpRaw == "true"
     val chartIds = remember(chartsRaw) {
         chartsRaw?.split(',')?.map { it.trim() }?.filter { it.isNotEmpty() }?.toSet()
             ?: setOf("radar", "mood", "sleep", "energy", "alcohol", "safety", "burden")
@@ -1731,16 +1830,14 @@ private fun OtherSettingsSection(viewModel: SettingsViewModel) {
         ) {
             listOf(
                 "dashboard" to R.string.reports_dashboard_title,
-                "burden" to R.string.reports_burden_title,
-                "radar" to R.string.reports_radar_title,
-                "mood" to R.string.reports_mood_chart_title,
-                "sleep" to R.string.reports_sleep_chart,
-                "sleep_mood" to R.string.reports_scatter_title,
-                "energy" to R.string.reports_energy_chart,
-                "alcohol" to R.string.reports_alcohol_chart,
-                "safety" to R.string.reports_safety_chart,
-                "heatmap" to R.string.reports_heatmap_title,
+                "mood_sleep" to R.string.reports_mood_sleep_title,
                 "medgrid" to R.string.reports_med_intake_title,
+                "heatmap" to R.string.reports_heatmap_title,
+                "scatter" to R.string.reports_scatter_title,
+                "level2" to R.string.reports_level2_title,
+                "level3" to R.string.reports_level3_title,
+                "radar" to R.string.reports_radar_title,
+                "burden" to R.string.reports_burden_title,
                 "priority" to R.string.reports_priority_title,
             ).forEach { (id, res) ->
                 Row(

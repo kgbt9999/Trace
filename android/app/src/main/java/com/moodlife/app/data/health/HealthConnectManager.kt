@@ -12,6 +12,7 @@ import androidx.health.connect.client.records.BodyFatRecord
 import androidx.health.connect.client.records.DistanceRecord
 import androidx.health.connect.client.records.ExerciseSessionRecord
 import androidx.health.connect.client.records.HeartRateRecord
+import androidx.health.connect.client.records.HeightRecord
 import androidx.health.connect.client.records.MenstruationFlowRecord
 import androidx.health.connect.client.records.MenstruationPeriodRecord
 import androidx.health.connect.client.records.NutritionRecord
@@ -58,6 +59,7 @@ class HealthConnectManager @Inject constructor(
         SleepSessionRecord::class to HealthPermission.getReadPermission(SleepSessionRecord::class),
         WeightRecord::class to HealthPermission.getReadPermission(WeightRecord::class),
         BodyFatRecord::class to HealthPermission.getReadPermission(BodyFatRecord::class),
+        HeightRecord::class to HealthPermission.getReadPermission(HeightRecord::class),
         NutritionRecord::class to HealthPermission.getReadPermission(NutritionRecord::class),
         MenstruationFlowRecord::class to HealthPermission.getReadPermission(MenstruationFlowRecord::class),
         MenstruationPeriodRecord::class to HealthPermission.getReadPermission(MenstruationPeriodRecord::class),
@@ -185,8 +187,25 @@ class HealthConnectManager @Inject constructor(
         if (requiredPermissions.none { it in granted }) {
             return SyncResult(skipped = true, reason = "Нет разрешений Health Connect")
         }
-        return try {
-            val client = HealthConnectClient.getOrCreate(context)
+        var lastError: Exception? = null
+        // Transient HC/API failures — short exponential backoff (partial grants already OK).
+        repeat(3) { attempt ->
+            val result = runCatching { syncRecentDaysOnce(daysBack, granted) }
+            result.getOrNull()?.let { return it }
+            lastError = result.exceptionOrNull() as? Exception
+                ?: Exception(result.exceptionOrNull()?.message ?: "Ошибка синхронизации")
+            if (attempt < 2) {
+                kotlinx.coroutines.delay(400L * (1L shl attempt))
+            }
+        }
+        return SyncResult(
+            skipped = true,
+            reason = lastError?.message ?: "Ошибка синхронизации",
+        )
+    }
+
+    private suspend fun syncRecentDaysOnce(daysBack: Int, granted: Set<String>): SyncResult {
+        val client = HealthConnectClient.getOrCreate(context)
             val end = Instant.now()
             val start = end.minus(daysBack.toLong(), ChronoUnit.DAYS)
             val filter = TimeRangeFilter.between(start, end)
@@ -336,6 +355,19 @@ class HealthConnectManager @Inject constructor(
                 }
             }
 
+            if (canRead(HeightRecord::class)) {
+                val heights = client.readRecords(ReadRecordsRequest(HeightRecord::class, timeRangeFilter = filter))
+                val latest = heights.records.maxByOrNull { it.time }
+                if (latest != null) {
+                    noteOrigin(latest.metadata.dataOrigin.packageName)
+                    val cm = (latest.height.inMeters * 100.0).toInt()
+                    if (cm in 50..250) {
+                        settingsRepository.set(SettingsRepository.KEY_BODY_HEIGHT_CM, cm.toString())
+                        rows++
+                    }
+                }
+            }
+
             if (canRead(NutritionRecord::class)) {
                 val nutrition = client.readRecords(ReadRecordsRequest(NutritionRecord::class, timeRangeFilter = filter))
                 data class Macros(var kcal: Double = 0.0, var p: Double = 0.0, var c: Double = 0.0, var f: Double = 0.0)
@@ -447,10 +479,7 @@ class HealthConnectManager @Inject constructor(
             settingsRepository.set(SettingsRepository.KEY_HC_LAST_ROWS, rows.toString())
             settingsRepository.set(SettingsRepository.KEY_HC_LAST_ORIGINS, JSONArray(originList).toString())
 
-            SyncResult(rowsWritten = rows, originLabels = originList)
-        } catch (e: Exception) {
-            SyncResult(skipped = true, reason = e.message ?: "Ошибка синхронизации")
-        }
+            return SyncResult(rowsWritten = rows, originLabels = originList)
     }
 
     private suspend fun upsertActivity(

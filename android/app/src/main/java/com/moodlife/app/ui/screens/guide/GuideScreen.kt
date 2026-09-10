@@ -31,6 +31,7 @@ fun GuideScreen() {
         )
         GuideSection(R.string.guide_today_title, R.string.guide_today_body, initiallyExpanded = true)
         GuideSection(R.string.guide_calendar_title, R.string.guide_calendar_body)
+        GuideSection(R.string.guide_calendar_legend_title, R.string.guide_calendar_legend_body)
         GuideSection(R.string.guide_reports_title, R.string.guide_reports_body)
         GuideSection(R.string.guide_forecast_title, R.string.guide_forecast_body)
         GuideSection(R.string.guide_settings_title, R.string.guide_settings_body)

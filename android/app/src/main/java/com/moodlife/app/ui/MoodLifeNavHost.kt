@@ -21,6 +21,7 @@ import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.SelfImprovement
 import androidx.compose.material.icons.outlined.DarkMode
 import androidx.compose.material.icons.outlined.HelpOutline
 import androidx.compose.material.icons.outlined.LightMode
@@ -96,8 +97,6 @@ fun MoodLifeNavHost(
     val tabs = buildList {
         add(MoodLifeTab.Today)
         add(MoodLifeTab.Calendar)
-        add(MoodLifeTab.Meds)
-        add(MoodLifeTab.Physical)
         add(MoodLifeTab.Reports)
         add(MoodLifeTab.Forecast)
         if (selfHelpEnabled) add(MoodLifeTab.SelfHelp)
@@ -135,6 +134,11 @@ fun MoodLifeNavHost(
                 MoodLifeHeader(
                     dark = dark,
                     onToggleTheme = { themeViewModel.toggleDark(dark) },
+                    onOpenSelfHelp = {
+                        navController.navigate(MoodLifeTab.SelfHelp.route) {
+                            launchSingleTop = true
+                        }
+                    },
                     onOpenGuide = {
                         navController.navigate(MoodLifeTab.Guide.route) {
                             launchSingleTop = true
@@ -196,6 +200,7 @@ fun MoodLifeNavHost(
 private fun MoodLifeHeader(
     dark: Boolean,
     onToggleTheme: () -> Unit,
+    onOpenSelfHelp: () -> Unit,
     onOpenGuide: () -> Unit,
     onOpenSources: () -> Unit,
 ) {
@@ -221,6 +226,17 @@ private fun MoodLifeHeader(
                     .widthIn(max = 120.dp),
             )
             Spacer(Modifier.weight(1f))
+            val selfHelpCd = stringResource(R.string.tab_selfhelp)
+            IconButton(
+                onClick = onOpenSelfHelp,
+                modifier = Modifier.semantics { contentDescription = selfHelpCd },
+            ) {
+                Icon(
+                    imageVector = Icons.Filled.SelfImprovement,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
             IconButton(
                 onClick = onOpenGuide,
                 modifier = Modifier.semantics { contentDescription = "Инструкция" },

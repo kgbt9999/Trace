@@ -6,7 +6,6 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
-import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -28,16 +27,19 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.moodlife.app.R
 import com.moodlife.app.data.export.ExportFormat
-import com.moodlife.app.ui.components.ChartSeries
+import com.moodlife.app.ui.components.GroupedBarChart
 import com.moodlife.app.ui.components.MedAdherenceGrid
 import com.moodlife.app.ui.components.MoodHeatmapChart
+import com.moodlife.app.ui.components.MoodSleepPolarityChart
 import com.moodlife.app.ui.components.MultiLineChart
+import com.moodlife.app.ui.components.ChartSeries
 import com.moodlife.app.ui.components.ParameterPriorityScheme
 import com.moodlife.app.ui.components.RadarChart
 import com.moodlife.app.ui.components.ReportsDashboardCard
@@ -53,6 +55,7 @@ fun ReportsScreen(viewModel: ReportsViewModel = hiltViewModel()) {
     val shareLauncher = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) {}
     val mood = LocalMoodColors.current
     val shareChooserTitle = stringResource(R.string.export_share_chooser)
+    val charts = state.visibleCharts
 
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp)) {
         PageHeader(
@@ -60,126 +63,204 @@ fun ReportsScreen(viewModel: ReportsViewModel = hiltViewModel()) {
             subtitle = stringResource(R.string.reports_subtitle),
         )
         MoodCard(Modifier.padding(top = 4.dp), contentPadding = false) {
-        Row(Modifier.fillMaxWidth().padding(horizontal = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-            IconButton(onClick = viewModel::prevMonth) {
-                Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(R.string.reports_prev_month))
-            }
-            Text(state.monthLabel, Modifier.weight(1f), style = MaterialTheme.typography.titleMedium, maxLines = 1)
-            IconButton(onClick = viewModel::nextMonth) {
-                Icon(Icons.AutoMirrored.Filled.ArrowForward, contentDescription = stringResource(R.string.reports_next_month))
-            }
-        }
-        Row(
-            Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp),
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-            KpiChip(stringResource(R.string.reports_entries_count, state.entryCount), Modifier.weight(1f))
-            KpiChip(
-                state.avgSleepHours?.let { stringResource(R.string.reports_avg_sleep, it) }
-                    ?: stringResource(R.string.reports_avg_sleep_empty),
-                Modifier.weight(1f),
-            )
-            KpiChip(
-                state.avgFunctioning?.let { stringResource(R.string.reports_avg_functioning, it) }
-                    ?: stringResource(R.string.reports_avg_functioning_empty),
-                Modifier.weight(1f),
-            )
-        }
-        Text(stringResource(R.string.reports_export_title), style = MaterialTheme.typography.titleSmall, modifier = Modifier.padding(start = 16.dp, top = 8.dp))
-        Text(
-            stringResource(R.string.reports_export_hint),
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 4.dp),
-        )
-        Column(
-            Modifier.padding(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 16.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-            ExportFormat.entries.forEach { format ->
-                val hint = when (format) {
-                    ExportFormat.JSON -> stringResource(R.string.reports_export_json_hint)
-                    ExportFormat.HTML -> stringResource(R.string.reports_export_html_hint)
-                    ExportFormat.CSV -> stringResource(R.string.reports_export_csv_hint)
-                    ExportFormat.PDF -> stringResource(R.string.reports_export_pdf_hint)
+            Row(Modifier.fillMaxWidth().padding(horizontal = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+                IconButton(onClick = viewModel::prevMonth) {
+                    Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(R.string.reports_prev_month))
                 }
-                FilledTonalButton(
-                    onClick = {
-                        viewModel.exportMonth(format) { intent ->
-                            shareLauncher.launch(
-                                Intent.createChooser(intent, shareChooserTitle),
-                            )
+                Text(state.monthLabel, Modifier.weight(1f), style = MaterialTheme.typography.titleMedium, maxLines = 1)
+                IconButton(onClick = viewModel::nextMonth) {
+                    Icon(Icons.AutoMirrored.Filled.ArrowForward, contentDescription = stringResource(R.string.reports_next_month))
+                }
+            }
+            Text(
+                stringResource(R.string.reports_export_title),
+                style = MaterialTheme.typography.titleSmall,
+                modifier = Modifier.padding(start = 16.dp, top = 8.dp),
+            )
+            Column(
+                Modifier.padding(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 16.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                ExportFormat.entries.forEach { format ->
+                    val hint = when (format) {
+                        ExportFormat.JSON -> stringResource(R.string.reports_export_json_hint)
+                        ExportFormat.HTML -> stringResource(R.string.reports_export_html_hint)
+                        ExportFormat.CSV -> stringResource(R.string.reports_export_csv_hint)
+                        ExportFormat.PDF -> stringResource(R.string.reports_export_pdf_hint)
+                    }
+                    FilledTonalButton(
+                        onClick = {
+                            viewModel.exportMonth(format) { intent ->
+                                shareLauncher.launch(Intent.createChooser(intent, shareChooserTitle))
+                            }
+                        },
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        Column(Modifier.fillMaxWidth()) {
+                            Text(stringResource(format.labelRes))
+                            Text(hint, style = MaterialTheme.typography.labelSmall)
                         }
-                    },
-                    modifier = Modifier.fillMaxWidth(),
-                ) {
-                    Column(Modifier.fillMaxWidth()) {
-                        Text(stringResource(format.labelRes))
-                        Text(hint, style = MaterialTheme.typography.labelSmall)
                     }
                 }
             }
         }
-        }
-        if ("dashboard" in state.visibleCharts) {
+
+        // —— Level 1: mood / sleep / meds ——
+        if ("dashboard" in charts || charts.isEmpty()) {
             Spacer(Modifier.height(12.dp))
             MoodCard {
                 ReportsDashboardCard(
-                    avgDepressed = state.avgDepressed,
-                    avgElevated = state.avgElevated,
+                    avgPolarity = state.avgPolarity,
                     avgSleep = state.avgSleepHours,
+                    adherencePercent = state.adherencePercent,
+                    missedSlots = state.missedMedSlots,
                     entryCount = state.entryCount,
                 )
             }
         }
-        if (state.entryCount > 0 && "burden" in state.visibleCharts) {
+        if (("mood_sleep" in charts || "mood" in charts || "sleep" in charts) &&
+            (state.polaritySeries.isNotEmpty() || state.sleepSeries.isNotEmpty())
+        ) {
             Spacer(Modifier.height(12.dp))
             MoodCard {
-                Text(stringResource(R.string.reports_burden_title), style = MaterialTheme.typography.titleMedium)
+                Text(stringResource(R.string.reports_mood_sleep_title), style = MaterialTheme.typography.titleMedium)
                 Text(
-                    stringResource(R.string.reports_burden_hint),
+                    stringResource(R.string.reports_mood_sleep_hint),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(top = 4.dp),
+                    modifier = Modifier.padding(top = 4.dp, bottom = 8.dp),
                 )
-                Row(
-                    Modifier.fillMaxWidth().padding(top = 10.dp),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                ) {
-                    KpiChip(stringResource(R.string.reports_days_depressed, state.daysDepressed), Modifier.weight(1f))
-                    KpiChip(stringResource(R.string.reports_days_elevated, state.daysElevated), Modifier.weight(1f))
-                }
-                Row(
-                    Modifier.fillMaxWidth().padding(top = 8.dp),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                ) {
-                    KpiChip(stringResource(R.string.reports_days_mixed, state.daysMixed), Modifier.weight(1f))
-                    KpiChip(stringResource(R.string.reports_days_other, state.daysOther), Modifier.weight(1f))
-                }
+                MoodSleepPolarityChart(
+                    moodPoints = state.polaritySeries,
+                    sleepPoints = state.sleepSeries,
+                )
+            }
+        }
+        if ("medgrid" in charts && state.medDayFractions.isNotEmpty()) {
+            Spacer(Modifier.height(12.dp))
+            MoodCard {
+                Text(stringResource(R.string.reports_med_intake_title), style = MaterialTheme.typography.titleMedium)
+                Text(
+                    stringResource(R.string.reports_med_intake_hint),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(top = 4.dp, bottom = 8.dp),
+                )
                 state.adherencePercent?.let { pct ->
                     Text(
                         stringResource(R.string.reports_adherence, pct),
                         style = MaterialTheme.typography.bodyMedium,
-                        modifier = Modifier.padding(top = 12.dp),
-                    )
-                    Text(
-                        stringResource(R.string.reports_adherence_hint),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.padding(top = 2.dp),
-                        lineHeight = MaterialTheme.typography.bodySmall.lineHeight * 1.3f,
+                        modifier = Modifier.padding(bottom = 8.dp),
                     )
                 }
-                state.bedtimeSpreadMin?.let { spread ->
+                MedAdherenceGrid(dayFractions = state.medDayFractions)
+                if (state.medTakenLines.isNotEmpty()) {
                     Text(
-                        stringResource(R.string.reports_bedtime_spread, spread),
-                        style = MaterialTheme.typography.bodyMedium,
-                        modifier = Modifier.padding(top = if (state.adherencePercent != null) 4.dp else 12.dp),
+                        stringResource(R.string.reports_med_taken_list_title),
+                        style = MaterialTheme.typography.titleSmall,
+                        modifier = Modifier.padding(top = 12.dp),
+                    )
+                    state.medTakenLines.take(40).forEach { line ->
+                        Text(
+                            "• $line",
+                            style = MaterialTheme.typography.bodySmall,
+                            modifier = Modifier.padding(top = 3.dp),
+                        )
+                    }
+                }
+            }
+        }
+        if ("heatmap" in charts && state.heatCells.isNotEmpty()) {
+            Spacer(Modifier.height(12.dp))
+            MoodCard {
+                Text(stringResource(R.string.reports_heatmap_title), style = MaterialTheme.typography.titleMedium)
+                Text(
+                    stringResource(R.string.reports_heatmap_hint),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(top = 4.dp, bottom = 8.dp),
+                )
+                MoodHeatmapChart(cells = state.heatCells)
+            }
+        }
+        if (("scatter" in charts || "sleep_mood" in charts) && state.sleepMoodPoints.isNotEmpty()) {
+            Spacer(Modifier.height(12.dp))
+            MoodCard {
+                Text(stringResource(R.string.reports_scatter_title), style = MaterialTheme.typography.titleMedium)
+                Text(
+                    stringResource(R.string.reports_scatter_hint),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(top = 4.dp, bottom = 8.dp),
+                )
+                SleepMoodScatterChart(points = state.sleepMoodPoints)
+            }
+        }
+
+        // —— Level 2: anxiety / energy / irritability ——
+        if (("level2" in charts || "energy" in charts) &&
+            (state.anxiousSeries.isNotEmpty() || state.energySeries.isNotEmpty())
+        ) {
+            Spacer(Modifier.height(12.dp))
+            MoodCard {
+                Text(stringResource(R.string.reports_level2_title), style = MaterialTheme.typography.titleMedium)
+                Text(
+                    stringResource(R.string.reports_level2_hint),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(top = 4.dp, bottom = 8.dp),
+                )
+                GroupedBarChart(
+                    seriesA = state.anxiousSeries,
+                    seriesB = state.energySeries,
+                    labelA = stringResource(R.string.axis_anxious),
+                    labelB = stringResource(R.string.axis_energy),
+                    colorA = Color(0xFFE8A838),
+                    colorB = Color(0xFF66BB6A),
+                    maxY = 10f,
+                )
+                if (state.irritableSeries.isNotEmpty()) {
+                    Text(
+                        stringResource(R.string.axis_irritable),
+                        style = MaterialTheme.typography.titleSmall,
+                        modifier = Modifier.padding(top = 12.dp),
+                    )
+                    MultiLineChart(
+                        series = listOf(
+                            ChartSeries(stringResource(R.string.axis_irritable), mood.irritable, state.irritableSeries),
+                        ),
+                        maxY = 5f,
+                        modifier = Modifier.padding(top = 6.dp),
                     )
                 }
             }
         }
-        if ("radar" in state.visibleCharts) {
+
+        // —— Level 3: concentration / social / appetite ——
+        if (("level3" in charts) &&
+            (state.concentrationSeries.isNotEmpty() || state.sociabilitySeries.isNotEmpty() || state.appetiteSeries.isNotEmpty())
+        ) {
+            Spacer(Modifier.height(12.dp))
+            MoodCard {
+                Text(stringResource(R.string.reports_level3_title), style = MaterialTheme.typography.titleMedium)
+                Text(
+                    stringResource(R.string.reports_level3_hint),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(top = 4.dp, bottom = 8.dp),
+                )
+                MultiLineChart(
+                    series = listOf(
+                        ChartSeries(stringResource(R.string.axis_concentration), Color(0xFF64B5F6), state.concentrationSeries),
+                        ChartSeries(stringResource(R.string.axis_sociability), Color(0xFFBA68C8), state.sociabilitySeries),
+                        ChartSeries(stringResource(R.string.axis_appetite), Color(0xFFFFB74D), state.appetiteSeries),
+                    ),
+                    maxY = 5f,
+                )
+            }
+        }
+
+        if ("radar" in charts) {
             Spacer(Modifier.height(12.dp))
             MoodCard {
                 Text(stringResource(R.string.reports_radar_title), style = MaterialTheme.typography.titleMedium)
@@ -200,169 +281,24 @@ fun ReportsScreen(viewModel: ReportsViewModel = hiltViewModel()) {
                 RadarChart(state.radarAxes)
             }
         }
-        if ("mood" in state.visibleCharts) {
+        if ("burden" in charts && state.entryCount > 0) {
             Spacer(Modifier.height(12.dp))
             MoodCard {
-                Text(stringResource(R.string.reports_mood_chart_title), style = MaterialTheme.typography.titleMedium)
-                Text(
-                    stringResource(R.string.reports_mood_chart_hint),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(top = 4.dp),
-                )
-                if (state.depressedSeries.isEmpty()) {
-                    Text(
-                        stringResource(R.string.reports_no_data),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.padding(top = 6.dp),
-                    )
-                } else {
-                    MultiLineChart(
-                        series = listOf(
-                            ChartSeries(stringResource(R.string.axis_depressed), mood.depressed, state.depressedSeries),
-                            ChartSeries(stringResource(R.string.axis_elevated), mood.elevated, state.elevatedSeries),
-                            ChartSeries(stringResource(R.string.axis_anxious), mood.anxious, state.anxiousSeries),
-                            ChartSeries(stringResource(R.string.axis_irritable), mood.irritable, state.irritableSeries),
-                        ),
-                        modifier = Modifier.padding(top = 8.dp),
-                    )
+                Text(stringResource(R.string.reports_burden_title), style = MaterialTheme.typography.titleMedium)
+                Row(
+                    Modifier.fillMaxWidth().padding(top = 10.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    KpiChip(stringResource(R.string.reports_days_depressed, state.daysDepressed), Modifier.weight(1f))
+                    KpiChip(stringResource(R.string.reports_days_elevated, state.daysElevated), Modifier.weight(1f))
                 }
             }
         }
-        if ("sleep" in state.visibleCharts && state.sleepSeries.isNotEmpty()) {
-            Spacer(Modifier.height(12.dp))
-            MoodCard {
-                Text(stringResource(R.string.reports_sleep_chart), style = MaterialTheme.typography.titleMedium)
-                Text(
-                    stringResource(R.string.reports_sleep_chart_hint),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(top = 4.dp),
-                )
-                MultiLineChart(
-                    series = listOf(
-                        ChartSeries(stringResource(R.string.reports_sleep_chart), mood.sleep, state.sleepSeries),
-                    ),
-                    maxY = (state.sleepSeries.maxOfOrNull { it.second } ?: 10f).coerceAtLeast(8f),
-                    modifier = Modifier.padding(top = 8.dp),
-                )
-            }
-        }
-        if ("sleep_mood" in state.visibleCharts && state.sleepMoodPoints.isNotEmpty()) {
-            Spacer(Modifier.height(12.dp))
-            MoodCard {
-                Text(stringResource(R.string.reports_scatter_title), style = MaterialTheme.typography.titleMedium)
-                Text(
-                    stringResource(R.string.reports_scatter_hint),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(top = 4.dp, bottom = 8.dp),
-                )
-                SleepMoodScatterChart(points = state.sleepMoodPoints)
-            }
-        }
-        if ("energy" in state.visibleCharts && (state.energySeries.isNotEmpty() || state.functioningSeries.isNotEmpty())) {
-            Spacer(Modifier.height(12.dp))
-            MoodCard {
-                Text(stringResource(R.string.reports_energy_chart), style = MaterialTheme.typography.titleMedium)
-                Text(
-                    stringResource(R.string.reports_energy_chart_hint),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(top = 4.dp),
-                )
-                MultiLineChart(
-                    series = listOf(
-                        ChartSeries(stringResource(R.string.axis_energy), mood.energy, state.energySeries),
-                        ChartSeries(stringResource(R.string.axis_functioning), mood.functioning, state.functioningSeries),
-                    ),
-                    maxY = 10f,
-                    modifier = Modifier.padding(top = 8.dp),
-                )
-            }
-        }
-        if ("alcohol" in state.visibleCharts && (state.alcoholSeries.isNotEmpty() || state.routineSeries.isNotEmpty())) {
-            Spacer(Modifier.height(12.dp))
-            MoodCard {
-                Text(stringResource(R.string.reports_alcohol_chart), style = MaterialTheme.typography.titleMedium)
-                Text(
-                    stringResource(R.string.reports_alcohol_chart_hint),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(top = 4.dp),
-                )
-                MultiLineChart(
-                    series = listOf(
-                        ChartSeries(stringResource(R.string.axis_alcohol), mood.alcohol, state.alcoholSeries),
-                        ChartSeries(stringResource(R.string.axis_routine), mood.routine, state.routineSeries),
-                    ),
-                    maxY = 10f,
-                    modifier = Modifier.padding(top = 8.dp),
-                )
-            }
-        }
-        if ("safety" in state.visibleCharts && state.safetySeries.isNotEmpty()) {
-            Spacer(Modifier.height(12.dp))
-            MoodCard {
-                Text(stringResource(R.string.reports_safety_chart), style = MaterialTheme.typography.titleMedium)
-                Text(
-                    stringResource(R.string.reports_safety_chart_hint),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(top = 4.dp),
-                )
-                MultiLineChart(
-                    series = listOf(
-                        ChartSeries(stringResource(R.string.axis_safety), mood.safety, state.safetySeries),
-                    ),
-                    maxY = 3f,
-                    modifier = Modifier.padding(top = 8.dp),
-                )
-            }
-        }
-        if ("heatmap" in state.visibleCharts && state.heatCells.isNotEmpty()) {
-            Spacer(Modifier.height(12.dp))
-            MoodCard {
-                Text(stringResource(R.string.reports_heatmap_title), style = MaterialTheme.typography.titleMedium)
-                Text(
-                    stringResource(R.string.reports_heatmap_hint),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(top = 4.dp, bottom = 8.dp),
-                )
-                MoodHeatmapChart(cells = state.heatCells)
-            }
-        }
-        if ("medgrid" in state.visibleCharts && state.medDayFractions.isNotEmpty()) {
-            Spacer(Modifier.height(12.dp))
-            MoodCard {
-                Text(stringResource(R.string.reports_med_intake_title), style = MaterialTheme.typography.titleMedium)
-                Text(
-                    stringResource(R.string.reports_med_intake_hint),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(top = 4.dp, bottom = 8.dp),
-                )
-                state.adherencePercent?.let { pct ->
-                    Text(
-                        stringResource(R.string.reports_adherence, pct),
-                        style = MaterialTheme.typography.bodyMedium,
-                        modifier = Modifier.padding(bottom = 8.dp),
-                    )
-                }
-                MedAdherenceGrid(dayFractions = state.medDayFractions)
-            }
-        }
-        if ("priority" in state.visibleCharts) {
+        if ("priority" in charts) {
             Spacer(Modifier.height(12.dp))
             MoodCard {
                 ParameterPriorityScheme()
             }
-        }
-        Spacer(Modifier.height(12.dp))
-        MoodCard {
-            Text(stringResource(R.string.reports_charts_settings_hint), style = MaterialTheme.typography.bodySmall)
         }
         Spacer(Modifier.height(12.dp))
         MoodCard {

@@ -86,7 +86,7 @@ fun ForecastScreen(viewModel: ForecastViewModel = hiltViewModel()) {
             modifier = Modifier.padding(bottom = 8.dp),
         )
         if (days.isEmpty()) {
-            Text(stringResource(R.string.forecast_loading), style = MaterialTheme.typography.bodyMedium)
+            Text(stringResource(R.string.forecast_empty), style = MaterialTheme.typography.bodyMedium)
         } else {
             Text(
                 stringResource(R.string.forecast_feed_hint, days.size),

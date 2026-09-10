@@ -43,8 +43,9 @@ class ExportManager @Inject constructor(
             }
             ExportFormat.PDF -> {
                 val entries = doctorExportGenerator.loadMonthEntries(year, month)
+                val medsByDay = doctorExportGenerator.loadMedsByDay(year, month)
                 val file = File(context.cacheDir, "Trace-report-$label.pdf")
-                PdfReportRenderer(context).write(file, year, month, entries)
+                PdfReportRenderer(context).write(file, year, month, entries, medsByDay)
                 ExportFile(file, ExportFormat.PDF)
             }
         }

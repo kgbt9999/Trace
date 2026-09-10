@@ -9,8 +9,6 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.BoxWithConstraints
-import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -23,21 +21,16 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -304,55 +297,26 @@ private fun ScaleStep(
 }
 
 /**
- * Shrinks Russian scale anchors to a single line so words like «заметно»
- * never wrap as «заметн» / «о».
+ * Single-line scale anchors. Uses AutoSize-style clip instead of a measuring loop
+ * so check-in / diary scales stay responsive while typing labels.
  */
 @Composable
 private fun FitScaleAnchor(
     text: String,
     color: Color,
     maxSize: TextUnit = 10.sp,
-    minSize: TextUnit = 6.5.sp,
 ) {
-    val measurer = rememberTextMeasurer()
-    val density = LocalDensity.current
-    BoxWithConstraints(Modifier.fillMaxWidth()) {
-        val maxWidthPx = with(density) { maxWidth.toPx() }.toInt().coerceAtLeast(1)
-        val chosen = remember(text, maxWidthPx, maxSize, minSize) {
-            var size = maxSize
-            val minPx = minSize.value
-            while (size.value >= minPx) {
-                val layout = measurer.measure(
-                    text = text,
-                    style = TextStyle(
-                        fontSize = size,
-                        fontWeight = FontWeight.Medium,
-                        textAlign = TextAlign.Center,
-                    ),
-                    maxLines = 1,
-                    softWrap = false,
-                    overflow = TextOverflow.Clip,
-                    constraints = Constraints(maxWidth = maxWidthPx),
-                )
-                if (!layout.hasVisualOverflow) {
-                    return@remember size
-                }
-                size = (size.value - 0.4f).sp
-            }
-            minSize
-        }
-        Text(
-            text = text,
-            color = color,
-            fontSize = chosen,
-            fontWeight = FontWeight.Medium,
-            textAlign = TextAlign.Center,
-            maxLines = 1,
-            softWrap = false,
-            overflow = TextOverflow.Clip,
-            modifier = Modifier.fillMaxWidth(),
-        )
-    }
+    Text(
+        text = text,
+        color = color,
+        fontSize = maxSize,
+        fontWeight = FontWeight.Medium,
+        textAlign = TextAlign.Center,
+        maxLines = 1,
+        softWrap = false,
+        overflow = TextOverflow.Ellipsis,
+        modifier = Modifier.fillMaxWidth(),
+    )
 }
 
 @Composable

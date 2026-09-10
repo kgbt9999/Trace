@@ -79,10 +79,11 @@ class NavHostViewModel @Inject constructor(
         }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), CrisisChipUiState())
     }
 
+    /** Bottom-nav Exercises tab is opt-in; top-bar icon is always available. */
     val selfHelpTabEnabled: StateFlow<Boolean> = settingsRepository
         .observe(SettingsRepository.KEY_SELFHELP_TAB)
-        .map { raw -> raw != "false" }
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), true)
+        .map { raw -> raw == "true" }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), false)
 
     fun openCrisisSettings() = dayNavigation.navigateToSettings("crisis")
 

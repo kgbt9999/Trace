@@ -431,32 +431,115 @@ class TodayViewModel @Inject constructor(
     fun addFactorQuick(name: String) {
         val trimmed = name.trim()
         if (trimmed.isEmpty()) return
+        val tempId = "tmp-f-${System.currentTimeMillis()}"
+        _uiState.update { state ->
+            state.copy(
+                factors = state.factors + FactorUiItem(
+                    id = tempId,
+                    name = trimmed,
+                    category = "Триггеры",
+                    color = "#F59E0B",
+                    scaleType = "0-5",
+                    scaleMax = 5,
+                    active = false,
+                    intensity = 0,
+                ),
+                saveMessage = "factor_added",
+            )
+        }
         viewModelScope.launch {
-            factorRepository.addFactor(trimmed)
-            _uiState.update { it.copy(saveMessage = "factor_added") }
+            val entity = factorRepository.addFactor(trimmed) ?: return@launch
+            _uiState.update { state ->
+                state.copy(
+                    factors = state.factors.map {
+                        if (it.id == tempId) {
+                            it.copy(
+                                id = entity.id,
+                                name = entity.name,
+                                category = entity.category,
+                                color = entity.color,
+                                scaleType = entity.scaleType,
+                                scaleMax = DefaultSeedData.scaleMaxFor(entity.scaleType),
+                            )
+                        } else {
+                            it
+                        }
+                    },
+                )
+            }
         }
     }
 
     fun addSymptomQuick(name: String) {
         val trimmed = name.trim()
         if (trimmed.isEmpty()) return
+        val scaleType = _uiState.value.newSymptomScale
+        val tempId = "tmp-s-${System.currentTimeMillis()}"
+        _uiState.update { state ->
+            state.copy(
+                symptoms = state.symptoms + SymptomUiItem(
+                    id = tempId,
+                    name = trimmed,
+                    scaleType = scaleType,
+                    scaleMax = DefaultSeedData.scaleMaxFor(scaleType),
+                    severity = 0,
+                    color = "#2BBFA0",
+                ),
+                saveMessage = "symptom_added",
+            )
+        }
         viewModelScope.launch {
-            symptomRepository.addSymptom(
+            val entity = symptomRepository.addSymptom(
                 name = trimmed,
                 category = "Общие",
                 color = "#2BBFA0",
-                scaleType = _uiState.value.newSymptomScale,
-            )
-            _uiState.update { it.copy(saveMessage = "symptom_added") }
+                scaleType = scaleType,
+            ) ?: return@launch
+            _uiState.update { state ->
+                state.copy(
+                    symptoms = state.symptoms.map {
+                        if (it.id == tempId) {
+                            it.copy(
+                                id = entity.id,
+                                name = entity.name,
+                                scaleType = entity.scaleType,
+                                scaleMax = entity.scaleMax,
+                                color = entity.color,
+                            )
+                        } else {
+                            it
+                        }
+                    },
+                )
+            }
         }
     }
 
     fun addWarningQuick(name: String) {
         val trimmed = name.trim()
         if (trimmed.isEmpty()) return
+        val tempId = "tmp-w-${System.currentTimeMillis()}"
+        _uiState.update { state ->
+            state.copy(
+                warnings = state.warnings + WarningUiItem(
+                    id = tempId,
+                    name = trimmed,
+                    direction = "depression",
+                    active = false,
+                ),
+                saveMessage = "warning_added",
+            )
+        }
         viewModelScope.launch {
-            warningSignRepository.addSign(trimmed, direction = "depression")
-            _uiState.update { it.copy(saveMessage = "warning_added") }
+            val entity = warningSignRepository.addSign(trimmed, direction = "depression") ?: return@launch
+            _uiState.update { state ->
+                state.copy(
+                    warnings = state.warnings.map {
+                        if (it.id == tempId) it.copy(id = entity.id, name = entity.name, direction = entity.direction)
+                        else it
+                    },
+                )
+            }
         }
     }
 
@@ -586,6 +669,58 @@ class TodayViewModel @Inject constructor(
         val target = _uiState.value.catalogEdit ?: return
         val trimmed = result.name.trim()
         if (trimmed.isEmpty()) return
+        // Optimistic: paint renamed/edited item before Room round-trip.
+        when (target.kind) {
+            CatalogEditTarget.Kind.SYMPTOM -> {
+                val scaleType = result.scaleType ?: target.scaleType
+                _uiState.update { state ->
+                    state.copy(
+                        catalogEdit = null,
+                        saveMessage = "catalog_updated",
+                        symptoms = state.symptoms.map {
+                            if (it.id != target.id) it else it.copy(
+                                name = trimmed,
+                                scaleType = scaleType,
+                                scaleMax = DefaultSeedData.scaleMaxFor(scaleType),
+                                color = result.color ?: it.color,
+                            )
+                        },
+                    )
+                }
+            }
+            CatalogEditTarget.Kind.FACTOR -> {
+                val scaleType = result.scaleType ?: target.scaleType
+                _uiState.update { state ->
+                    state.copy(
+                        catalogEdit = null,
+                        saveMessage = "catalog_updated",
+                        factors = state.factors.map {
+                            if (it.id != target.id) it else it.copy(
+                                name = trimmed,
+                                category = result.category ?: it.category,
+                                color = result.color ?: it.color,
+                                scaleType = scaleType,
+                                scaleMax = DefaultSeedData.scaleMaxFor(scaleType),
+                            )
+                        },
+                    )
+                }
+            }
+            CatalogEditTarget.Kind.WARNING -> {
+                _uiState.update { state ->
+                    state.copy(
+                        catalogEdit = null,
+                        saveMessage = "catalog_updated",
+                        warnings = state.warnings.map {
+                            if (it.id != target.id) it else it.copy(
+                                name = trimmed,
+                                direction = result.direction ?: it.direction,
+                            )
+                        },
+                    )
+                }
+            }
+        }
         viewModelScope.launch {
             when (target.kind) {
                 CatalogEditTarget.Kind.SYMPTOM -> {
@@ -618,7 +753,6 @@ class TodayViewModel @Inject constructor(
                     )
                 }
             }
-            _uiState.update { it.copy(catalogEdit = null, saveMessage = "catalog_updated") }
         }
     }
 
@@ -1175,15 +1309,20 @@ class TodayViewModel @Inject constructor(
             val ui = curById[db.id] ?: return@map db
             if (ui.severity != db.severity) db.copy(severity = ui.severity) else db
         }
-        if (merged.size == current.size &&
-            merged.zip(current).all { (a, b) ->
+        val dbNames = fromDb.map { it.name.lowercase() }.toSet()
+        val pendingOptimistic = current.filter {
+            it.id.startsWith("tmp-") && it.name.lowercase() !in dbNames
+        }
+        val result = merged + pendingOptimistic
+        if (result.size == current.size &&
+            result.zip(current).all { (a, b) ->
                 a.id == b.id && a.severity == b.severity && a.name == b.name &&
                     a.scaleType == b.scaleType && a.scaleMax == b.scaleMax && a.color == b.color
             }
         ) {
             return current
         }
-        return merged
+        return result
     }
 
     private fun applyCatalog(snap: CatalogSnapshot) {
@@ -1240,15 +1379,20 @@ class TodayViewModel @Inject constructor(
                 db
             }
         }
+        val dbNames = fromDb.map { it.name.lowercase() }.toSet()
+        val pendingOptimistic = current.filter {
+            it.id.startsWith("tmp-") && it.name.lowercase() !in dbNames
+        }
+        val result = merged + pendingOptimistic
         return if (
-            merged.size == current.size &&
-            merged.zip(current).all { (a, b) ->
+            result.size == current.size &&
+            result.zip(current).all { (a, b) ->
                 a.id == b.id && a.intensity == b.intensity && a.active == b.active
             }
         ) {
             current
         } else {
-            merged
+            result
         }
     }
 
@@ -1263,13 +1407,18 @@ class TodayViewModel @Inject constructor(
             val ui = curById[db.id] ?: return@map db
             if (ui.active != db.active) db.copy(active = ui.active) else db
         }
+        val dbNames = fromDb.map { it.name.lowercase() }.toSet()
+        val pendingOptimistic = current.filter {
+            it.id.startsWith("tmp-") && it.name.lowercase() !in dbNames
+        }
+        val result = merged + pendingOptimistic
         return if (
-            merged.size == current.size &&
-            merged.zip(current).all { (a, b) -> a.id == b.id && a.active == b.active }
+            result.size == current.size &&
+            result.zip(current).all { (a, b) -> a.id == b.id && a.active == b.active }
         ) {
             current
         } else {
-            merged
+            result
         }
     }
 

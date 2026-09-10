@@ -51,6 +51,16 @@ class SettingsRepository @Inject constructor(private val settingDao: SettingDao)
         const val KEY_HC_LAST_ROWS = "hc_last_rows"
         const val KEY_HC_LAST_ORIGINS = "hc_last_origins"
         const val KEY_BACKUP_LAST = "backup_last_path"
+        /** Weekly auto-backup to user SAF folder — "true" / "false", default off. */
+        const val KEY_WEEKLY_BACKUP_ENABLED = "weekly_backup_enabled"
+        /** Persisted SAF tree URI for weekly backup folder. */
+        const val KEY_WEEKLY_BACKUP_TREE_URI = "weekly_backup_tree_uri"
+        /** Last weekly backup status label (path or error). */
+        const val KEY_WEEKLY_BACKUP_LAST = "weekly_backup_last"
+        /** User height in cm (optional; also filled from Health Connect). */
+        const val KEY_BODY_HEIGHT_CM = "body_height_cm"
+        /** Nutrition goals JSON: {"kcal":N,"protein":N,"fat":N,"carbs":N} — optional. */
+        const val KEY_NUTRITION_GOALS = "nutrition_goals_json"
         /** Check-in period scheme: morning_day_night | halves | hours */
         const val KEY_CHECKIN_SCHEME = "checkin_scheme"
         const val KEY_SELFHELP_TAB = "selfhelp_tab_enabled"

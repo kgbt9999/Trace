@@ -45,6 +45,28 @@ object DateUtils {
         return first.format(isoFormatter) to last.format(isoFormatter)
     }
 
+    /** Inclusive ISO range for a calendar week (Mon–Sun) containing [iso]. */
+    fun weekRangeContaining(iso: String): Pair<String, String> {
+        val d = parseIso(iso)
+        val monday = d.minusDays(((d.dayOfWeek.value + 6) % 7).toLong())
+        val sunday = monday.plusDays(6)
+        return monday.format(isoFormatter) to sunday.format(isoFormatter)
+    }
+
+    /** Inclusive ISO range for a calendar quarter (Q1–Q4) containing [iso]. */
+    fun quarterRangeContaining(iso: String): Pair<String, String> {
+        val d = parseIso(iso)
+        val qStartMonth = ((d.monthValue - 1) / 3) * 3 + 1
+        val first = LocalDate.of(d.year, qStartMonth, 1)
+        val last = first.plusMonths(2).withDayOfMonth(first.plusMonths(2).lengthOfMonth())
+        return first.format(isoFormatter) to last.format(isoFormatter)
+    }
+
+    fun monthRangeContaining(iso: String): Pair<String, String> {
+        val d = parseIso(iso)
+        return monthRange(d.year, d.monthValue - 1)
+    }
+
     /** Monday-first 6×7 grid; null = padding cell. */
     fun monthMatrix(year: Int, month: Int): List<List<String?>> {
         val first = LocalDate.of(year, month + 1, 1)

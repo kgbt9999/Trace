@@ -80,6 +80,52 @@ class ReportsRepository @Inject constructor(
         }
     }
 
+    /** Per-day taken lines: "12 мая — Название · доза · слоты". */
+    fun observeMonthMedTakenLines(year: Int, month: Int): Flow<List<String>> {
+        val (from, to) = DateUtils.monthRange(year, month)
+        return combine(
+            medicationLogDao.observeRange(from, to),
+            medicationDao.observeActive(),
+        ) { logs, meds ->
+            if (meds.isEmpty()) return@combine emptyList()
+            val byDate = logs.groupBy { it.date }
+            val start = java.time.LocalDate.parse(from)
+            val end = java.time.LocalDate.parse(to)
+            buildList {
+                var d = start
+                while (!d.isAfter(end)) {
+                    val iso = d.toString()
+                    val dayLogs = byDate[iso].orEmpty()
+                    val dayLabel = "${d.dayOfMonth} ${DateUtils.MONTH_NAMES_RU[d.monthValue - 1].take(3).lowercase()}"
+                    meds.forEach { med ->
+                        val log = dayLogs.find { it.medicationId == med.id } ?: return@forEach
+                        val slots = com.moodlife.app.util.MedsUtils.parseIntakeTimes(med.intakeTimes)
+                        val timed = slots.filter { it != "by-scheme" }
+                        val takenLabels = if (timed.isEmpty()) {
+                            if (log.taken) listOf("день") else emptyList()
+                        } else {
+                            timed.filter { slot ->
+                                com.moodlife.app.util.MedsUtils.isSlotTaken(
+                                    log.taken, log.slotsTaken, slot, timed,
+                                )
+                            }
+                        }
+                        if (takenLabels.isEmpty()) return@forEach
+                        val doseStr = (log.dosageOverride ?: med.dosage)?.takeIf { it.isNotBlank() }
+                        add(
+                            buildString {
+                                append(dayLabel).append(" — ").append(med.name)
+                                if (doseStr != null) append(" · ").append(doseStr)
+                                append(" · ").append(takenLabels.joinToString(", "))
+                            },
+                        )
+                    }
+                    d = d.plusDays(1)
+                }
+            }
+        }
+    }
+
     suspend fun buildInsights(): Triple<Boolean, List<InsightsEngine.InsightCard>, String> {
         val today = DateUtils.todayIso()
         val from = DateUtils.addDays(today, -365L)

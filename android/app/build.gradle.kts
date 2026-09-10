@@ -120,6 +120,7 @@ dependencies {
     implementation("androidx.work:work-runtime-ktx:2.9.1")
     implementation("androidx.hilt:hilt-work:1.2.0")
     ksp("androidx.hilt:hilt-compiler:1.2.0")
+    implementation("androidx.documentfile:documentfile:1.0.1")
 
     // Health Connect (stub — enable when implementing Phase 4)
     implementation("androidx.health.connect:connect-client:1.1.0-alpha11")

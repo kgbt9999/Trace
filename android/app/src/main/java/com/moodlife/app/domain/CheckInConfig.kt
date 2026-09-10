@@ -20,7 +20,16 @@ data class CheckInAxisConfig(
     val stepLabels: List<String> = emptyList(),
 ) {
     fun anchors(): List<String>? {
-        if (stepLabels.size == max - min + 1) return stepLabels
+        val needed = (max - min + 1).coerceAtLeast(1)
+        if (stepLabels.isNotEmpty()) {
+            // Prefer custom labels immediately — pad/truncate so Today picks them up
+            // even while the user is still typing (size may temporarily mismatch).
+            return when {
+                stepLabels.size == needed -> stepLabels
+                stepLabels.size > needed -> stepLabels.take(needed)
+                else -> stepLabels + List(needed - stepLabels.size) { "" }
+            }
+        }
         return when (max - min) {
             5 -> MoodScales.INTENSITY_ANCHORS_COMPACT
             else -> null

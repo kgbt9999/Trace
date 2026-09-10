@@ -48,7 +48,13 @@ internal class PdfReportRenderer(
     private val mR = 36f
     private val contentW = pageW - mL - mR
 
-    fun write(file: File, year: Int, month: Int, entries: List<MoodEntryEntity>) {
+    fun write(
+        file: File,
+        year: Int,
+        month: Int,
+        entries: List<MoodEntryEntity>,
+        medsByDay: List<Pair<String, List<String>>> = emptyList(),
+    ) {
         val doc = PdfDocument()
         val titlePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
             color = white
@@ -176,19 +182,75 @@ internal class PdfReportRenderer(
             small = small,
         )
         y += 170f
-        c.drawText("Алкоголь и режим", mL, y, heading)
+        c.drawText("Алкоголь / ПАВ и режим", mL, y, heading)
         y += 8f
         drawLines(
             c,
-            RectF(mL, y, mL + contentW, y + 150f),
+            RectF(mL, y, mL + contentW, y + 120f),
             listOf(
                 Series("Алкоголь", alcC, entries.map { it.alcoholUse.toFloat() }),
+                Series("ПАВ", Color.parseColor("#6A4A8A"), entries.map { it.substanceUse.toFloat() }),
                 Series("Режим", routineC, entries.map { it.routineScore.toFloat() }),
             ),
             maxY = 10f,
             labels = entries.map { it.date.takeLast(2) },
             small = small,
         )
+        y += 140f
+        val pavHelp = listOf(
+            "ПАВ — психоактивные вещества (шкала самоотчёта).",
+            "Подписи вроде «заметно» — якоря шкалы пользователя/по умолчанию, не диагноз.",
+        )
+        pavHelp.forEach { line ->
+            c.drawText(line, mL, y, small)
+            y += 12f
+        }
+        drawFooter(c, small, pageNum)
+        doc.finishPage(page)
+
+        // Page 3 — meds by day
+        pageNum = 3
+        page = doc.startPage(PdfDocument.PageInfo.Builder(pageW, pageH, pageNum).create())
+        c = page.canvas
+        drawHeader(c, titlePaint, small, monthLabel, exported, n)
+        y = 92f
+        c.drawText("Приём лекарств по дням", mL, y, heading)
+        y += 14f
+        c.drawText("Самоотчёт: что отмечено принятым. Не оценка терапии.", mL, y, small)
+        y += 16f
+        if (medsByDay.isEmpty()) {
+            c.drawText("Нет отметок приёма за месяц.", mL, y, body)
+        } else {
+            for ((date, lines) in medsByDay) {
+                if (y > pageH - 60f) {
+                    drawFooter(c, small, pageNum)
+                    doc.finishPage(page)
+                    pageNum++
+                    page = doc.startPage(PdfDocument.PageInfo.Builder(pageW, pageH, pageNum).create())
+                    c = page.canvas
+                    drawHeader(c, titlePaint, small, monthLabel, exported, n)
+                    y = 92f
+                    c.drawText("Приём лекарств по дням (продолжение)", mL, y, heading)
+                    y += 16f
+                }
+                c.drawText(date, mL, y, Paint(body).apply { isFakeBoldText = true })
+                y += 12f
+                for (line in lines) {
+                    if (y > pageH - 48f) {
+                        drawFooter(c, small, pageNum)
+                        doc.finishPage(page)
+                        pageNum++
+                        page = doc.startPage(PdfDocument.PageInfo.Builder(pageW, pageH, pageNum).create())
+                        c = page.canvas
+                        drawHeader(c, titlePaint, small, monthLabel, exported, n)
+                        y = 92f
+                    }
+                    c.drawText("  • $line", mL, y, body)
+                    y += 11f
+                }
+                y += 4f
+            }
+        }
         drawFooter(c, small, pageNum)
         doc.finishPage(page)
 
@@ -227,7 +289,7 @@ internal class PdfReportRenderer(
             }
         }
         c.drawText(
-            "Д — подавленность · П — подъём · Т — тревога · Р — раздражение. Не медицинская диагностика.",
+            "Д — подавленность · П — подъём · Т — тревога · Р — раздражение · ПАВ — психоактивные вещества. Не диагноз.",
             mL,
             pageH - 28f,
             small,
