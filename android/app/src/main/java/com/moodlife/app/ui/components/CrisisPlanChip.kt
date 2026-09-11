@@ -1,8 +1,10 @@
 package com.moodlife.app.ui.components
 
-import androidx.compose.foundation.layout.Arrangement
+import android.content.ActivityNotFoundException
+import android.content.Intent
+import android.net.Uri
+import android.widget.Toast
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -14,6 +16,7 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Surface
@@ -24,51 +27,44 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import com.moodlife.app.R
+import com.moodlife.app.domain.CrisisContact
 import com.moodlife.app.domain.WorseningDetector
 import com.moodlife.app.ui.navigation.CrisisChipUiState
 
+/** Top-bar entry to the crisis plan — always available, not tied to worsening. */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun CrisisPlanChip(
+fun CrisisPlanHeaderAction(
     state: CrisisChipUiState,
     onOpenSettings: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    if (!state.visible) return
     var open by remember { mutableStateOf(false) }
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    val context = LocalContext.current
+    val title = stringResource(R.string.crisis_plan_title)
+    val tint = if (state.worsening) {
+        MaterialTheme.colorScheme.error
+    } else {
+        MaterialTheme.colorScheme.onSurfaceVariant
+    }
 
-    Surface(
+    IconButton(
         onClick = { open = true },
-        shape = MaterialTheme.shapes.extraLarge,
-        color = MaterialTheme.colorScheme.errorContainer,
-        modifier = modifier
-            .heightIn(min = 48.dp)
-            .semantics { contentDescription = "crisis_chip" },
+        modifier = modifier.semantics { contentDescription = title },
     ) {
-        Row(
-            Modifier.padding(horizontal = 16.dp, vertical = 10.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-            Icon(
-                Icons.Filled.Phone,
-                contentDescription = null,
-                tint = MaterialTheme.colorScheme.onErrorContainer,
-            )
-            Text(
-                stringResource(R.string.crisis_plan_title),
-                style = MaterialTheme.typography.labelLarge,
-                color = MaterialTheme.colorScheme.onErrorContainer,
-            )
-        }
+        Icon(
+            imageVector = Icons.Filled.Phone,
+            contentDescription = null,
+            tint = tint,
+        )
     }
 
     if (open) {
@@ -76,7 +72,10 @@ fun CrisisPlanChip(
             Column(Modifier.fillMaxWidth().padding(horizontal = 24.dp).padding(bottom = 32.dp)) {
                 Text(stringResource(R.string.crisis_plan_title), style = MaterialTheme.typography.titleLarge)
                 Text(
-                    stringResource(R.string.crisis_plan_reason),
+                    stringResource(
+                        if (state.worsening) R.string.crisis_plan_reason
+                        else R.string.crisis_plan_reason_always,
+                    ),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
                     modifier = Modifier.padding(top = 4.dp, bottom = 16.dp),
@@ -93,6 +92,19 @@ fun CrisisPlanChip(
                         Text(stringResource(R.string.crisis_plan_fill_settings))
                     }
                 } else {
+                    if (state.contacts.isNotEmpty()) {
+                        Text(
+                            stringResource(R.string.crisis_plan_quick_dial),
+                            style = MaterialTheme.typography.titleSmall,
+                            modifier = Modifier.padding(bottom = 6.dp),
+                        )
+                        state.contacts.forEach { contact ->
+                            DialContactButton(contact) {
+                                dialSafely(context, contact.telUri())
+                            }
+                        }
+                        Spacer(Modifier.height(8.dp))
+                    }
                     if (state.doctor.isNotBlank()) PlanField(stringResource(R.string.settings_crisis_doctor), state.doctor)
                     if (state.support.isNotBlank()) PlanField(stringResource(R.string.settings_crisis_support), state.support)
                     if (state.notes.isNotBlank()) PlanField(stringResource(R.string.settings_crisis_notes), state.notes)
@@ -109,12 +121,49 @@ fun CrisisPlanChip(
                     }
                 }
                 Spacer(Modifier.height(12.dp))
-                Text(
-                    stringResource(R.string.crisis_helpline, WorseningDetector.HELPLINE),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
-                )
+                FilledTonalButton(
+                    onClick = { dialSafely(context, "tel:88003334434") },
+                    modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp),
+                ) {
+                    Text(stringResource(R.string.crisis_helpline, WorseningDetector.HELPLINE))
+                }
             }
+        }
+    }
+}
+
+/** @deprecated Use [CrisisPlanHeaderAction] in the top bar. Kept as alias for call-site clarity. */
+@Composable
+fun CrisisPlanChip(
+    state: CrisisChipUiState,
+    onOpenSettings: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    CrisisPlanHeaderAction(state = state, onOpenSettings = onOpenSettings, modifier = modifier)
+}
+
+private fun dialSafely(context: android.content.Context, telUri: String) {
+    try {
+        context.startActivity(Intent(Intent.ACTION_DIAL, Uri.parse(telUri)))
+    } catch (_: ActivityNotFoundException) {
+        Toast.makeText(context, R.string.crisis_dial_unavailable, Toast.LENGTH_SHORT).show()
+    } catch (_: SecurityException) {
+        Toast.makeText(context, R.string.crisis_dial_unavailable, Toast.LENGTH_SHORT).show()
+    }
+}
+
+@Composable
+private fun DialContactButton(contact: CrisisContact, onDial: () -> Unit) {
+    FilledTonalButton(
+        onClick = onDial,
+        modifier = Modifier.fillMaxWidth().padding(bottom = 6.dp).heightIn(min = 48.dp),
+    ) {
+        Column(Modifier.fillMaxWidth()) {
+            Text(
+                "${stringResource(R.string.crisis_plan_dial)}: ${contact.label}",
+                style = MaterialTheme.typography.titleSmall,
+            )
+            Text(contact.phone, style = MaterialTheme.typography.bodySmall)
         }
     }
 }

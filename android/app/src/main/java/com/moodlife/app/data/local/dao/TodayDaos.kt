@@ -19,6 +19,20 @@ interface MedicationDao {
     @Query("SELECT * FROM medications ORDER BY isActive DESC, name")
     fun observeAll(): Flow<List<MedicationEntity>>
 
+    /** Active catalog + any med that has a log in range (keeps historical rows after deactivate). */
+    @Query(
+        """
+        SELECT DISTINCT m.* FROM medications m
+        WHERE m.isActive = 1
+           OR m.id IN (
+                SELECT medicationId FROM medication_logs
+                WHERE date >= :from AND date <= :to
+           )
+        ORDER BY m.name
+        """,
+    )
+    fun observeVisibleInRange(from: String, to: String): Flow<List<MedicationEntity>>
+
     @Query("SELECT COUNT(*) FROM medications WHERE isActive = 1")
     suspend fun countActive(): Int
 
@@ -40,8 +54,16 @@ interface MedicationLogDao {
     @Query("SELECT * FROM medication_logs WHERE date >= :from AND date <= :to ORDER BY date")
     suspend fun listRange(from: String, to: String): List<MedicationLogEntity>
 
+    @Query(
+        "SELECT * FROM medication_logs WHERE medicationId = :medId AND date >= :from ORDER BY date",
+    )
+    suspend fun listFromDate(medId: String, from: String): List<MedicationLogEntity>
+
     @Query("SELECT * FROM medication_logs WHERE medicationId = :medId AND date = :date LIMIT 1")
     suspend fun getByMedAndDate(medId: String, date: String): MedicationLogEntity?
+
+    @Query("DELETE FROM medication_logs WHERE medicationId = :medId AND date = :date")
+    suspend fun deleteByMedAndDate(medId: String, date: String)
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun upsert(log: MedicationLogEntity)

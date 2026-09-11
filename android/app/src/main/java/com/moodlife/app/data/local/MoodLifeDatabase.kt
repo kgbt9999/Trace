@@ -58,8 +58,8 @@ import com.moodlife.app.data.local.entity.WeatherDayEntity
         ExternalHealthDayEntity::class,
         SettingEntity::class,
     ],
-    version = 4,
-    exportSchema = false,
+    version = 5,
+    exportSchema = true,
 )
 abstract class MoodLifeDatabase : RoomDatabase() {
     abstract fun moodEntryDao(): MoodEntryDao
@@ -112,6 +112,48 @@ abstract class MoodLifeDatabase : RoomDatabase() {
             override fun migrate(db: SupportSQLiteDatabase) {
                 db.execSQL(
                     "ALTER TABLE medication_logs ADD COLUMN dosageOverride TEXT DEFAULT NULL",
+                )
+            }
+        }
+
+        /**
+         * v4 → v5: freeze name + intake times on each day log so catalog scheme edits
+         * do not rewrite historical dosage / slots / labels. Backfill from catalog.
+         */
+        val MIGRATION_4_5: Migration = object : Migration(4, 5) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    "ALTER TABLE medication_logs ADD COLUMN nameSnapshot TEXT DEFAULT NULL",
+                )
+                db.execSQL(
+                    "ALTER TABLE medication_logs ADD COLUMN intakeTimesSnapshot TEXT DEFAULT NULL",
+                )
+                db.execSQL(
+                    """
+                    UPDATE medication_logs
+                    SET dosageOverride = (
+                        SELECT dosage FROM medications WHERE medications.id = medication_logs.medicationId
+                    )
+                    WHERE dosageOverride IS NULL
+                    """.trimIndent(),
+                )
+                db.execSQL(
+                    """
+                    UPDATE medication_logs
+                    SET nameSnapshot = (
+                        SELECT name FROM medications WHERE medications.id = medication_logs.medicationId
+                    )
+                    WHERE nameSnapshot IS NULL
+                    """.trimIndent(),
+                )
+                db.execSQL(
+                    """
+                    UPDATE medication_logs
+                    SET intakeTimesSnapshot = (
+                        SELECT intakeTimes FROM medications WHERE medications.id = medication_logs.medicationId
+                    )
+                    WHERE intakeTimesSnapshot IS NULL
+                    """.trimIndent(),
                 )
             }
         }

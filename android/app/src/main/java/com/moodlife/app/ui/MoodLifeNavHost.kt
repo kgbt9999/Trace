@@ -48,7 +48,6 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavDestination.Companion.hierarchy
@@ -58,8 +57,9 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import com.moodlife.app.R
-import com.moodlife.app.ui.components.CrisisPlanChip
+import com.moodlife.app.ui.components.CrisisPlanHeaderAction
 import com.moodlife.app.ui.components.FitOneLineText
+import com.moodlife.app.ui.navigation.CrisisChipUiState
 import com.moodlife.app.ui.navigation.NavHostViewModel
 import com.moodlife.app.ui.screens.TodayScreen
 import com.moodlife.app.ui.screens.calendar.CalendarScreen
@@ -133,6 +133,8 @@ fun MoodLifeNavHost(
             Column {
                 MoodLifeHeader(
                     dark = dark,
+                    crisisState = crisisState,
+                    onOpenCrisis = navHostViewModel::openCrisisSettings,
                     onToggleTheme = { themeViewModel.toggleDark(dark) },
                     onOpenSelfHelp = {
                         navController.navigate(MoodLifeTab.SelfHelp.route) {
@@ -185,13 +187,6 @@ fun MoodLifeNavHost(
                 composable(MoodLifeTab.Sources.route) { SourcesScreen() }
                 composable(MoodLifeTab.Guide.route) { GuideScreen() }
             }
-            CrisisPlanChip(
-                state = crisisState,
-                onOpenSettings = navHostViewModel::openCrisisSettings,
-                modifier = Modifier
-                    .align(Alignment.BottomStart)
-                    .padding(start = 12.dp, bottom = 12.dp),
-            )
         }
     }
 }
@@ -199,6 +194,8 @@ fun MoodLifeNavHost(
 @Composable
 private fun MoodLifeHeader(
     dark: Boolean,
+    crisisState: CrisisChipUiState,
+    onOpenCrisis: () -> Unit,
     onToggleTheme: () -> Unit,
     onOpenSelfHelp: () -> Unit,
     onOpenGuide: () -> Unit,
@@ -226,6 +223,10 @@ private fun MoodLifeHeader(
                     .widthIn(max = 120.dp),
             )
             Spacer(Modifier.weight(1f))
+            CrisisPlanHeaderAction(
+                state = crisisState,
+                onOpenSettings = onOpenCrisis,
+            )
             val selfHelpCd = stringResource(R.string.tab_selfhelp)
             IconButton(
                 onClick = onOpenSelfHelp,

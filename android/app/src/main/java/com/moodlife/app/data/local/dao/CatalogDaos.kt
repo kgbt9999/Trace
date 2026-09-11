@@ -85,6 +85,9 @@ interface WarningTriggerDao {
     @Query("SELECT * FROM warning_triggers WHERE moodEntryId = :moodEntryId")
     suspend fun listForEntry(moodEntryId: String): List<WarningTriggerEntity>
 
+    @Query("SELECT * FROM warning_triggers WHERE moodEntryId IN (:entryIds)")
+    suspend fun listForEntries(entryIds: List<String>): List<WarningTriggerEntity>
+
     @Query("SELECT * FROM warning_triggers WHERE moodEntryId = :entryId AND warningSignId = :signId LIMIT 1")
     suspend fun getByEntryAndSign(entryId: String, signId: String): WarningTriggerEntity?
 

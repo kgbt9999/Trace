@@ -65,7 +65,9 @@ class MedsViewModel @Inject constructor(
             var scheduled = 0
             meds.forEach { med ->
                 val log = dayLogs.find { it.medicationId == med.id }
-                val slots = MedsUtils.parseIntakeTimes(med.intakeTimes)
+                val slots = MedsUtils.parseIntakeTimes(
+                    medicationRepository.effectiveIntakeTimes(med, log),
+                )
                 val timed = slots.filter { it != "by-scheme" }
                 if (timed.isEmpty()) {
                     scheduled += 1
@@ -89,7 +91,9 @@ class MedsViewModel @Inject constructor(
             weekMarks = weekMarks,
             todayRows = meds.map { med ->
                 val log = todayLogs.find { it.medicationId == med.id }
-                val slots = MedsUtils.parseIntakeTimes(med.intakeTimes)
+                val slots = MedsUtils.parseIntakeTimes(
+                    medicationRepository.effectiveIntakeTimes(med, log),
+                )
                 val timed = slots.filter { it != "by-scheme" }.ifEmpty { listOf("day") }
                 val takenCount = timed.count { slot ->
                     if (slot == "day") log?.taken == true
@@ -97,7 +101,7 @@ class MedsViewModel @Inject constructor(
                 }
                 TodayMedRow(
                     id = med.id,
-                    name = med.name,
+                    name = medicationRepository.effectiveName(med, log),
                     dosage = medicationRepository.effectiveDosage(med, log),
                     slotsTaken = takenCount,
                     slotsTotal = timed.size,

@@ -39,8 +39,6 @@ internal class PdfReportRenderer(
     private val sleepC = Color.parseColor("#4A3A9A")
     private val energyC = Color.parseColor("#2BBFA0")
     private val funcC = Color.parseColor("#186898")
-    private val alcC = Color.parseColor("#8A6840")
-    private val routineC = Color.parseColor("#2A8A80")
 
     private val pageW = 595
     private val pageH = 842
@@ -97,8 +95,8 @@ internal class PdfReportRenderer(
                 "Подъём" to avg { it.elevated },
                 "Тревога" to avg { it.anxious },
                 "Раздр." to avg { it.irritable },
+                "Силы" to avg { it.energy },
                 "Сон, ч" to avgSleep,
-                "Дела" to avg { it.functioning },
             ),
         )
         y += 8f
@@ -150,24 +148,52 @@ internal class PdfReportRenderer(
         drawFooter(c, small, pageNum)
         doc.finishPage(page)
 
-        // Page 2 — more charts
+        // Page 2 — heatmap, sleep+mood, anxiety/energy bars
         pageNum = 2
         page = doc.startPage(PdfDocument.PageInfo.Builder(pageW, pageH, pageNum).create())
         c = page.canvas
         drawHeader(c, titlePaint, small, monthLabel, exported, n)
         y = 92f
-        c.drawText("Сон", mL, y, heading)
+        c.drawText("Тепловая карта настроения", mL, y, heading)
+        y += 8f
+        val heatH = 120f
+        drawMoodHeatmap(c, RectF(mL, y, mL + contentW, y + heatH), entries, small)
+        y += heatH + 16f
+        c.drawText("Сон и настроение", mL, y, heading)
         y += 8f
         val sleepVals = entries.map { it.sleepHours ?: 0f }
+        val sleepMax = sleepVals.maxOrNull()?.coerceAtLeast(8f) ?: 8f
+        // Normalize sleep to 0–5 visual scale alongside mood for combined readability
         drawLines(
             c,
             RectF(mL, y, mL + contentW, y + 150f),
-            listOf(Series("Сон, ч", sleepC, sleepVals)),
-            maxY = sleepVals.maxOrNull()?.coerceAtLeast(8f) ?: 8f,
+            listOf(
+                Series("Сон÷${String.format(Locale("ru"), "%.0f", sleepMax)}×5", sleepC, sleepVals.map { it / sleepMax * 5f }),
+                Series("Д", dep, entries.map { it.depressed.toFloat() }),
+                Series("П", elev, entries.map { it.elevated.toFloat() }),
+            ),
+            maxY = 5f,
             labels = entries.map { it.date.takeLast(2) },
             small = small,
         )
         y += 170f
+        c.drawText("Тревога и силы (столбцы)", mL, y, heading)
+        y += 8f
+        drawAnxietyEnergyBars(
+            c,
+            RectF(mL, y, mL + contentW, y + 140f),
+            entries,
+            small,
+        )
+        drawFooter(c, small, pageNum)
+        doc.finishPage(page)
+
+        // Page 3 — polarity + energy/functioning
+        pageNum = 3
+        page = doc.startPage(PdfDocument.PageInfo.Builder(pageW, pageH, pageNum).create())
+        c = page.canvas
+        drawHeader(c, titlePaint, small, monthLabel, exported, n)
+        y = 92f
         c.drawText("Силы и дела", mL, y, heading)
         y += 8f
         drawLines(
@@ -182,44 +208,38 @@ internal class PdfReportRenderer(
             small = small,
         )
         y += 170f
-        c.drawText("Алкоголь / ПАВ и режим", mL, y, heading)
+        c.drawText("Полярность (подъём − спад)", mL, y, heading)
         y += 8f
-        drawLines(
+        val polarity = entries.map { (it.elevated - it.depressed).toFloat() }
+        val polMax = polarity.maxOfOrNull { kotlin.math.abs(it) }?.coerceAtLeast(5f) ?: 5f
+        drawPolarityBars(
             c,
             RectF(mL, y, mL + contentW, y + 120f),
-            listOf(
-                Series("Алкоголь", alcC, entries.map { it.alcoholUse.toFloat() }),
-                Series("ПАВ", Color.parseColor("#6A4A8A"), entries.map { it.substanceUse.toFloat() }),
-                Series("Режим", routineC, entries.map { it.routineScore.toFloat() }),
-            ),
-            maxY = 10f,
-            labels = entries.map { it.date.takeLast(2) },
-            small = small,
+            polarity,
+            polMax,
+            entries.map { it.date.takeLast(2) },
+            small,
         )
         y += 140f
-        val pavHelp = listOf(
-            "ПАВ — психоактивные вещества (шкала самоотчёта).",
-            "Подписи вроде «заметно» — якоря шкалы пользователя/по умолчанию, не диагноз.",
+        c.drawText(
+            "Полярность: положительная — преобладание подъёма, отрицательная — спада. Самоотчёт.",
+            mL,
+            y,
+            small,
         )
-        pavHelp.forEach { line ->
-            c.drawText(line, mL, y, small)
-            y += 12f
-        }
         drawFooter(c, small, pageNum)
         doc.finishPage(page)
 
-        // Page 3 — meds by day
-        pageNum = 3
+        // Page 4 — meds by day
+        pageNum = 4
         page = doc.startPage(PdfDocument.PageInfo.Builder(pageW, pageH, pageNum).create())
         c = page.canvas
         drawHeader(c, titlePaint, small, monthLabel, exported, n)
         y = 92f
         c.drawText("Приём лекарств по дням", mL, y, heading)
         y += 14f
-        c.drawText("Самоотчёт: что отмечено принятым. Не оценка терапии.", mL, y, small)
-        y += 16f
         if (medsByDay.isEmpty()) {
-            c.drawText("Нет отметок приёма за месяц.", mL, y, body)
+            c.drawText("Нет записей приёма за месяц.", mL, y, body)
         } else {
             for ((date, lines) in medsByDay) {
                 if (y > pageH - 60f) {
@@ -230,7 +250,7 @@ internal class PdfReportRenderer(
                     c = page.canvas
                     drawHeader(c, titlePaint, small, monthLabel, exported, n)
                     y = 92f
-                    c.drawText("Приём лекарств по дням (продолжение)", mL, y, heading)
+                    c.drawText("Лекарства по дням (продолжение)", mL, y, heading)
                     y += 16f
                 }
                 c.drawText(date, mL, y, Paint(body).apply { isFakeBoldText = true })
@@ -289,7 +309,7 @@ internal class PdfReportRenderer(
             }
         }
         c.drawText(
-            "Д — подавленность · П — подъём · Т — тревога · Р — раздражение · ПАВ — психоактивные вещества. Не диагноз.",
+            "Д/П/Т/Р — оси настроения · самоотчёт, не диагноз",
             mL,
             pageH - 28f,
             small,
@@ -316,7 +336,7 @@ internal class PdfReportRenderer(
         c.drawRect(0f, 72f, pageW.toFloat(), 76f, Paint().apply { color = teal })
         c.drawText("Trace — отчёт за $month", mL, 32f, title)
         small.color = mint
-        c.drawText("Записей: $count  ·  экспорт $exported  ·  самонаблюдение, не диагноз", mL, 52f, small)
+        c.drawText("Записей: $count  ·  $exported  ·  самоотчёт, не диагноз", mL, 52f, small)
         small.color = muted
     }
 
@@ -432,7 +452,7 @@ internal class PdfReportRenderer(
             val p = Paint(Paint.ANTI_ALIAS_FLAG).apply {
                 color = s.color
                 style = Paint.Style.STROKE
-                strokeWidth = 2.2f
+                strokeWidth = 2.6f
                 strokeJoin = Paint.Join.ROUND
                 strokeCap = Paint.Cap.ROUND
             }
@@ -443,6 +463,13 @@ internal class PdfReportRenderer(
                 if (i == 0) path.moveTo(x, y) else path.lineTo(x, y)
             }
             c.drawPath(path, p)
+            val dot = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = s.color }
+            s.values.forEachIndexed { i, v ->
+                if (count > 40 && i % 2 != 0) return@forEachIndexed
+                val x = plot.left + i * stepX
+                val y = plot.bottom - (v / maxY.coerceAtLeast(0.01f)).coerceIn(0f, 1f) * plot.height()
+                c.drawCircle(x, y, 2.2f, dot)
+            }
         }
         val step = when {
             count <= 16 -> 1
@@ -491,10 +518,9 @@ internal class PdfReportRenderer(
             "${e.elevated}",
             "${e.anxious}",
             "${e.irritable}",
+            "${e.energy}",
             e.sleepHours?.let { String.format(Locale("ru"), "%.1f", it) } ?: "—",
-            if (e.alcoholUse > 0) "${e.alcoholUse}" else "—",
-            if (e.substanceUse > 0) "${e.substanceUse}" else "—",
-            e.functioning.toString(),
+            "${e.elevated - e.depressed}",
         )
         var x = mL + 4f
         values.forEachIndexed { i, v ->
@@ -507,15 +533,159 @@ internal class PdfReportRenderer(
         val w = contentW
         return listOf(
             "Дата" to w * 0.16f,
-            "Д" to w * 0.08f,
-            "П" to w * 0.08f,
-            "Т" to w * 0.08f,
-            "Р" to w * 0.08f,
-            "Сон" to w * 0.14f,
-            "Алк." to w * 0.12f,
-            "ПАВ" to w * 0.12f,
-            "Дела" to w * 0.14f,
+            "Д" to w * 0.09f,
+            "П" to w * 0.09f,
+            "Т" to w * 0.09f,
+            "Р" to w * 0.09f,
+            "Силы" to w * 0.12f,
+            "Сон" to w * 0.16f,
+            "Пол." to w * 0.20f,
         )
+    }
+
+    private fun drawPolarityBars(
+        c: Canvas,
+        box: RectF,
+        values: List<Float>,
+        maxAbs: Float,
+        labels: List<String>,
+        small: Paint,
+    ) {
+        c.drawRoundRect(box, 10f, 10f, Paint().apply { color = white })
+        c.drawRoundRect(box, 10f, 10f, Paint().apply {
+            color = line
+            style = Paint.Style.STROKE
+            strokeWidth = 1.2f
+        })
+        val padL = 22f
+        val padB = 18f
+        val padT = 12f
+        val padR = 10f
+        val plot = RectF(box.left + padL, box.top + padT, box.right - padR, box.bottom - padB)
+        val midY = plot.centerY()
+        c.drawLine(plot.left, midY, plot.right, midY, Paint().apply { color = line; strokeWidth = 1.2f })
+        if (values.isEmpty()) {
+            c.drawText("Нет данных", plot.centerX() - 24f, plot.centerY(), small)
+            return
+        }
+        val barW = (plot.width() / values.size.coerceAtLeast(1)).coerceAtMost(14f)
+        val gap = (plot.width() - barW * values.size) / (values.size + 1).coerceAtLeast(1)
+        values.forEachIndexed { i, v ->
+            val x = plot.left + gap + i * (barW + gap)
+            val h = (kotlin.math.abs(v) / maxAbs.coerceAtLeast(0.01f)).coerceIn(0f, 1f) * (plot.height() / 2f)
+            val top = if (v >= 0f) midY - h else midY
+            val color = if (v >= 0f) elev else dep
+            c.drawRoundRect(
+                RectF(x, top, x + barW, top + h.coerceAtLeast(1f)),
+                2f,
+                2f,
+                Paint(Paint.ANTI_ALIAS_FLAG).apply { this.color = color },
+            )
+        }
+        val step = when {
+            values.size <= 16 -> 1
+            values.size <= 31 -> 2
+            else -> 5
+        }
+        labels.forEachIndexed { i, lab ->
+            if (i % step == 0) {
+                val x = plot.left + gap + i * (barW + gap)
+                c.drawText(lab, x, box.bottom - 4f, small)
+            }
+        }
+        c.drawCircle(box.left + 12f, box.top + 10f, 4f, Paint().apply { color = elev })
+        c.drawText("Подъём", box.left + 20f, box.top + 13f, small)
+        c.drawCircle(box.left + 80f, box.top + 10f, 4f, Paint().apply { color = dep })
+        c.drawText("Спад", box.left + 88f, box.top + 13f, small)
+    }
+
+    private fun drawMoodHeatmap(
+        c: Canvas,
+        box: RectF,
+        entries: List<MoodEntryEntity>,
+        small: Paint,
+    ) {
+        c.drawRoundRect(box, 8f, 8f, Paint().apply { color = card })
+        if (entries.isEmpty()) {
+            c.drawText("Нет данных", box.centerX() - 24f, box.centerY(), small)
+            return
+        }
+        val labels = listOf("Д", "П", "Т", "Р")
+        val getters: List<(MoodEntryEntity) -> Int> = listOf(
+            { it.depressed }, { it.elevated }, { it.anxious }, { it.irritable },
+        )
+        val labelW = 18f
+        val cellW = ((box.width() - labelW - 8f) / entries.size).coerceAtMost(14f)
+        val cellH = ((box.height() - 16f) / labels.size).coerceAtMost(22f)
+        labels.forEachIndexed { row, lab ->
+            val y = box.top + 10f + row * cellH
+            c.drawText(lab, box.left + 4f, y + cellH * 0.7f, small)
+            entries.forEachIndexed { i, e ->
+                val v = getters[row](e)
+                val t = (v / 5f).coerceIn(0f, 1f)
+                val color = Color.rgb(
+                    (255 * t).toInt(),
+                    (220 - 140 * t).toInt(),
+                    (220 - 100 * t).toInt(),
+                )
+                val x = box.left + labelW + i * cellW
+                c.drawRoundRect(
+                    RectF(x, y, x + cellW - 1f, y + cellH - 2f),
+                    2f,
+                    2f,
+                    Paint().apply { this.color = color },
+                )
+            }
+        }
+    }
+
+    private fun drawAnxietyEnergyBars(
+        c: Canvas,
+        box: RectF,
+        entries: List<MoodEntryEntity>,
+        small: Paint,
+    ) {
+        c.drawRoundRect(box, 8f, 8f, Paint().apply { color = card })
+        val padL = 22f
+        val padB = 18f
+        val padT = 14f
+        val padR = 10f
+        val plot = RectF(box.left + padL, box.top + padT, box.right - padR, box.bottom - padB)
+        val gridP = Paint().apply { color = line; strokeWidth = 1f }
+        for (i in 0..5) {
+            val gy = plot.bottom - plot.height() * i / 5f
+            c.drawLine(plot.left, gy, plot.right, gy, gridP)
+            c.drawText("${i * 2}", box.left + 4f, gy + 3f, small)
+        }
+        if (entries.isEmpty()) {
+            c.drawText("Нет данных", plot.centerX() - 24f, plot.centerY(), small)
+            return
+        }
+        val slot = plot.width() / entries.size
+        val barW = (slot * 0.35f).coerceAtLeast(2f)
+        entries.forEachIndexed { i, e ->
+            val x = plot.left + i * slot
+            val hAnx = plot.height() * (e.anxious / 5f).coerceIn(0f, 1f)
+            val hEn = plot.height() * (e.energy / 10f).coerceIn(0f, 1f)
+            c.drawRect(
+                x,
+                plot.bottom - hAnx,
+                x + barW,
+                plot.bottom,
+                Paint().apply { color = anx },
+            )
+            c.drawRect(
+                x + barW + 1f,
+                plot.bottom - hEn,
+                x + barW * 2 + 1f,
+                plot.bottom,
+                Paint().apply { color = energyC },
+            )
+        }
+        c.drawCircle(box.left + 12f, box.top + 10f, 4f, Paint().apply { color = anx })
+        c.drawText("Тревога", box.left + 20f, box.top + 13f, small)
+        c.drawCircle(box.left + 90f, box.top + 10f, 4f, Paint().apply { color = energyC })
+        c.drawText("Силы", box.left + 98f, box.top + 13f, small)
     }
 
     private fun drawFooter(c: Canvas, small: Paint, page: Int) {

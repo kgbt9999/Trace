@@ -10,7 +10,14 @@ class BootReceiver : BroadcastReceiver() {
         if (intent.action == Intent.ACTION_BOOT_COMPLETED ||
             intent.action == Intent.ACTION_MY_PACKAGE_REPLACED
         ) {
-            ReminderScheduler.scheduleAll(context)
+            val pending = goAsync()
+            try {
+                ReminderScheduler.scheduleAll(context)
+            } catch (_: Exception) {
+                // Boot must not crash the app process.
+            } finally {
+                pending.finish()
+            }
         }
     }
 }

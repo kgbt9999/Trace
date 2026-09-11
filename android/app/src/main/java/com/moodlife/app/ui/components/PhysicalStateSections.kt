@@ -29,6 +29,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
@@ -36,11 +37,17 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.moodlife.app.R
 import com.moodlife.app.domain.PhysicalAggregate
 import com.moodlife.app.domain.PhysicalPeriod
+import com.moodlife.app.ui.theme.LocalMoodColors
 import java.util.Locale
-import kotlin.math.min
+
+private val KbjuPurpleTop = Color(0xFFA876F5)
+private val KbjuPurpleBottom = Color(0xFF8A56E8)
+private val KbjuWhite = Color.White
+private val KbjuTrack = Color.White.copy(alpha = 0.30f)
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
@@ -96,9 +103,12 @@ fun PhysicalDateNav(
     }
 }
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun PhysicalStateSections(
     summary: PhysicalAggregate?,
+    onPrevDay: (() -> Unit)? = null,
+    onNextDay: (() -> Unit)? = null,
     modifier: Modifier = Modifier,
 ) {
     if (summary == null) {
@@ -110,243 +120,384 @@ fun PhysicalStateSections(
         )
         return
     }
-    Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        NutritionKbjuCard(summary)
-        BodyMetricsCard(summary)
-        CycleCard(summary)
-        ActivityCard(summary)
-        SleepCard(summary)
+    val mood = LocalMoodColors.current
+    Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        KbjuNutritionCard(
+            summary = summary,
+            onPrevDay = onPrevDay,
+            onNextDay = onNextDay,
+        )
+
+        MoodCard {
+            Text(
+                stringResource(R.string.physical_body_title),
+                style = MaterialTheme.typography.titleSmall,
+                fontWeight = FontWeight.SemiBold,
+                color = MaterialTheme.colorScheme.primary,
+            )
+            FlowRow(
+                Modifier.padding(top = 8.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                CompactMetric(
+                    label = stringResource(R.string.physical_height),
+                    value = summary.heightCm?.let { String.format(Locale("ru"), "%.0f см", it) } ?: "—",
+                )
+                CompactMetric(
+                    label = stringResource(R.string.physical_weight),
+                    value = summary.weightKg?.let { String.format(Locale("ru"), "%.1f кг", it) } ?: "—",
+                )
+            }
+        }
+
+        MoodCard {
+            Text(
+                stringResource(R.string.physical_cycle_title),
+                style = MaterialTheme.typography.titleSmall,
+                fontWeight = FontWeight.SemiBold,
+                color = mood.cycle,
+            )
+            if (summary.cycleDay == null) {
+                Text(
+                    stringResource(R.string.physical_cycle_empty),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(top = 6.dp),
+                )
+            } else {
+                Text(
+                    stringResource(R.string.physical_cycle_day, summary.cycleDay),
+                    style = MaterialTheme.typography.bodyLarge,
+                    modifier = Modifier.padding(top = 6.dp),
+                )
+                summary.cyclePhaseLabel?.let {
+                    Text(
+                        stringResource(R.string.physical_cycle_phase, it),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            }
+        }
+
+        MoodCard {
+            Text(
+                stringResource(R.string.physical_activity_title),
+                style = MaterialTheme.typography.titleSmall,
+                fontWeight = FontWeight.SemiBold,
+                color = mood.energy,
+            )
+            FlowRow(
+                Modifier.padding(top = 8.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                CompactMetric(
+                    label = stringResource(R.string.physical_cardio),
+                    value = summary.cardioMinutes?.let { "$it мин" } ?: "—",
+                )
+                CompactMetric(
+                    label = stringResource(R.string.physical_steps),
+                    value = summary.steps?.toString() ?: "—",
+                )
+            }
+            if (summary.period != PhysicalPeriod.DAY) {
+                Text(
+                    stringResource(R.string.physical_activity_sum_note),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(top = 6.dp),
+                )
+            }
+        }
+
+        MoodCard {
+            Text(
+                stringResource(R.string.physical_sleep_title),
+                style = MaterialTheme.typography.titleSmall,
+                fontWeight = FontWeight.SemiBold,
+                color = mood.sleep,
+            )
+            FlowRow(
+                Modifier.padding(top = 8.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                CompactMetric(
+                    label = stringResource(R.string.physical_sleep_title),
+                    value = summary.sleepHours?.let {
+                        String.format(Locale("ru"), "%.1f ч", it)
+                    } ?: "—",
+                )
+                CompactMetric(
+                    label = stringResource(R.string.physical_metric_bedtime),
+                    value = summary.bedtime ?: "—",
+                )
+                CompactMetric(
+                    label = stringResource(R.string.physical_metric_wake),
+                    value = summary.wakeTime ?: "—",
+                )
+                CompactMetric(
+                    label = stringResource(R.string.physical_metric_quality),
+                    value = summary.sleepQuality?.toString() ?: "—",
+                )
+            }
+        }
     }
 }
 
 @Composable
-private fun SectionTitle(text: String) {
-    Text(text, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
-}
-
-@Composable
-private fun NutritionKbjuCard(s: PhysicalAggregate) {
-    val accent = Color(0xFF7C5CBF)
-    MoodCard {
-        SectionTitle(stringResource(R.string.physical_nutrition_title))
-        Text(
-            stringResource(R.string.physical_nutrition_hint),
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.padding(top = 2.dp, bottom = 10.dp),
-        )
-        if (!s.hasNutrition && s.caloriesBurned == null) {
+private fun KbjuNutritionCard(
+    summary: PhysicalAggregate,
+    onPrevDay: (() -> Unit)?,
+    onNextDay: (() -> Unit)?,
+) {
+    val shape = RoundedCornerShape(20.dp)
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(shape)
+            .background(Brush.verticalGradient(listOf(KbjuPurpleTop, KbjuPurpleBottom)))
+            .padding(horizontal = 16.dp, vertical = 18.dp),
+        verticalArrangement = Arrangement.spacedBy(16.dp),
+    ) {
+        if (!summary.hasNutrition && summary.caloriesBurned == null) {
             Text(
                 stringResource(R.string.physical_nutrition_empty),
                 style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                color = KbjuWhite.copy(alpha = 0.9f),
             )
-            return@MoodCard
-        }
-        Row(
-            Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(10.dp),
-        ) {
-            MacroBar(
-                label = stringResource(R.string.physical_macro_protein),
-                value = s.proteinG,
-                goal = s.goals.proteinG,
-                color = Color(0xFF5B8DEF),
-                modifier = Modifier.weight(1f),
-            )
-            MacroBar(
-                label = stringResource(R.string.physical_macro_fat),
-                value = s.fatG,
-                goal = s.goals.fatG,
-                color = Color(0xFFE8A838),
-                modifier = Modifier.weight(1f),
-            )
-            MacroBar(
-                label = stringResource(R.string.physical_macro_carbs),
-                value = s.carbsG,
-                goal = s.goals.carbsG,
-                color = Color(0xFF2BBFA0),
-                modifier = Modifier.weight(1f),
-            )
-        }
-        Spacer(Modifier.height(14.dp))
-        Row(
-            Modifier.fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.SpaceEvenly,
-        ) {
-            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                Text(
-                    s.goals.kcal?.toString() ?: "—",
-                    style = MaterialTheme.typography.titleLarge,
-                    fontWeight = FontWeight.Bold,
-                    color = accent,
+        } else {
+            Row(
+                Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                MacroBarColumn(
+                    label = stringResource(R.string.physical_macro_protein),
+                    current = summary.proteinG,
+                    goal = summary.goals.proteinG,
+                    modifier = Modifier.weight(1f),
                 )
-                Text(
-                    stringResource(R.string.physical_kcal_norm),
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                MacroBarColumn(
+                    label = stringResource(R.string.physical_macro_fat),
+                    current = summary.fatG,
+                    goal = summary.goals.fatG,
+                    modifier = Modifier.weight(1f),
+                )
+                MacroBarColumn(
+                    label = stringResource(R.string.physical_macro_carbs),
+                    current = summary.carbsG,
+                    goal = summary.goals.carbsG,
+                    modifier = Modifier.weight(1f),
                 )
             }
-            CalorieRing(
-                eaten = s.caloriesEaten,
-                goal = s.goals.kcal,
-                color = accent,
-            )
-            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                Text(
-                    s.caloriesBurned?.toString() ?: "—",
-                    style = MaterialTheme.typography.titleLarge,
-                    fontWeight = FontWeight.Bold,
-                    color = accent,
-                )
-                Text(
-                    stringResource(R.string.physical_kcal_burned),
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
+
+            val eaten = summary.caloriesEaten
+            val norm = summary.goals.kcal
+            val burned = summary.caloriesBurned
+            val progress = when {
+                eaten == null || norm == null || norm <= 0 -> 0f
+                else -> (eaten.toFloat() / norm).coerceIn(0f, 1f)
             }
+
+            Row(
+                Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween,
+            ) {
+                Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.weight(1f)) {
+                    Text(
+                        formatIntRu(norm),
+                        color = KbjuWhite,
+                        fontSize = 22.sp,
+                        fontWeight = FontWeight.Bold,
+                    )
+                    Text(
+                        stringResource(R.string.physical_kcal_norm),
+                        color = KbjuWhite.copy(alpha = 0.85f),
+                        style = MaterialTheme.typography.labelMedium,
+                    )
+                }
+                Box(
+                    contentAlignment = Alignment.Center,
+                    modifier = Modifier.size(110.dp),
+                ) {
+                    Canvas(Modifier.size(110.dp)) {
+                        val stroke = 10.dp.toPx()
+                        val diameter = size.minDimension - stroke
+                        val topLeft = Offset((size.width - diameter) / 2f, (size.height - diameter) / 2f)
+                        drawArc(
+                            color = KbjuTrack,
+                            startAngle = -90f,
+                            sweepAngle = 360f,
+                            useCenter = false,
+                            topLeft = topLeft,
+                            size = Size(diameter, diameter),
+                            style = Stroke(width = stroke, cap = StrokeCap.Round),
+                        )
+                        drawArc(
+                            color = KbjuWhite,
+                            startAngle = -90f,
+                            sweepAngle = 360f * progress,
+                            useCenter = false,
+                            topLeft = topLeft,
+                            size = Size(diameter, diameter),
+                            style = Stroke(width = stroke, cap = StrokeCap.Round),
+                        )
+                    }
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Text(
+                            formatIntRu(eaten),
+                            color = KbjuWhite,
+                            fontSize = 26.sp,
+                            fontWeight = FontWeight.Bold,
+                        )
+                        Text(
+                            stringResource(R.string.physical_kcal_unit),
+                            color = KbjuWhite.copy(alpha = 0.9f),
+                            style = MaterialTheme.typography.labelMedium,
+                        )
+                    }
+                }
+                Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.weight(1f)) {
+                    Text(
+                        formatIntRu(burned),
+                        color = KbjuWhite,
+                        fontSize = 22.sp,
+                        fontWeight = FontWeight.Bold,
+                    )
+                    Text(
+                        stringResource(R.string.physical_kcal_burned),
+                        color = KbjuWhite.copy(alpha = 0.85f),
+                        style = MaterialTheme.typography.labelMedium,
+                    )
+                }
+            }
+
+            // Accessibility labels matching mockup: норма | съедено | сожжено
+            Text(
+                buildString {
+                    append(stringResource(R.string.physical_kcal_norm))
+                    append(" · ")
+                    append(stringResource(R.string.physical_kcal_eaten))
+                    append(" · ")
+                    append(stringResource(R.string.physical_kcal_burned))
+                },
+                color = KbjuWhite.copy(alpha = 0.55f),
+                style = MaterialTheme.typography.labelSmall,
+                textAlign = TextAlign.Center,
+                modifier = Modifier.fillMaxWidth(),
+            )
         }
-        if (s.period != PhysicalPeriod.DAY) {
+
+        if (summary.period != PhysicalPeriod.DAY) {
             Text(
                 stringResource(R.string.physical_nutrition_avg_note),
+                color = KbjuWhite.copy(alpha = 0.75f),
                 style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(top = 8.dp),
+                textAlign = TextAlign.Center,
+                modifier = Modifier.fillMaxWidth(),
             )
+        }
+
+        if (summary.period == PhysicalPeriod.DAY && onPrevDay != null && onNextDay != null) {
+            Row(
+                Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween,
+            ) {
+                IconButton(onClick = onPrevDay) {
+                    Icon(
+                        Icons.AutoMirrored.Filled.ArrowBack,
+                        contentDescription = stringResource(R.string.physical_prev_period),
+                        tint = KbjuWhite,
+                    )
+                }
+                Text(
+                    summary.rangeLabel,
+                    color = KbjuWhite,
+                    style = MaterialTheme.typography.titleSmall,
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier.weight(1f),
+                )
+                IconButton(onClick = onNextDay) {
+                    Icon(
+                        Icons.AutoMirrored.Filled.ArrowForward,
+                        contentDescription = stringResource(R.string.physical_next_period),
+                        tint = KbjuWhite,
+                    )
+                }
+            }
         }
     }
 }
 
 @Composable
-private fun MacroBar(
+private fun MacroBarColumn(
     label: String,
-    value: Float?,
+    current: Float?,
     goal: Float?,
-    color: Color,
     modifier: Modifier = Modifier,
 ) {
-    Column(modifier) {
-        Text(label, style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Medium)
-        val progress = when {
-            value == null -> 0f
-            goal != null && goal > 0f -> min(1f, value / goal)
-            else -> 0.35f
-        }
+    val progress = when {
+        current == null || goal == null || goal <= 0f -> 0f
+        else -> (current / goal).coerceIn(0f, 1f)
+    }
+    Column(modifier = modifier, horizontalAlignment = Alignment.CenterHorizontally) {
+        Text(
+            label,
+            color = KbjuWhite,
+            style = MaterialTheme.typography.labelMedium,
+            fontWeight = FontWeight.Medium,
+        )
+        Spacer(Modifier.height(6.dp))
         LinearProgressIndicator(
             progress = { progress },
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(top = 4.dp)
                 .height(6.dp)
                 .clip(RoundedCornerShape(50)),
-            color = color,
-            trackColor = color.copy(alpha = 0.18f),
+            color = KbjuWhite,
+            trackColor = KbjuTrack,
+            strokeCap = StrokeCap.Round,
         )
+        Spacer(Modifier.height(6.dp))
         Text(
-            buildString {
-                append(value?.let { String.format(Locale("ru"), "%.0f", it) } ?: "—")
-                if (goal != null) {
-                    append(" / ")
-                    append(String.format(Locale("ru"), "%.0f", goal))
-                    append(" г")
-                } else if (value != null) {
-                    append(" г")
-                }
-            },
+            "${fmtGNum(current)} / ${fmtGNum(goal)} ${stringResource(R.string.physical_macro_unit_g)}",
+            color = KbjuWhite.copy(alpha = 0.92f),
             style = MaterialTheme.typography.labelSmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.padding(top = 2.dp),
+            textAlign = TextAlign.Center,
+            maxLines = 1,
         )
     }
 }
 
 @Composable
-private fun CalorieRing(eaten: Int?, goal: Int?, color: Color) {
-    val progress = when {
-        eaten == null -> 0f
-        goal != null && goal > 0 -> min(1f, eaten.toFloat() / goal)
-        else -> 0.55f
-    }
-    Box(contentAlignment = Alignment.Center, modifier = Modifier.size(96.dp)) {
-        Canvas(Modifier.size(96.dp)) {
-            val stroke = 8.dp.toPx()
-            val pad = stroke / 2
-            drawArc(
-                color = color.copy(alpha = 0.2f),
-                startAngle = -90f,
-                sweepAngle = 360f,
-                useCenter = false,
-                topLeft = Offset(pad, pad),
-                size = Size(size.width - stroke, size.height - stroke),
-                style = Stroke(width = stroke, cap = StrokeCap.Round),
-            )
-            drawArc(
-                color = color,
-                startAngle = -90f,
-                sweepAngle = 360f * progress,
-                useCenter = false,
-                topLeft = Offset(pad, pad),
-                size = Size(size.width - stroke, size.height - stroke),
-                style = Stroke(width = stroke, cap = StrokeCap.Round),
-            )
-        }
-        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+private fun CompactMetric(
+    label: String,
+    value: String,
+    hint: String? = null,
+) {
+    androidx.compose.material3.Card(
+        modifier = Modifier.fillMaxWidth(0.48f),
+    ) {
+        Column(Modifier.padding(12.dp)) {
             Text(
-                eaten?.toString() ?: "—",
-                style = MaterialTheme.typography.titleLarge,
-                fontWeight = FontWeight.Bold,
-            )
-            Text(
-                stringResource(R.string.physical_kcal_unit),
-                style = MaterialTheme.typography.labelSmall,
+                label,
+                style = MaterialTheme.typography.labelMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
-        }
-    }
-}
-
-@Composable
-private fun BodyMetricsCard(s: PhysicalAggregate) {
-    MoodCard {
-        SectionTitle(stringResource(R.string.physical_body_title))
-        Row(
-            Modifier.fillMaxWidth().padding(top = 8.dp),
-            horizontalArrangement = Arrangement.SpaceEvenly,
-        ) {
-            MetricCell(
-                stringResource(R.string.physical_height),
-                s.heightCm?.let { String.format(Locale("ru"), "%.0f см", it) } ?: "—",
-            )
-            MetricCell(
-                stringResource(R.string.physical_weight),
-                s.weightKg?.let { String.format(Locale("ru"), "%.1f кг", it) } ?: "—",
-            )
-        }
-    }
-}
-
-@Composable
-private fun CycleCard(s: PhysicalAggregate) {
-    MoodCard {
-        SectionTitle(stringResource(R.string.physical_cycle_title))
-        if (s.cycleDay == null) {
             Text(
-                stringResource(R.string.physical_cycle_empty),
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(top = 6.dp),
+                value,
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.SemiBold,
+                modifier = Modifier.padding(top = 2.dp),
             )
-        } else {
-            Text(
-                stringResource(R.string.physical_cycle_day, s.cycleDay),
-                style = MaterialTheme.typography.bodyLarge,
-                modifier = Modifier.padding(top = 6.dp),
-            )
-            s.cyclePhaseLabel?.let {
+            if (hint != null) {
                 Text(
-                    stringResource(R.string.physical_cycle_phase, it),
-                    style = MaterialTheme.typography.bodyMedium,
+                    hint,
+                    style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
@@ -354,67 +505,8 @@ private fun CycleCard(s: PhysicalAggregate) {
     }
 }
 
-@Composable
-private fun ActivityCard(s: PhysicalAggregate) {
-    MoodCard {
-        SectionTitle(stringResource(R.string.physical_activity_title))
-        Row(
-            Modifier.fillMaxWidth().padding(top = 8.dp),
-            horizontalArrangement = Arrangement.SpaceEvenly,
-        ) {
-            MetricCell(
-                stringResource(R.string.physical_cardio),
-                s.cardioMinutes?.let { "$it мин" } ?: "—",
-            )
-            MetricCell(
-                stringResource(R.string.physical_steps),
-                s.steps?.toString() ?: "—",
-            )
-        }
-        if (s.period != PhysicalPeriod.DAY) {
-            Text(
-                stringResource(R.string.physical_activity_sum_note),
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(top = 6.dp),
-            )
-        }
-    }
-}
+private fun fmtGNum(v: Float?): String =
+    v?.let { String.format(Locale("ru"), "%.0f", it) } ?: "—"
 
-@Composable
-private fun SleepCard(s: PhysicalAggregate) {
-    MoodCard {
-        SectionTitle(stringResource(R.string.physical_sleep_title))
-        Column(Modifier.padding(top = 6.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-            Text(
-                stringResource(
-                    R.string.physical_sleep_duration,
-                    s.sleepHours?.let { String.format(Locale("ru"), "%.1f", it) } ?: "—",
-                ),
-            )
-            Text(stringResource(R.string.physical_sleep_bedtime, s.bedtime ?: "—"))
-            Text(stringResource(R.string.physical_sleep_wake, s.wakeTime ?: "—"))
-            Text(
-                stringResource(
-                    R.string.physical_sleep_quality,
-                    s.sleepQuality?.toString() ?: "—",
-                ),
-            )
-        }
-    }
-}
-
-@Composable
-private fun MetricCell(label: String, value: String) {
-    Column(
-        horizontalAlignment = Alignment.CenterHorizontally,
-        modifier = Modifier
-            .clip(RoundedCornerShape(12.dp))
-            .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f))
-            .padding(horizontal = 16.dp, vertical = 10.dp),
-    ) {
-        Text(value, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
-        Text(label, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-    }
-}
+private fun formatIntRu(v: Int?): String =
+    v?.let { String.format(Locale("ru"), "%,d", it).replace(',', ' ') } ?: "—"

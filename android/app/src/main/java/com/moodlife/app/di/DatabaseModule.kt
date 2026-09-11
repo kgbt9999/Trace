@@ -6,6 +6,7 @@ import com.moodlife.app.data.local.MoodLifeDatabase
 import com.moodlife.app.data.local.MoodLifeDatabase.Companion.MIGRATION_1_2
 import com.moodlife.app.data.local.MoodLifeDatabase.Companion.MIGRATION_2_3
 import com.moodlife.app.data.local.MoodLifeDatabase.Companion.MIGRATION_3_4
+import com.moodlife.app.data.local.MoodLifeDatabase.Companion.MIGRATION_4_5
 import com.moodlife.app.data.local.dao.DayNoteDao
 import com.moodlife.app.data.local.dao.ExternalHealthDayDao
 import com.moodlife.app.data.local.dao.FactorDao
@@ -37,7 +38,7 @@ object DatabaseModule {
     @Singleton
     fun provideDatabase(@ApplicationContext context: Context): MoodLifeDatabase =
         Room.databaseBuilder(context, MoodLifeDatabase::class.java, "moodlife.db")
-            .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4)
+            .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5)
             .build()
 
     @Provides fun provideMoodEntryDao(db: MoodLifeDatabase): MoodEntryDao = db.moodEntryDao()

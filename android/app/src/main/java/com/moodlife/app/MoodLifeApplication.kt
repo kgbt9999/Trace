@@ -11,6 +11,7 @@ import com.moodlife.app.data.repository.SettingsRepository
 import dagger.hilt.android.HiltAndroidApp
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
@@ -19,12 +20,14 @@ class MoodLifeApplication : Application(), Configuration.Provider {
     @Inject lateinit var workerFactory: HiltWorkerFactory
     @Inject lateinit var settingsRepository: SettingsRepository
 
+    private val applicationScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+
     override fun onCreate() {
         super.onCreate()
         NotificationHelper.ensureChannels(this)
         ReminderScheduler.scheduleAll(this)
         MonthlyBackupWorker.schedule(this)
-        CoroutineScope(Dispatchers.IO).launch {
+        applicationScope.launch {
             WeeklyFolderBackupWorker.syncSchedule(this@MoodLifeApplication, settingsRepository)
         }
     }

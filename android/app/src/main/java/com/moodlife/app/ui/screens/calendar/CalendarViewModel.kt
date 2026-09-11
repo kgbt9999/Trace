@@ -43,6 +43,10 @@ data class DayMedLine(
     val takenSlots: Int,
     val scheduledSlots: Int,
     val slotsDetail: String,
+    val slotKeys: List<String> = emptyList(),
+    val slotsTaken: Map<String, Boolean> = emptyMap(),
+    /** True when a medication_logs row exists for this date. */
+    val hasLog: Boolean = false,
 )
 
 data class MedMonthCell(
@@ -70,7 +74,13 @@ data class CalendarUiState(
     val todayIso: String = DateUtils.todayIso(),
     val showDayIconPicker: Boolean = false,
     val iconNoteDraft: String = "",
+    /** Medication id pending confirm before deleting that day's log. */
+    val pendingDeleteDayMedId: String? = null,
+    /** Top calendar → summary sheet; meds calendar → editable day diary. */
+    val daySheetMode: DaySheetMode = DaySheetMode.SUMMARY,
 )
+
+enum class DaySheetMode { SUMMARY, MEDS_DIARY }
 
 @OptIn(ExperimentalCoroutinesApi::class)
 @HiltViewModel
@@ -88,6 +98,10 @@ class CalendarViewModel @Inject constructor(
     private val _selected = MutableStateFlow<String?>(null)
     private val _showDayIconPicker = MutableStateFlow(false)
     private val _iconNoteDraft = MutableStateFlow("")
+    private val _pendingDeleteDayMedId = MutableStateFlow<String?>(null)
+    private val _daySheetMode = MutableStateFlow(DaySheetMode.SUMMARY)
+    /** Optimistic hide of day-log rows until Room catches up: "date|medicationId". */
+    private val _removedDayLogs = MutableStateFlow<Set<String>>(emptySet())
 
     val uiState: StateFlow<CalendarUiState> = combine(
         combine(
@@ -101,7 +115,7 @@ class CalendarViewModel @Inject constructor(
                 val (from, to) = DateUtils.monthRange(y, m)
                 combine(
                     medicationRepository.observeLogsRange(from, to),
-                    medicationRepository.observeActive(),
+                    medicationRepository.observeVisibleInRange(from, to),
                 ) { logs, meds -> logs to meds }
             },
         ) { ym, selected, entries, medPair ->
@@ -113,13 +127,26 @@ class CalendarViewModel @Inject constructor(
             weatherDayDao.observeRange(from, to)
         },
         settingsRepository.observe(SettingsRepository.KEY_CALENDAR_DAY_ICONS),
-        combine(_selected, _showDayIconPicker, _iconNoteDraft) { a, b, c ->
-            Triple(a, b, c)
+        combine(
+            _selected,
+            _showDayIconPicker,
+            _iconNoteDraft,
+            _pendingDeleteDayMedId,
+            combine(_removedDayLogs, _daySheetMode) { removed, mode -> removed to mode },
+        ) { selected, showPicker, noteDraft, pendingDelete, removedMode ->
+            CalendarSelPack(
+                selected,
+                showPicker,
+                noteDraft,
+                pendingDelete,
+                removedMode.first,
+                removedMode.second,
+            )
         },
     ) { partial, period, weatherDays, iconsRaw, selPack ->
         val parsed = CalendarDayIcons.parseDetailed(iconsRaw)
         val (from, to) = DateUtils.monthRange(partial.ym.first, partial.ym.second)
-        val medLines = medLinesMap(from, to, partial.medLogs, partial.meds)
+        val medLines = medLinesMap(from, to, partial.medLogs, partial.meds, selPack.removedDayLogs)
         val medStatus = medLines.mapValues { (_, lines) ->
             val scheduled = lines.sumOf { it.scheduledSlots }
             val taken = lines.sumOf { it.takenSlots }
@@ -142,7 +169,7 @@ class CalendarViewModel @Inject constructor(
         }
         buildCalendarState(
             partial.ym,
-            selPack.first,
+            selPack.selected,
             partial.entries,
             period,
             weatherDays,
@@ -151,10 +178,12 @@ class CalendarViewModel @Inject constructor(
             medStatus,
             medLines,
             medMonthCells,
-            selPack.first?.let { medLines[it] }.orEmpty(),
-            selPack.second,
-            selPack.third,
+            selPack.selected?.let { medLines[it] }.orEmpty(),
+            selPack.showDayIconPicker,
+            selPack.iconNoteDraft,
             emptyList(),
+            selPack.pendingDeleteDayMedId,
+            selPack.daySheetMode,
         )
     }.combine(
         _selected.flatMapLatest { date ->
@@ -167,14 +196,22 @@ class CalendarViewModel @Inject constructor(
     fun prevMonth() = _yearMonth.update { (y, m) -> if (m == 0) (y - 1) to 11 else y to (m - 1) }
     fun nextMonth() = _yearMonth.update { (y, m) -> if (m == 11) (y + 1) to 0 else y to (m + 1) }
     fun selectDay(date: String) {
+        _daySheetMode.value = DaySheetMode.SUMMARY
         _selected.value = date
         _showDayIconPicker.value = false
         val note = uiState.value.dayIconNotes[date].orEmpty()
         _iconNoteDraft.value = note
     }
+    fun selectMedsDay(date: String) {
+        _daySheetMode.value = DaySheetMode.MEDS_DIARY
+        _selected.value = date
+        _showDayIconPicker.value = false
+    }
     fun dismissSheet() {
         _selected.value = null
         _showDayIconPicker.value = false
+        _pendingDeleteDayMedId.value = null
+        _daySheetMode.value = DaySheetMode.SUMMARY
     }
 
     fun openCycleSettings() = dayNavigation.navigateToSettings("cycle")
@@ -247,13 +284,50 @@ class CalendarViewModel @Inject constructor(
         _showDayIconPicker.value = false
     }
 
+    fun toggleMedSlot(medicationId: String, slotKey: String) {
+        val date = _selected.value ?: return
+        _removedDayLogs.update { it - dayLogKey(date, medicationId) }
+        viewModelScope.launch {
+            medicationRepository.toggleSlot(medicationId, date, slotKey, moodEntryId = null)
+        }
+    }
+
+    fun updateDayDose(medicationId: String, dosage: String) {
+        val date = _selected.value ?: return
+        _removedDayLogs.update { it - dayLogKey(date, medicationId) }
+        viewModelScope.launch {
+            medicationRepository.updateLogDosage(medicationId, date, dosage)
+        }
+    }
+
+    fun requestDeleteDayMedLog(medicationId: String) {
+        val line = uiState.value.selectedDayMeds.find { it.medicationId == medicationId } ?: return
+        if (!line.hasLog) return
+        _pendingDeleteDayMedId.value = medicationId
+    }
+
+    fun dismissDeleteDayMedLog() {
+        _pendingDeleteDayMedId.value = null
+    }
+
+    fun confirmDeleteDayMedLog() {
+        val medId = _pendingDeleteDayMedId.value ?: return
+        val date = _selected.value ?: return
+        _pendingDeleteDayMedId.value = null
+        _removedDayLogs.update { it + dayLogKey(date, medId) }
+        viewModelScope.launch {
+            medicationRepository.deleteDayLog(medId, date)
+        }
+    }
+
     private fun medLinesMap(
         from: String,
         to: String,
         logs: List<MedicationLogEntity>,
         meds: List<MedicationEntity>,
+        removedDayLogs: Set<String>,
     ): Map<String, List<DayMedLine>> {
-        if (meds.isEmpty()) return emptyMap()
+        if (meds.isEmpty() && logs.isEmpty() && removedDayLogs.isEmpty()) return emptyMap()
         val byDate = logs.groupBy { it.date }
         val start = LocalDate.parse(from)
         val end = LocalDate.parse(to)
@@ -262,6 +336,7 @@ class CalendarViewModel @Inject constructor(
         while (!d.isAfter(end)) {
             val iso = d.toString()
             result[iso] = dayMedLines(byDate[iso].orEmpty(), meds)
+                .filterNot { dayLogKey(iso, it.medicationId) in removedDayLogs }
             d = d.plusDays(1)
         }
         return result
@@ -271,32 +346,53 @@ class CalendarViewModel @Inject constructor(
         dayLogs: List<MedicationLogEntity>,
         meds: List<MedicationEntity>,
     ): List<DayMedLine> {
-        return meds.map { med ->
-            val log = dayLogs.find { it.medicationId == med.id }
-            val slots = MedsUtils.parseIntakeTimes(med.intakeTimes)
-            val timed = slots.filter { it != "by-scheme" }
-            val scheduled = if (timed.isEmpty()) 1 else timed.size
-            val takenSlotLabels = if (timed.isEmpty()) {
-                if (log?.taken == true) listOf("день") else emptyList()
-            } else {
-                timed.filter { slot ->
-                    MedsUtils.isSlotTaken(log?.taken == true, log?.slotsTaken, slot, timed)
-                }
-            }
-            val taken = takenSlotLabels.size
-            DayMedLine(
-                medicationId = med.id,
-                name = med.name,
-                dosage = medicationRepository.effectiveDosage(med, log),
-                takenSlots = taken,
-                scheduledSlots = scheduled,
-                slotsDetail = when {
-                    taken == 0 -> "0/$scheduled"
-                    timed.isEmpty() -> "принято"
-                    else -> takenSlotLabels.joinToString(", ")
-                },
-            )
+        val medById = meds.associateBy { it.id }
+        val seen = linkedSetOf<String>()
+        val lines = mutableListOf<DayMedLine>()
+
+        // Prefer journal snapshots for the day (handles taper / ramp / stopped A).
+        for (log in dayLogs.sortedBy { it.medicationId }) {
+            val med = medById[log.medicationId] ?: continue
+            seen += med.id
+            lines += buildDayLine(med, log)
         }
+        // Active regular catalog meds without a log yet (planned for day).
+        for (med in meds) {
+            if (med.id in seen) continue
+            if (!med.isActive) continue
+            if (!med.isRegular) continue
+            lines += buildDayLine(med, null)
+        }
+        return lines
+    }
+
+    private fun buildDayLine(med: MedicationEntity, log: MedicationLogEntity?): DayMedLine {
+        val slots = MedsUtils.parseIntakeTimes(
+            medicationRepository.effectiveIntakeTimes(med, log),
+        )
+        val timed = slots.filter { it != "by-scheme" }
+        val displaySlots = if (timed.isEmpty()) listOf(slots.firstOrNull() ?: "by-scheme") else timed
+        val scheduled = displaySlots.size
+        val takenMap = displaySlots.associateWith { slot ->
+            MedsUtils.isSlotTaken(log?.taken == true, log?.slotsTaken, slot, displaySlots)
+        }
+        val takenSlotLabels = displaySlots.filter { takenMap[it] == true }
+        val taken = takenSlotLabels.size
+        return DayMedLine(
+            medicationId = med.id,
+            name = medicationRepository.effectiveName(med, log),
+            dosage = medicationRepository.effectiveDosage(med, log),
+            takenSlots = taken,
+            scheduledSlots = scheduled,
+            slotsDetail = when {
+                taken == 0 -> "0/$scheduled"
+                timed.isEmpty() && taken > 0 -> "принято"
+                else -> takenSlotLabels.joinToString(", ") { MedsUtils.slotLabel(it) }
+            },
+            slotKeys = displaySlots,
+            slotsTaken = takenMap,
+            hasLog = log != null,
+        )
     }
 
     private fun buildCalendarState(
@@ -314,11 +410,11 @@ class CalendarViewModel @Inject constructor(
         showDayIconPicker: Boolean,
         iconNoteDraft: String,
         notes: List<DayNoteEntity>,
+        pendingDeleteDayMedId: String?,
+        daySheetMode: DaySheetMode,
     ): CalendarUiState {
         val (year, month) = ym
         val (from, to) = DateUtils.monthRange(year, month)
-        // Day sheet: only medications marked taken that day.
-        val sheetMeds = selectedDayMeds.filter { it.takenSlots > 0 }
         return CalendarUiState(
             year = year,
             month = month,
@@ -331,15 +427,19 @@ class CalendarViewModel @Inject constructor(
             medStatusByDate = medStatusByDate,
             medLinesByDate = medLinesByDate,
             medMonthCells = medMonthCells,
-            selectedDayMeds = sheetMeds,
+            selectedDayMeds = selectedDayMeds,
             period = period,
             selectedDate = selected,
             selectedNotes = notes,
             todayIso = DateUtils.todayIso(),
             showDayIconPicker = showDayIconPicker,
             iconNoteDraft = iconNoteDraft,
+            pendingDeleteDayMedId = pendingDeleteDayMedId,
+            daySheetMode = daySheetMode,
         )
     }
+
+    private fun dayLogKey(date: String, medicationId: String) = "$date|$medicationId"
 
     private data class CalendarPartial(
         val ym: Pair<Int, Int>,
@@ -347,5 +447,14 @@ class CalendarViewModel @Inject constructor(
         val entries: List<MoodEntryEntity>,
         val medLogs: List<MedicationLogEntity>,
         val meds: List<MedicationEntity>,
+    )
+
+    private data class CalendarSelPack(
+        val selected: String?,
+        val showDayIconPicker: Boolean,
+        val iconNoteDraft: String,
+        val pendingDeleteDayMedId: String?,
+        val removedDayLogs: Set<String>,
+        val daySheetMode: DaySheetMode,
     )
 }

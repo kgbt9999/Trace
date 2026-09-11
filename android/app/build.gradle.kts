@@ -28,10 +28,14 @@ android {
         testInstrumentationRunner = "com.moodlife.app.HiltTestRunner"
         vectorDrawables { useSupportLibrary = true }
 
+        ksp {
+            arg("room.schemaLocation", "$projectDir/schemas")
+        }
+
     }
 
     lint {
-        checkReleaseBuilds = false
+        checkReleaseBuilds = true
         abortOnError = false
     }
 

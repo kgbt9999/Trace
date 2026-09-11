@@ -23,6 +23,6 @@ object TriggerBaselines {
 
     fun isSubstanceLike(factorName: String): Boolean {
         val n = factorName.trim().lowercase()
-        return n.contains("алкогол") || n.contains("веществ") || n.contains("наркот") || n == "кофе"
+        return n.contains("алкогол") || n.contains("веществ") || n.contains("наркот")
     }
 }

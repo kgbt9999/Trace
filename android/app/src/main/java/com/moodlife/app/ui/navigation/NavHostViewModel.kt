@@ -21,13 +21,17 @@ import kotlinx.coroutines.flow.stateIn
 import javax.inject.Inject
 
 data class CrisisChipUiState(
-    val visible: Boolean = false,
+    /** Always true — crisis plan lives in the top bar and is always reachable. */
+    val visible: Boolean = true,
+    /** Today looks harder than yesterday (optional accent on the header icon). */
+    val worsening: Boolean = false,
     val empty: Boolean = true,
     val doctor: String = "",
     val support: String = "",
     val notes: String = "",
     val wishes: String = "",
     val avoid: String = "",
+    val contacts: List<com.moodlife.app.domain.CrisisContact> = emptyList(),
 )
 
 @OptIn(ExperimentalCoroutinesApi::class)
@@ -53,28 +57,33 @@ class NavHostViewModel @Inject constructor(
             CrisisSettings(on, doctor.orEmpty(), support.orEmpty(), notes.orEmpty(), wishes.orEmpty())
         }.combine(settingsRepository.observe(SettingsRepository.KEY_CRISIS_AVOID)) { base, avoid ->
             base.copy(avoid = avoid.orEmpty())
+        }.combine(settingsRepository.observe(SettingsRepository.KEY_CRISIS_CONTACTS)) { base, contactsRaw ->
+            base.copy(contacts = com.moodlife.app.domain.CrisisContacts.parse(contactsRaw))
         }
         combine(
             sliceFlow(today),
             sliceFlow(yesterday),
             crisisSettings,
         ) { todaySlice, yestSlice, settings ->
-            val enabled = WorseningDetector.isCrisisBadgeEnabled(settings.onWorsening)
+            val badgeEnabled = WorseningDetector.isCrisisBadgeEnabled(settings.onWorsening)
             val detected = WorseningDetector.detect(todaySlice, yestSlice)
+            val empty = WorseningDetector.isCrisisPlanEmpty(
+                settings.doctor,
+                settings.support,
+                settings.notes,
+                settings.wishes,
+                settings.avoid,
+            ) && settings.contacts.isEmpty()
             CrisisChipUiState(
-                visible = enabled && detected.worsening,
-                empty = WorseningDetector.isCrisisPlanEmpty(
-                    settings.doctor,
-                    settings.support,
-                    settings.notes,
-                    settings.wishes,
-                    settings.avoid,
-                ),
+                visible = true,
+                worsening = badgeEnabled && detected.worsening,
+                empty = empty,
                 doctor = settings.doctor,
                 support = settings.support,
                 notes = settings.notes,
                 wishes = settings.wishes,
                 avoid = settings.avoid,
+                contacts = settings.contacts,
             )
         }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), CrisisChipUiState())
     }
@@ -121,5 +130,6 @@ class NavHostViewModel @Inject constructor(
         val notes: String,
         val wishes: String,
         val avoid: String = "",
+        val contacts: List<com.moodlife.app.domain.CrisisContact> = emptyList(),
     )
 }

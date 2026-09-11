@@ -32,7 +32,11 @@ class ExportManager @Inject constructor(
     suspend fun exportMonth(year: Int, month: Int, format: ExportFormat): ExportFile {
         val label = "${year}-${(month + 1).toString().padStart(2, '0')}"
         return when (format) {
-            ExportFormat.JSON -> exportFullBackup()
+            // Month JSON must stay month-scoped — never dump the full diary DB.
+            ExportFormat.JSON -> {
+                val exported = jsonBackupExporter.exportMonthToCache(year, month)
+                ExportFile(exported.file, ExportFormat.JSON)
+            }
             ExportFormat.HTML -> {
                 val html = doctorExportGenerator.generateHtml(year, month)
                 writeCache("Trace-report-$label.html", html, ExportFormat.HTML)

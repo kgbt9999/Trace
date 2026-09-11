@@ -67,7 +67,8 @@ object MonthBurden {
         var scheduled = 0
         logs.forEach { log ->
             val med = byId[log.medicationId] ?: return@forEach
-            val slots = MedsUtils.parseIntakeTimes(med.intakeTimes)
+            val rawTimes = log.intakeTimesSnapshot?.takeIf { it.isNotBlank() } ?: med.intakeTimes
+            val slots = MedsUtils.parseIntakeTimes(rawTimes)
             val timed = slots.filter { it != "by-scheme" }
             if (timed.isEmpty()) {
                 scheduled += 1

@@ -3,6 +3,7 @@ package com.moodlife.app.data.repository
 import com.moodlife.app.data.local.dao.SettingDao
 import com.moodlife.app.data.local.entity.SettingEntity
 import com.moodlife.app.domain.CalendarDayIcons
+import com.moodlife.app.domain.CrisisContacts
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
 import java.util.UUID
@@ -43,6 +44,8 @@ class SettingsRepository @Inject constructor(private val settingDao: SettingDao)
         const val KEY_CRISIS_AVOID = "crisis_avoid"
         const val KEY_ONBOARDING_DISMISSED = "onboarding_dismissed"
         const val KEY_CRISIS_ON_WORSENING = "crisis_plan_on_worsening"
+        /** JSON array of {id,label,phone} — see [com.moodlife.app.domain.CrisisContacts]. */
+        const val KEY_CRISIS_CONTACTS = CrisisContacts.KEY
         const val KEY_WEATHER_LOCATION = "weather_location"
         const val KEY_WEATHER_CITY = "weather_city"
         const val KEY_WEATHER_LAST_FETCH = "weather_last_fetch_at"

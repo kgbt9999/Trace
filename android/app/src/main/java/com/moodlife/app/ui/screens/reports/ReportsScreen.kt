@@ -5,7 +5,6 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -17,14 +16,19 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -48,7 +52,6 @@ import com.moodlife.app.ui.components.MoodCard
 import com.moodlife.app.ui.components.PageHeader
 import com.moodlife.app.ui.theme.LocalMoodColors
 
-@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun ReportsScreen(viewModel: ReportsViewModel = hiltViewModel()) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
@@ -56,6 +59,14 @@ fun ReportsScreen(viewModel: ReportsViewModel = hiltViewModel()) {
     val mood = LocalMoodColors.current
     val shareChooserTitle = stringResource(R.string.export_share_chooser)
     val charts = state.visibleCharts
+    var dataFormatDialog by remember { mutableStateOf(false) }
+    var doctorFormatDialog by remember { mutableStateOf(false) }
+
+    fun launchExport(format: ExportFormat) {
+        viewModel.exportMonth(format) { intent ->
+            shareLauncher.launch(Intent.createChooser(intent, shareChooserTitle))
+        }
+    }
 
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp)) {
         PageHeader(
@@ -77,32 +88,108 @@ fun ReportsScreen(viewModel: ReportsViewModel = hiltViewModel()) {
                 style = MaterialTheme.typography.titleSmall,
                 modifier = Modifier.padding(start = 16.dp, top = 8.dp),
             )
+            Text(
+                stringResource(R.string.reports_export_hint),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 4.dp),
+            )
             Column(
                 Modifier.padding(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 16.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp),
             ) {
-                ExportFormat.entries.forEach { format ->
-                    val hint = when (format) {
-                        ExportFormat.JSON -> stringResource(R.string.reports_export_json_hint)
-                        ExportFormat.HTML -> stringResource(R.string.reports_export_html_hint)
-                        ExportFormat.CSV -> stringResource(R.string.reports_export_csv_hint)
-                        ExportFormat.PDF -> stringResource(R.string.reports_export_pdf_hint)
+                FilledTonalButton(
+                    onClick = { dataFormatDialog = true },
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Column(Modifier.fillMaxWidth()) {
+                        Text(stringResource(R.string.reports_export_data))
+                        Text(
+                            stringResource(R.string.reports_export_data_hint),
+                            style = MaterialTheme.typography.labelSmall,
+                        )
                     }
-                    FilledTonalButton(
-                        onClick = {
-                            viewModel.exportMonth(format) { intent ->
-                                shareLauncher.launch(Intent.createChooser(intent, shareChooserTitle))
-                            }
-                        },
-                        modifier = Modifier.fillMaxWidth(),
-                    ) {
-                        Column(Modifier.fillMaxWidth()) {
-                            Text(stringResource(format.labelRes))
-                            Text(hint, style = MaterialTheme.typography.labelSmall)
-                        }
+                }
+                FilledTonalButton(
+                    onClick = { doctorFormatDialog = true },
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Column(Modifier.fillMaxWidth()) {
+                        Text(stringResource(R.string.reports_export_doctor_report))
+                        Text(
+                            stringResource(R.string.reports_export_doctor_hint),
+                            style = MaterialTheme.typography.labelSmall,
+                        )
                     }
                 }
             }
+        }
+
+        if (dataFormatDialog) {
+            AlertDialog(
+                onDismissRequest = { dataFormatDialog = false },
+                title = { Text(stringResource(R.string.reports_export_data)) },
+                text = {
+                    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        TextButton(
+                            onClick = {
+                                dataFormatDialog = false
+                                launchExport(ExportFormat.JSON)
+                            },
+                            modifier = Modifier.fillMaxWidth(),
+                        ) {
+                            Text(stringResource(R.string.export_format_json) + " — " + stringResource(R.string.reports_export_json_hint))
+                        }
+                        TextButton(
+                            onClick = {
+                                dataFormatDialog = false
+                                launchExport(ExportFormat.CSV)
+                            },
+                            modifier = Modifier.fillMaxWidth(),
+                        ) {
+                            Text(stringResource(R.string.export_format_csv) + " — " + stringResource(R.string.reports_export_csv_hint))
+                        }
+                    }
+                },
+                confirmButton = {
+                    TextButton(onClick = { dataFormatDialog = false }) {
+                        Text(stringResource(android.R.string.cancel))
+                    }
+                },
+            )
+        }
+        if (doctorFormatDialog) {
+            AlertDialog(
+                onDismissRequest = { doctorFormatDialog = false },
+                title = { Text(stringResource(R.string.reports_export_doctor_report)) },
+                text = {
+                    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        TextButton(
+                            onClick = {
+                                doctorFormatDialog = false
+                                launchExport(ExportFormat.PDF)
+                            },
+                            modifier = Modifier.fillMaxWidth(),
+                        ) {
+                            Text(stringResource(R.string.export_format_pdf) + " — " + stringResource(R.string.reports_export_pdf_hint))
+                        }
+                        TextButton(
+                            onClick = {
+                                doctorFormatDialog = false
+                                launchExport(ExportFormat.HTML)
+                            },
+                            modifier = Modifier.fillMaxWidth(),
+                        ) {
+                            Text(stringResource(R.string.export_format_html) + " — " + stringResource(R.string.reports_export_html_hint))
+                        }
+                    }
+                },
+                confirmButton = {
+                    TextButton(onClick = { doctorFormatDialog = false }) {
+                        Text(stringResource(android.R.string.cancel))
+                    }
+                },
+            )
         }
 
         // —— Level 1: mood / sleep / meds ——

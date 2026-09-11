@@ -55,6 +55,7 @@ data class SettingsUiState(
     val crisisWishes: String = "",
     val crisisAvoid: String = "",
     val crisisOnWorsening: Boolean = true,
+    val crisisContacts: List<com.moodlife.app.domain.CrisisContact> = emptyList(),
     val weatherLat: String = "",
     val weatherLon: String = "",
     val weatherCity: String = "",
@@ -99,6 +100,7 @@ class SettingsViewModel @Inject constructor(
 ) : ViewModel() {
 
     private val _crisis = MutableStateFlow(CrisisForm())
+    private val _crisisContacts = MutableStateFlow<List<com.moodlife.app.domain.CrisisContact>>(emptyList())
     private val _weather = MutableStateFlow(WeatherForm("", "", "", ""))
     private val _hc = MutableStateFlow(
         HealthConnectManager.HcStatus(
@@ -197,12 +199,14 @@ class SettingsViewModel @Inject constructor(
         combine(
             base,
             _prodromeHints,
+            _crisisContacts,
             settingsRepository.observe(SettingsRepository.KEY_WEEKLY_BACKUP_ENABLED),
             settingsRepository.observe(SettingsRepository.KEY_WEEKLY_BACKUP_TREE_URI),
-            settingsRepository.observe(SettingsRepository.KEY_WEEKLY_BACKUP_LAST),
-        ) { state, hints, enabled, treeUri, last ->
+        ) { state, hints, contacts, enabled, treeUri ->
+            Triple(state.copy(prodromeHints = hints, crisisContacts = contacts), enabled, treeUri)
+        }.combine(settingsRepository.observe(SettingsRepository.KEY_WEEKLY_BACKUP_LAST)) { pack, last ->
+            val (state, enabled, treeUri) = pack
             state.copy(
-                prodromeHints = hints,
                 weeklyBackupEnabled = enabled == "true",
                 weeklyBackupFolderLabel = treeUri?.takeIf { it.isNotBlank() }?.let { shortUriLabel(it) },
                 weeklyBackupLastStatus = last,
@@ -219,9 +223,13 @@ class SettingsViewModel @Inject constructor(
                 wishes = settingsRepository.get(SettingsRepository.KEY_CRISIS_WISHES).orEmpty(),
                 avoid = settingsRepository.get(SettingsRepository.KEY_CRISIS_AVOID).orEmpty(),
             )
+            _crisisContacts.value = com.moodlife.app.domain.CrisisContacts.parse(
+                settingsRepository.get(SettingsRepository.KEY_CRISIS_CONTACTS),
+            )
             _crisisOn.value = settingsRepository.get(SettingsRepository.KEY_CRISIS_ON_WORSENING) != "false"
             val loc = settingsRepository.get(SettingsRepository.KEY_WEATHER_LOCATION)
             val yandex = secureSecretsStore.getYandexWeatherApiKey()
+            val masked = if (yandex.isNotEmpty()) MASKED_API_KEY else ""
             if (loc != null) {
                 val parts = loc.split(",")
                 if (parts.size == 2) {
@@ -229,11 +237,11 @@ class SettingsViewModel @Inject constructor(
                         parts[0].trim(),
                         parts[1].trim(),
                         settingsRepository.get(SettingsRepository.KEY_WEATHER_CITY).orEmpty(),
-                        yandex,
+                        masked,
                     )
                 }
             } else {
-                _weather.value = _weather.value.copy(yandexKey = yandex)
+                _weather.value = _weather.value.copy(yandexKey = masked)
             }
             refreshHcStatus()
             periodRepository.observe().collect { p ->
@@ -397,7 +405,8 @@ class SettingsViewModel @Inject constructor(
         isRegular: Boolean = med.isRegular,
     ) {
         viewModelScope.launch {
-            medicationRepository.updateMedication(
+            val today = com.moodlife.app.util.DateUtils.todayIso()
+            medicationRepository.updateSchemeFromDate(
                 med.copy(
                     name = name.trim(),
                     dosage = dosage.trim().ifBlank { null },
@@ -406,6 +415,8 @@ class SettingsViewModel @Inject constructor(
                         intakeTimes.ifEmpty { listOf("morning", "evening") },
                     ),
                 ),
+                fromDate = today,
+                propagateDosage = true,
             )
             _message.value = "med_updated"
         }
@@ -455,14 +466,9 @@ class SettingsViewModel @Inject constructor(
     fun exportData(format: ExportFormat, onReady: (Intent) -> Unit) {
         viewModelScope.launch {
             try {
-                val file = when (format) {
-                    ExportFormat.JSON -> exportManager.exportFullBackup()
-                    else -> exportManager.exportMonth(
-                        java.time.LocalDate.now().year,
-                        java.time.LocalDate.now().monthValue - 1,
-                        format,
-                    )
-                }
+                // Month-scoped only — full JSON backup has a dedicated button above.
+                val now = java.time.LocalDate.now()
+                val file = exportManager.exportMonth(now.year, now.monthValue - 1, format)
                 onReady(exportManager.shareIntent(file.file, file.format))
                 _message.value = "export_ok"
             } catch (_: Exception) {
@@ -477,14 +483,28 @@ class SettingsViewModel @Inject constructor(
         notes: String,
         wishes: String,
         avoid: String,
+        contacts: List<com.moodlife.app.domain.CrisisContact> = _crisisContacts.value,
     ) = viewModelScope.launch {
         settingsRepository.set(SettingsRepository.KEY_CRISIS_DOCTOR, doctor)
         settingsRepository.set(SettingsRepository.KEY_CRISIS_SUPPORT, support)
         settingsRepository.set(SettingsRepository.KEY_CRISIS_NOTES, notes)
         settingsRepository.set(SettingsRepository.KEY_CRISIS_WISHES, wishes)
         settingsRepository.set(SettingsRepository.KEY_CRISIS_AVOID, avoid)
+        settingsRepository.set(
+            SettingsRepository.KEY_CRISIS_CONTACTS,
+            com.moodlife.app.domain.CrisisContacts.serialize(contacts),
+        )
         _crisis.value = CrisisForm(doctor, support, notes, wishes, avoid)
+        _crisisContacts.value = contacts
         _message.value = "crisis_saved"
+    }
+
+    fun setCrisisContacts(contacts: List<com.moodlife.app.domain.CrisisContact>) = viewModelScope.launch {
+        settingsRepository.set(
+            SettingsRepository.KEY_CRISIS_CONTACTS,
+            com.moodlife.app.domain.CrisisContacts.serialize(contacts),
+        )
+        _crisisContacts.value = contacts
     }
 
     fun setCrisisOnWorsening(enabled: Boolean) = viewModelScope.launch {
@@ -567,13 +587,29 @@ class SettingsViewModel @Inject constructor(
             _message.value = "weather_invalid"
             return@launch
         }
-        secureSecretsStore.setYandexWeatherApiKey(yandexKey.trim())
+        val resolvedKey = resolveYandexKeyInput(yandexKey)
+        secureSecretsStore.setYandexWeatherApiKey(resolvedKey)
         // Ensure plaintext Room copy is cleared if it still exists.
         settingsRepository.set(SettingsRepository.KEY_YANDEX_WEATHER_API_KEY, "")
         weatherRepository.setLocation(latN, lonN, city.ifBlank { null })
-        _weather.value = WeatherForm(lat, lon, city, yandexKey.trim())
+        _weather.value = WeatherForm(
+            lat,
+            lon,
+            city,
+            if (resolvedKey.isNotEmpty()) MASKED_API_KEY else "",
+        )
         val result = weatherRepository.refreshForecast()
         _message.value = if (result.success) "weather_ok" else "weather_fail"
+    }
+
+    /** Keep real key out of UI state; treat mask / blank as "unchanged existing". */
+    private suspend fun resolveYandexKeyInput(raw: String): String {
+        val trimmed = raw.trim()
+        if (trimmed.isEmpty()) return ""
+        if (trimmed.all { it == '•' }) {
+            return secureSecretsStore.getYandexWeatherApiKey()
+        }
+        return trimmed
     }
 
     fun syncHealthConnect() = viewModelScope.launch {
@@ -589,7 +625,15 @@ class SettingsViewModel @Inject constructor(
         _hc.value = healthConnectManager.loadStatus()
     }
 
-    fun onHcPermissionsResult() = viewModelScope.launch { refreshHcStatus() }
+    fun onHcPermissionsResult() = viewModelScope.launch {
+        refreshHcStatus()
+        val result = healthConnectManager.syncRecentDays(30)
+        _message.value = when {
+            result.skipped -> "hc_skip"
+            else -> "hc_ok"
+        }
+        refreshHcStatus()
+    }
 
     private fun formatHcSyncTime(ms: Long): String {
         val fmt = java.text.SimpleDateFormat("dd.MM.yyyy HH:mm", java.util.Locale("ru"))
@@ -626,10 +670,13 @@ class SettingsViewModel @Inject constructor(
         }
         val file = File(result.filePath)
         val uri = FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", file)
+        val subject = context.getString(R.string.backup_share_subject)
         val intent = Intent(Intent.ACTION_SEND).apply {
             type = "application/json"
             putExtra(Intent.EXTRA_STREAM, uri)
-            putExtra(Intent.EXTRA_SUBJECT, context.getString(R.string.backup_share_subject))
+            putExtra(Intent.EXTRA_SUBJECT, subject)
+            putExtra(Intent.EXTRA_TITLE, subject)
+            clipData = android.content.ClipData.newUri(context.contentResolver, subject, uri)
             addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
         }
         onReady(intent)
@@ -700,4 +747,8 @@ class SettingsViewModel @Inject constructor(
         val city: String,
         val yandexKey: String,
     )
+
+    companion object {
+        private const val MASKED_API_KEY = "••••••••"
+    }
 }

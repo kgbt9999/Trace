@@ -15,6 +15,7 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -24,6 +25,9 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.health.connect.client.PermissionController
 import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.moodlife.app.R
 import com.moodlife.app.ui.components.MoodCard
@@ -38,6 +42,16 @@ fun PhysicalScreen(viewModel: PhysicalViewModel = hiltViewModel()) {
     val hcLauncher = rememberLauncherForActivityResult(
         PermissionController.createRequestPermissionResultContract(),
     ) { viewModel.onPermissionsGranted() }
+    val lifecycleOwner = LocalLifecycleOwner.current
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) {
+                viewModel.refreshHcStatus()
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
 
     Column(
         Modifier
@@ -60,12 +74,14 @@ fun PhysicalScreen(viewModel: PhysicalViewModel = hiltViewModel()) {
                 onSelect = viewModel::setPeriod,
                 modifier = Modifier.padding(top = 10.dp),
             )
-            PhysicalDateNav(
-                label = state.rangeLabel,
-                onPrev = viewModel::prevPeriod,
-                onNext = viewModel::nextPeriod,
-                modifier = Modifier.padding(top = 4.dp),
-            )
+            if (state.period != com.moodlife.app.domain.PhysicalPeriod.DAY) {
+                PhysicalDateNav(
+                    label = state.rangeLabel,
+                    onPrev = viewModel::prevPeriod,
+                    onNext = viewModel::nextPeriod,
+                    modifier = Modifier.padding(top = 4.dp),
+                )
+            }
             when {
                 !state.available -> {
                     Text(
@@ -94,6 +110,24 @@ fun PhysicalScreen(viewModel: PhysicalViewModel = hiltViewModel()) {
                     }
                 }
                 else -> {
+                    if (state.grantedCount < state.requiredCount) {
+                        Text(
+                            stringResource(
+                                R.string.physical_partial_perms,
+                                state.grantedCount,
+                                state.requiredCount,
+                            ),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.padding(top = 8.dp),
+                        )
+                        OutlinedButton(
+                            onClick = { hcLauncher.launch(viewModel.hcPermissions) },
+                            modifier = Modifier.fillMaxWidth().padding(top = 6.dp),
+                        ) {
+                            Text(stringResource(R.string.settings_hc_request_more))
+                        }
+                    }
                     state.lastSyncLabel?.let { label ->
                         Text(
                             stringResource(R.string.physical_last_sync, label, state.lastRows),
@@ -123,7 +157,11 @@ fun PhysicalScreen(viewModel: PhysicalViewModel = hiltViewModel()) {
             }
         }
         Spacer(Modifier.height(12.dp))
-        PhysicalStateSections(summary = state.summary)
+        PhysicalStateSections(
+            summary = state.summary,
+            onPrevDay = viewModel::prevPeriod,
+            onNextDay = viewModel::nextPeriod,
+        )
         Spacer(Modifier.height(12.dp))
         NutritionGoalsEditor(state, viewModel)
         Spacer(Modifier.height(8.dp))

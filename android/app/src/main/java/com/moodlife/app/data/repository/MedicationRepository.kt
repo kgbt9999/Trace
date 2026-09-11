@@ -22,6 +22,9 @@ class MedicationRepository @Inject constructor(
 
     fun observeAll() = medicationDao.observeAll()
 
+    fun observeVisibleInRange(from: String, to: String) =
+        medicationDao.observeVisibleInRange(from, to)
+
     suspend fun getById(id: String): MedicationEntity? = medicationDao.getById(id)
 
     fun observeLogsForDate(date: String): Flow<List<MedicationLogEntity>> =
@@ -76,18 +79,7 @@ class MedicationRepository @Inject constructor(
         for (i in 0 until days) {
             val date = com.moodlife.app.util.DateUtils.addDays(today, i.toLong())
             if (medicationLogDao.getByMedAndDate(medicationId, date) != null) continue
-            medicationLogDao.upsert(
-                MedicationLogEntity(
-                    id = UUID.randomUUID().toString(),
-                    medicationId = medicationId,
-                    moodEntryId = null,
-                    date = date,
-                    taken = false,
-                    slotsTaken = "{}",
-                    createdAt = now,
-                    updatedAt = now,
-                ),
-            )
+            medicationLogDao.upsert(newDayLog(med, date, now))
         }
     }
 
@@ -95,19 +87,21 @@ class MedicationRepository @Inject constructor(
         medicationDao.observeActive().first().filter { it.isRegular }.forEach { ensureWeekAhead(it.id) }
     }
 
-    suspend fun updateMedication(med: MedicationEntity) {
-        val previous = medicationDao.getById(med.id)
+    /**
+     * Updates catalog defaults. Never rewrites past day logs.
+     * Propagates name/times (and optionally dosage) to today + future day snapshots only.
+     */
+    suspend fun updateMedication(med: MedicationEntity, propagateDosage: Boolean = false) {
         medicationDao.upsert(med.copy(updatedAt = System.currentTimeMillis()))
-        // Changing-scheme: do not wipe past logs. Continuous: refill forward slots.
+        propagateCatalogToFuture(med, propagateDosage = propagateDosage)
         if (med.isActive && med.isRegular) {
             ensureWeekAhead(med.id)
         }
-        // If switched off regular, leave existing logs as historical marks.
-        previous // keep for clarity / future hooks
     }
 
     suspend fun deactivate(med: MedicationEntity) {
         medicationDao.upsert(med.copy(isActive = false, updatedAt = System.currentTimeMillis()))
+        // Keep historical logs; do not delete rows on hide/rename.
     }
 
     suspend fun toggleSlot(
@@ -117,8 +111,8 @@ class MedicationRepository @Inject constructor(
         moodEntryId: String?,
     ) {
         val med = medicationDao.getById(medicationId) ?: return
-        val scheduled = MedsUtils.parseIntakeTimes(med.intakeTimes)
         val existing = medicationLogDao.getByMedAndDate(medicationId, date)
+        val scheduled = MedsUtils.parseIntakeTimes(effectiveIntakeTimes(med, existing))
         val now = System.currentTimeMillis()
         val slots = existing?.let { MedsUtils.parseSlotsTaken(it.slotsTaken).toMutableMap() }
             ?: mutableMapOf()
@@ -137,7 +131,9 @@ class MedicationRepository @Inject constructor(
             date = date,
             taken = allTaken,
             slotsTaken = MedsUtils.serializeSlotsTaken(slots),
-            dosageOverride = existing?.dosageOverride,
+            dosageOverride = existing?.dosageOverride ?: med.dosage,
+            nameSnapshot = existing?.nameSnapshot ?: med.name,
+            intakeTimesSnapshot = existing?.intakeTimesSnapshot ?: med.intakeTimes,
             createdAt = existing?.createdAt ?: now,
             updatedAt = now,
         )
@@ -149,9 +145,35 @@ class MedicationRepository @Inject constructor(
      * Does not change [MedicationEntity.dosage] (catalog default).
      */
     suspend fun updateLogDosage(medicationId: String, date: String, dosage: String?) {
+        updateDaySnapshot(
+            medicationId = medicationId,
+            date = date,
+            dosage = dosage,
+            clearDosage = dosage.isNullOrBlank(),
+        )
+    }
+
+    /**
+     * Updates per-day journal snapshot (name / dose / intake times) without touching catalog.
+     * Creates a log row if missing.
+     */
+    suspend fun updateDaySnapshot(
+        medicationId: String,
+        date: String,
+        name: String? = null,
+        dosage: String? = null,
+        clearDosage: Boolean = false,
+        intakeTimes: List<String>? = null,
+        updateDosage: Boolean = true,
+    ) {
+        val med = medicationDao.getById(medicationId) ?: return
         val existing = medicationLogDao.getByMedAndDate(medicationId, date)
         val now = System.currentTimeMillis()
-        val override = dosage?.trim()?.takeIf { it.isNotEmpty() }
+        val override = when {
+            !updateDosage -> existing?.dosageOverride ?: med.dosage
+            clearDosage -> null
+            else -> dosage?.trim()?.takeIf { it.isNotEmpty() } ?: existing?.dosageOverride ?: med.dosage
+        }
         medicationLogDao.upsert(
             MedicationLogEntity(
                 id = existing?.id ?: UUID.randomUUID().toString(),
@@ -161,15 +183,97 @@ class MedicationRepository @Inject constructor(
                 taken = existing?.taken == true,
                 slotsTaken = existing?.slotsTaken ?: "{}",
                 dosageOverride = override,
+                nameSnapshot = name?.trim()?.takeIf { it.isNotEmpty() }
+                    ?: existing?.nameSnapshot
+                    ?: med.name,
+                intakeTimesSnapshot = intakeTimes?.let { MedsUtils.serializeIntakeTimes(it) }
+                    ?: existing?.intakeTimesSnapshot
+                    ?: med.intakeTimes,
                 createdAt = existing?.createdAt ?: now,
                 updatedAt = now,
             ),
         )
     }
 
-    /** Effective dosage shown for a day: log override, else catalog. */
+    /**
+     * Catalog change from a given date: updates defaults and propagates to [fromDate] + future only.
+     * Past day logs stay as historical snapshots.
+     */
+    suspend fun updateSchemeFromDate(
+        med: MedicationEntity,
+        fromDate: String,
+        propagateDosage: Boolean = true,
+    ) {
+        medicationDao.upsert(med.copy(updatedAt = System.currentTimeMillis()))
+        val now = System.currentTimeMillis()
+        val future = medicationLogDao.listFromDate(med.id, fromDate)
+        for (log in future) {
+            medicationLogDao.upsert(
+                log.copy(
+                    nameSnapshot = med.name,
+                    intakeTimesSnapshot = med.intakeTimes,
+                    dosageOverride = if (propagateDosage) med.dosage else (log.dosageOverride ?: med.dosage),
+                    updatedAt = now,
+                ),
+            )
+        }
+        if (med.isActive && med.isRegular) {
+            ensureWeekAhead(med.id)
+        }
+    }
+
+    /**
+     * Removes the journal row for one medication on one date.
+     * Does not change the catalog medication or other days.
+     */
+    suspend fun deleteDayLog(medicationId: String, date: String) {
+        medicationLogDao.deleteByMedAndDate(medicationId, date)
+    }
+
+    fun effectiveName(med: MedicationEntity, log: MedicationLogEntity?): String =
+        log?.nameSnapshot?.takeIf { it.isNotBlank() } ?: med.name
+
+    /** Effective dosage shown for a day: log override/snapshot, else catalog. */
     fun effectiveDosage(med: MedicationEntity, log: MedicationLogEntity?): String? =
         log?.dosageOverride?.takeIf { it.isNotBlank() } ?: med.dosage
+
+    fun effectiveIntakeTimes(med: MedicationEntity, log: MedicationLogEntity?): String =
+        log?.intakeTimesSnapshot?.takeIf { it.isNotBlank() } ?: med.intakeTimes
+
+    private suspend fun propagateCatalogToFuture(med: MedicationEntity, propagateDosage: Boolean) {
+        val today = com.moodlife.app.util.DateUtils.todayIso()
+        val now = System.currentTimeMillis()
+        val future = medicationLogDao.listFromDate(med.id, today)
+        for (log in future) {
+            medicationLogDao.upsert(
+                log.copy(
+                    nameSnapshot = med.name,
+                    intakeTimesSnapshot = med.intakeTimes,
+                    dosageOverride = if (propagateDosage) {
+                        med.dosage
+                    } else {
+                        log.dosageOverride ?: med.dosage
+                    },
+                    updatedAt = now,
+                ),
+            )
+        }
+    }
+
+    private fun newDayLog(med: MedicationEntity, date: String, now: Long): MedicationLogEntity =
+        MedicationLogEntity(
+            id = UUID.randomUUID().toString(),
+            medicationId = med.id,
+            moodEntryId = null,
+            date = date,
+            taken = false,
+            slotsTaken = "{}",
+            dosageOverride = med.dosage,
+            nameSnapshot = med.name,
+            intakeTimesSnapshot = med.intakeTimes,
+            createdAt = now,
+            updatedAt = now,
+        )
 }
 
 @Singleton

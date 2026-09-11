@@ -637,9 +637,15 @@ private fun MedsSettingsSection(state: SettingsUiState, viewModel: SettingsViewM
             description = stringResource(R.string.notif_meds_section_desc),
         ) {
             Text(
-                stringResource(R.string.notif_meds_section_hint),
+                stringResource(R.string.settings_med_reminders_note),
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Text(
+                stringResource(R.string.notif_meds_section_hint),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(top = 6.dp),
             )
             TextButton(onClick = { viewModel.dayNavigation.selectSettingsSection("other") }) {
                 Text(stringResource(R.string.notif_open_other))
@@ -653,7 +659,7 @@ private fun MedsSettingsSection(state: SettingsUiState, viewModel: SettingsViewM
                 initialTimes = setOf("morning", "evening"),
                 initialRegular = true,
                 onDismiss = { showAdd = false },
-                onSave = { name, dosage, times, regular ->
+                onSave = { name, dosage, times, regular, _ ->
                     viewModel.addMedication(name, dosage, times, regular)
                     showAdd = false
                 },
@@ -711,7 +717,7 @@ private fun MedRow(med: MedicationEntity, viewModel: SettingsViewModel) {
             initialTimes = MedsUtils.parseIntakeTimes(med.intakeTimes).toSet(),
             initialRegular = med.isRegular,
             onDismiss = { showEdit = false },
-            onSave = { name, dosage, times, regular ->
+            onSave = { name, dosage, times, regular, _ ->
                 viewModel.updateMedication(med, name, dosage, times, regular)
                 showEdit = false
             },
@@ -778,6 +784,9 @@ private fun CrisisSettingsSection(state: SettingsUiState, viewModel: SettingsVie
     var notes by remember(state.crisisNotes) { mutableStateOf(state.crisisNotes) }
     var wishes by remember(state.crisisWishes) { mutableStateOf(state.crisisWishes) }
     var avoid by remember(state.crisisAvoid) { mutableStateOf(state.crisisAvoid) }
+    var contacts by remember(state.crisisContacts) { mutableStateOf(state.crisisContacts) }
+    var newLabel by remember { mutableStateOf("") }
+    var newPhone by remember { mutableStateOf("") }
     val context = LocalContext.current
 
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -836,9 +845,71 @@ private fun CrisisSettingsSection(state: SettingsUiState, viewModel: SettingsVie
                 modifier = Modifier.padding(top = 8.dp),
             )
             Button(
-                onClick = { viewModel.saveCrisis(doctor, support, notes, wishes, avoid) },
+                onClick = { viewModel.saveCrisis(doctor, support, notes, wishes, avoid, contacts) },
                 modifier = Modifier.fillMaxWidth().padding(top = 12.dp),
             ) { Text(stringResource(R.string.settings_crisis_save)) }
+        }
+
+        SettingsCard(
+            title = stringResource(R.string.settings_crisis_contacts_title),
+            description = stringResource(R.string.settings_crisis_contacts_desc),
+        ) {
+            contacts.forEach { c ->
+                Row(
+                    Modifier.fillMaxWidth().padding(vertical = 4.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Column(Modifier.weight(1f)) {
+                        Text(c.label, style = MaterialTheme.typography.bodyMedium)
+                        Text(
+                            c.phone,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                    TextButton(
+                        onClick = {
+                            contacts = contacts.filter { it.id != c.id }
+                            viewModel.setCrisisContacts(contacts)
+                        },
+                    ) {
+                        Text(stringResource(R.string.settings_crisis_contact_remove))
+                    }
+                }
+            }
+            OutlinedTextField(
+                newLabel,
+                { newLabel = it },
+                label = { Text(stringResource(R.string.settings_crisis_contact_label)) },
+                modifier = Modifier.fillMaxWidth(),
+                singleLine = true,
+            )
+            OutlinedTextField(
+                newPhone,
+                { newPhone = it },
+                label = { Text(stringResource(R.string.settings_crisis_contact_phone)) },
+                modifier = Modifier.fillMaxWidth().padding(top = 6.dp),
+                singleLine = true,
+            )
+            FilledTonalButton(
+                onClick = {
+                    val label = newLabel.trim()
+                    val phone = newPhone.trim()
+                    if (label.isEmpty() || phone.isEmpty()) return@FilledTonalButton
+                    contacts = contacts + com.moodlife.app.domain.CrisisContact(
+                        id = java.util.UUID.randomUUID().toString(),
+                        label = label,
+                        phone = phone,
+                    )
+                    newLabel = ""
+                    newPhone = ""
+                    viewModel.setCrisisContacts(contacts)
+                },
+                modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+                enabled = newLabel.isNotBlank() && newPhone.isNotBlank(),
+            ) {
+                Text(stringResource(R.string.settings_crisis_contact_add))
+            }
         }
 
         SettingsCard(
@@ -1283,12 +1354,103 @@ private fun DataSettingsSection(
                 style = MaterialTheme.typography.labelMedium,
                 modifier = Modifier.padding(top = 16.dp),
             )
-            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(top = 6.dp)) {
-                ExportFormat.entries.filter { it != ExportFormat.JSON }.forEach { format ->
-                    OutlinedButton(onClick = { onExportFormat(format) }) {
-                        Text(stringResource(format.labelRes))
-                    }
+            Text(
+                stringResource(R.string.reports_export_hint),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(top = 4.dp),
+            )
+            var dataFormatDialog by remember { mutableStateOf(false) }
+            var doctorFormatDialog by remember { mutableStateOf(false) }
+            OutlinedButton(
+                onClick = { dataFormatDialog = true },
+                modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+            ) {
+                Column(Modifier.fillMaxWidth()) {
+                    Text(stringResource(R.string.reports_export_data))
+                    Text(
+                        stringResource(R.string.reports_export_data_hint),
+                        style = MaterialTheme.typography.labelSmall,
+                    )
                 }
+            }
+            OutlinedButton(
+                onClick = { doctorFormatDialog = true },
+                modifier = Modifier.fillMaxWidth().padding(top = 6.dp),
+            ) {
+                Column(Modifier.fillMaxWidth()) {
+                    Text(stringResource(R.string.reports_export_doctor_report))
+                    Text(
+                        stringResource(R.string.reports_export_doctor_hint),
+                        style = MaterialTheme.typography.labelSmall,
+                    )
+                }
+            }
+            if (dataFormatDialog) {
+                AlertDialog(
+                    onDismissRequest = { dataFormatDialog = false },
+                    title = { Text(stringResource(R.string.reports_export_data)) },
+                    text = {
+                        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                            TextButton(
+                                onClick = {
+                                    dataFormatDialog = false
+                                    onExportFormat(ExportFormat.JSON)
+                                },
+                                modifier = Modifier.fillMaxWidth(),
+                            ) {
+                                Text(stringResource(R.string.export_format_json))
+                            }
+                            TextButton(
+                                onClick = {
+                                    dataFormatDialog = false
+                                    onExportFormat(ExportFormat.CSV)
+                                },
+                                modifier = Modifier.fillMaxWidth(),
+                            ) {
+                                Text(stringResource(R.string.export_format_csv))
+                            }
+                        }
+                    },
+                    confirmButton = {
+                        TextButton(onClick = { dataFormatDialog = false }) {
+                            Text(stringResource(android.R.string.cancel))
+                        }
+                    },
+                )
+            }
+            if (doctorFormatDialog) {
+                AlertDialog(
+                    onDismissRequest = { doctorFormatDialog = false },
+                    title = { Text(stringResource(R.string.reports_export_doctor_report)) },
+                    text = {
+                        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                            TextButton(
+                                onClick = {
+                                    doctorFormatDialog = false
+                                    onExportFormat(ExportFormat.PDF)
+                                },
+                                modifier = Modifier.fillMaxWidth(),
+                            ) {
+                                Text(stringResource(R.string.export_format_pdf))
+                            }
+                            TextButton(
+                                onClick = {
+                                    doctorFormatDialog = false
+                                    onExportFormat(ExportFormat.HTML)
+                                },
+                                modifier = Modifier.fillMaxWidth(),
+                            ) {
+                                Text(stringResource(R.string.export_format_html))
+                            }
+                        }
+                    },
+                    confirmButton = {
+                        TextButton(onClick = { doctorFormatDialog = false }) {
+                            Text(stringResource(android.R.string.cancel))
+                        }
+                    },
+                )
             }
         }
         SettingsCard(

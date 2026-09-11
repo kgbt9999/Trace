@@ -62,6 +62,8 @@ data class MedUiItem(
     val slots: List<String>,
     val slotsTaken: Map<String, Boolean>,
     val isRegular: Boolean,
+    /** True when a medication_logs row exists for the selected date. */
+    val hasDayLog: Boolean = false,
 )
 
 data class MedEditorTarget(
@@ -157,6 +159,8 @@ data class TodayUiState(
     val newSymptomScale: String = "qual4-i",
     val catalogEdit: CatalogEditTarget? = null,
     val medEditor: MedEditorTarget? = null,
+    /** Medication id pending Russian confirm before deleting that day's log. */
+    val pendingDeleteDayMedId: String? = null,
     val axisScalePrefs: Map<String, Int> = com.moodlife.app.domain.AxisScalePrefs.parse(null),
     val showAxisScaleEdit: String? = null,
     val isSaving: Boolean = false,
@@ -346,7 +350,7 @@ class TodayViewModel @Inject constructor(
                     combine(
                         flowOf(date),
                         flowOf(entry),
-                        medicationRepository.observeActive(),
+                        medicationRepository.observeVisibleInRange(date, date),
                         medicationRepository.observeLogsForDate(date),
                         symptomRepository.observeActive(),
                         symptomLogsFlow,
@@ -564,32 +568,66 @@ class TodayViewModel @Inject constructor(
 
     fun dismissMedEditor() = _uiState.update { it.copy(medEditor = null) }
 
-    fun saveMedEditor(name: String, dosage: String, times: List<String>, isRegular: Boolean) {
+    fun saveMedEditor(
+        name: String,
+        dosage: String,
+        times: List<String>,
+        isRegular: Boolean,
+        scope: com.moodlife.app.ui.components.MedEditScope,
+    ) {
         val editor = _uiState.value.medEditor ?: return
         val trimmed = name.trim()
         if (trimmed.isEmpty()) return
         val slots = times.ifEmpty { listOf("morning", "evening") }
+        val date = _uiState.value.date
         viewModelScope.launch {
             val existingId = editor.existingId
             if (existingId == null) {
                 medicationRepository.addMedicationDetailed(trimmed, dosage, slots, isRegular)
                 _uiState.update { it.copy(medEditor = null, saveMessage = "med_added") }
             } else {
-                val entity = medicationRepository.getById(existingId) ?: return@launch
-                // Name / schedule / mode → catalog. Dosage for selected day → log override only.
-                medicationRepository.updateMedication(
-                    entity.copy(
-                        name = trimmed,
-                        isRegular = isRegular,
-                        intakeTimes = MedsUtils.serializeIntakeTimes(slots),
-                    ),
-                )
-                medicationRepository.updateLogDosage(
-                    medicationId = existingId,
-                    date = _uiState.value.date,
-                    dosage = dosage,
-                )
-                _uiState.update { it.copy(medEditor = null, saveMessage = "catalog_updated") }
+                when (scope) {
+                    com.moodlife.app.ui.components.MedEditScope.DAY_ONLY -> {
+                        // Optimistic UI: avoid waiting for Room before closing editor.
+                        _uiState.update { state ->
+                            state.copy(
+                                medEditor = null,
+                                saveMessage = "day_med_updated",
+                                medications = state.medications.map { med ->
+                                    if (med.id != existingId) med
+                                    else med.copy(
+                                        name = trimmed,
+                                        dosage = dosage.trim().ifBlank { null },
+                                        slots = slots,
+                                        isRegular = isRegular,
+                                    )
+                                },
+                            )
+                        }
+                        medicationRepository.updateDaySnapshot(
+                            medicationId = existingId,
+                            date = date,
+                            name = trimmed,
+                            dosage = dosage,
+                            clearDosage = dosage.isBlank(),
+                            intakeTimes = slots,
+                        )
+                    }
+                    com.moodlife.app.ui.components.MedEditScope.SCHEME_FROM_DATE -> {
+                        val entity = medicationRepository.getById(existingId) ?: return@launch
+                        medicationRepository.updateSchemeFromDate(
+                            entity.copy(
+                                name = trimmed,
+                                dosage = dosage.trim().ifBlank { null },
+                                isRegular = isRegular,
+                                intakeTimes = MedsUtils.serializeIntakeTimes(slots),
+                            ),
+                            fromDate = date,
+                            propagateDosage = true,
+                        )
+                        _uiState.update { it.copy(medEditor = null, saveMessage = "catalog_updated") }
+                    }
+                }
             }
         }
     }
@@ -600,6 +638,35 @@ class TodayViewModel @Inject constructor(
             val entity = medicationRepository.getById(id) ?: return@launch
             medicationRepository.deactivate(entity)
             _uiState.update { it.copy(medEditor = null, saveMessage = "catalog_hidden") }
+        }
+    }
+
+    fun requestDeleteDayMedLog(medId: String) {
+        val med = _uiState.value.medications.find { it.id == medId } ?: return
+        if (!med.hasDayLog) return
+        _uiState.update { it.copy(pendingDeleteDayMedId = medId) }
+    }
+
+    fun dismissDeleteDayMedLog() = _uiState.update { it.copy(pendingDeleteDayMedId = null) }
+
+    fun confirmDeleteDayMedLog() {
+        val medId = _uiState.value.pendingDeleteDayMedId ?: return
+        val date = _uiState.value.date
+        _uiState.update { state ->
+            state.copy(
+                pendingDeleteDayMedId = null,
+                saveMessage = "day_med_deleted",
+                medications = state.medications.map { med ->
+                    if (med.id != medId) med
+                    else med.copy(
+                        hasDayLog = false,
+                        slotsTaken = med.slots.associateWith { false },
+                    )
+                },
+            )
+        }
+        viewModelScope.launch {
+            medicationRepository.deleteDayLog(medId, date)
         }
     }
 
@@ -831,6 +898,17 @@ class TodayViewModel @Inject constructor(
     }
 
     fun toggleMedSlot(medId: String, slot: String) {
+        _uiState.update { state ->
+            state.copy(
+                medications = state.medications.map { med ->
+                    if (med.id != medId) med
+                    else {
+                        val next = med.slotsTaken[slot] != true
+                        med.copy(slotsTaken = med.slotsTaken + (slot to next))
+                    }
+                },
+            )
+        }
         viewModelScope.launch {
             val entryId = ensureEntryForSideEffects()
             medicationRepository.toggleSlot(medId, _uiState.value.date, slot, entryId)
@@ -926,18 +1004,10 @@ class TodayViewModel @Inject constructor(
         }
     }
 
-    private fun syncSubstanceAxesFromFactor(nameRaw: String, intensity: Int) {
-        val name = nameRaw.trim().lowercase()
-        when {
-            name == "алкоголь" || name.contains("алкогол") -> {
-                markUserEdited()
-                _uiState.update { it.copy(alcoholUse = intensity) }
-            }
-            name.contains("веществ") || name.contains("наркот") -> {
-                markUserEdited()
-                _uiState.update { it.copy(substanceUse = intensity) }
-            }
-        }
+    private fun syncSubstanceAxesFromFactor(@Suppress("UNUSED_PARAMETER") nameRaw: String, @Suppress("UNUSED_PARAMETER") intensity: Int) {
+        // Do not mirror factor chips into alcoholUse/substanceUse axes.
+        // Mid-baseline intensity (3 ≈ «заметно») created false doctor-facing ПАВ claims.
+        // Factors remain as factor logs; axes stay user-explicit only.
     }
 
     fun openAxisScaleEdit(section: String) =
@@ -1199,7 +1269,9 @@ class TodayViewModel @Inject constructor(
         val todayIso = DateUtils.todayIso()
         val medItems = snap.meds.map { med ->
             val log = snap.medLogs.find { it.medicationId == med.id }
-            val slots = MedsUtils.parseIntakeTimes(med.intakeTimes)
+            val slots = MedsUtils.parseIntakeTimes(
+                medicationRepository.effectiveIntakeTimes(med, log),
+            )
             val takenMap = slots.associateWith { slot ->
                 MedsUtils.isSlotTaken(
                     taken = log?.taken == true,
@@ -1210,11 +1282,12 @@ class TodayViewModel @Inject constructor(
             }
             MedUiItem(
                 med.id,
-                med.name,
+                medicationRepository.effectiveName(med, log),
                 medicationRepository.effectiveDosage(med, log),
                 slots,
                 takenMap,
                 med.isRegular,
+                hasDayLog = log != null,
             )
         }
         val logBySymptom = snap.symptomLogs.associateBy { it.symptomId }
@@ -1289,11 +1362,56 @@ class TodayViewModel @Inject constructor(
                 dateLabel = formatDateLabel(snap.date),
                 isToday = snap.date == todayIso,
                 canGoNext = snap.date < todayIso,
-                medications = medItems,
+                medications = mergeMedItems(current.medications, medItems, sameDay = current.date == snap.date),
                 symptoms = mergeSymptomItems(current.symptoms, symptomItems, sameDay = current.date == snap.date),
                 symptomCount = snap.symptoms.size,
                 dayNotes = notes,
             )
+        }
+    }
+
+    /** Prefer optimistic slot toggles until Room catches up; keep dosage/name from DB. */
+    private fun mergeMedItems(
+        current: List<MedUiItem>,
+        fromDb: List<MedUiItem>,
+        sameDay: Boolean,
+    ): List<MedUiItem> {
+        if (!sameDay || current.isEmpty()) return fromDb
+        val curById = current.associateBy { it.id }
+        return fromDb.map { db ->
+            val ui = curById[db.id] ?: return@map db
+            if (ui.slotsTaken == db.slotsTaken &&
+                ui.name == db.name &&
+                ui.dosage == db.dosage &&
+                ui.slots == db.slots &&
+                ui.hasDayLog == db.hasDayLog
+            ) {
+                ui
+            } else if (ui.slotsTaken != db.slotsTaken || ui.hasDayLog != db.hasDayLog) {
+                // Keep optimistic checks / delete until DB echo catches up.
+                db.copy(
+                    name = db.name,
+                    dosage = db.dosage,
+                    slots = db.slots,
+                    slotsTaken = if (ui.hasDayLog && !db.hasDayLog) {
+                        // Delete in flight or applied: trust cleared UI until Room matches.
+                        ui.slotsTaken
+                    } else if (ui.slotsTaken != db.slotsTaken) {
+                        ui.slotsTaken
+                    } else {
+                        db.slotsTaken
+                    },
+                    isRegular = db.isRegular,
+                    hasDayLog = if (!ui.hasDayLog && db.hasDayLog) {
+                        // Stale Room echo still has the row we just deleted.
+                        false
+                    } else {
+                        db.hasDayLog
+                    },
+                )
+            } else {
+                db
+            }
         }
     }
 

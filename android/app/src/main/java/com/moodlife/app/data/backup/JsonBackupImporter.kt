@@ -16,12 +16,7 @@ class JsonBackupImporter @Inject constructor(
     @ApplicationContext private val context: Context,
     private val database: MoodLifeDatabase,
 ) {
-    private val tables = listOf(
-        "mood_entries", "mood_check_ins", "day_notes", "medications", "medication_logs",
-        "symptoms", "symptom_logs", "weather_days", "external_health_days", "settings",
-        "period_logs", "period_settings", "factors", "factor_logs", "early_warning_signs",
-        "warning_triggers", "flo_logs",
-    )
+    private val tables = BackupSchema.TABLES
 
     suspend fun importFromStream(stream: InputStream): ImportResult = withContext(Dispatchers.IO) {
         val text = stream.bufferedReader().readText().trim().removePrefix("\uFEFF")
@@ -48,8 +43,7 @@ class JsonBackupImporter @Inject constructor(
                 val arr = root.optJSONArray(table) ?: continue
                 for (i in 0 until arr.length()) {
                     val row = arr.getJSONObject(i)
-                    insertRow(db, table, row)
-                    rows++
+                    if (insertRow(db, table, row)) rows++
                 }
             }
             db.setTransactionSuccessful()
@@ -184,9 +178,25 @@ class JsonBackupImporter @Inject constructor(
         }
     }
 
-    private fun insertRow(db: SupportSQLiteDatabase, table: String, row: JSONObject) {
-        val cols = row.keys().asSequence().toList()
-        if (cols.isEmpty()) return
+    /**
+     * Inserts only whitelisted columns for [table]. Rejects unknown column names
+     * to block SQL injection via malicious backup JSON keys.
+     */
+    private fun insertRow(db: SupportSQLiteDatabase, table: String, row: JSONObject): Boolean {
+        val allowed = BackupSchema.allowedColumns(table)
+        if (allowed.isEmpty()) return false
+        val cols = row.keys().asSequence()
+            .map { it }
+            .filter { it in allowed }
+            .toList()
+        if (cols.isEmpty()) return false
+        if (table == "settings") {
+            val key = row.optString("key")
+            if (key in BackupSchema.REDACTED_SETTING_KEYS) {
+                // Never restore secrets / absolute paths from backup.
+                return false
+            }
+        }
         val placeholders = cols.joinToString(",") { "?" }
         val sql = "INSERT OR REPLACE INTO $table (${cols.joinToString(",")}) VALUES ($placeholders)"
         val args = cols.map { col ->
@@ -197,6 +207,7 @@ class JsonBackupImporter @Inject constructor(
             }
         }.toTypedArray()
         db.execSQL(sql, args)
+        return true
     }
 
     data class ImportResult(val success: Boolean, val message: String)

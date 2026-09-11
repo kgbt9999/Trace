@@ -6,11 +6,18 @@ import android.content.Intent
 
 class ReminderReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
-        val type = intent.getStringExtra(EXTRA_TYPE) ?: NotificationHelper.TYPE_DIARY
-        val code = intent.getIntExtra(EXTRA_CODE, type.hashCode())
-        NotificationHelper.showReminder(context, type, code)
-        // Reschedule next day for this same wall-clock time
-        ReminderScheduler.rescheduleOne(context, type, code)
+        val pending = goAsync()
+        try {
+            val type = intent.getStringExtra(EXTRA_TYPE) ?: NotificationHelper.TYPE_DIARY
+            val code = intent.getIntExtra(EXTRA_CODE, type.hashCode())
+            NotificationHelper.showReminder(context, type, code)
+            // Reschedule next day for this same wall-clock time
+            ReminderScheduler.rescheduleOne(context, type, code)
+        } catch (_: Exception) {
+            // Never crash the process from an alarm callback.
+        } finally {
+            pending.finish()
+        }
     }
 
     companion object {

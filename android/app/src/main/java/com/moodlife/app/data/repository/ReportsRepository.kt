@@ -35,7 +35,7 @@ class ReportsRepository @Inject constructor(
         val (from, to) = DateUtils.monthRange(year, month)
         return combine(
             medicationLogDao.observeRange(from, to),
-            medicationDao.observeAll(),
+            medicationDao.observeVisibleInRange(from, to),
         ) { logs, meds -> MonthBurden.adherence(logs, meds) }
     }
 
@@ -43,7 +43,7 @@ class ReportsRepository @Inject constructor(
         val (from, to) = DateUtils.monthRange(year, month)
         return combine(
             medicationLogDao.observeRange(from, to),
-            medicationDao.observeActive(),
+            medicationDao.observeVisibleInRange(from, to),
         ) { logs, meds ->
             if (meds.isEmpty()) return@combine emptyList()
             val byDate = logs.groupBy { it.date }
@@ -58,7 +58,8 @@ class ReportsRepository @Inject constructor(
                     var scheduled = 0
                     meds.forEach { med ->
                         val log = dayLogs.find { it.medicationId == med.id }
-                        val slots = com.moodlife.app.util.MedsUtils.parseIntakeTimes(med.intakeTimes)
+                        val raw = log?.intakeTimesSnapshot?.takeIf { it.isNotBlank() } ?: med.intakeTimes
+                        val slots = com.moodlife.app.util.MedsUtils.parseIntakeTimes(raw)
                         val timed = slots.filter { it != "by-scheme" }
                         if (timed.isEmpty()) {
                             scheduled += 1
@@ -85,7 +86,7 @@ class ReportsRepository @Inject constructor(
         val (from, to) = DateUtils.monthRange(year, month)
         return combine(
             medicationLogDao.observeRange(from, to),
-            medicationDao.observeActive(),
+            medicationDao.observeVisibleInRange(from, to),
         ) { logs, meds ->
             if (meds.isEmpty()) return@combine emptyList()
             val byDate = logs.groupBy { it.date }
@@ -99,7 +100,8 @@ class ReportsRepository @Inject constructor(
                     val dayLabel = "${d.dayOfMonth} ${DateUtils.MONTH_NAMES_RU[d.monthValue - 1].take(3).lowercase()}"
                     meds.forEach { med ->
                         val log = dayLogs.find { it.medicationId == med.id } ?: return@forEach
-                        val slots = com.moodlife.app.util.MedsUtils.parseIntakeTimes(med.intakeTimes)
+                        val raw = log.intakeTimesSnapshot?.takeIf { it.isNotBlank() } ?: med.intakeTimes
+                        val slots = com.moodlife.app.util.MedsUtils.parseIntakeTimes(raw)
                         val timed = slots.filter { it != "by-scheme" }
                         val takenLabels = if (timed.isEmpty()) {
                             if (log.taken) listOf("день") else emptyList()
@@ -111,10 +113,11 @@ class ReportsRepository @Inject constructor(
                             }
                         }
                         if (takenLabels.isEmpty()) return@forEach
+                        val name = log.nameSnapshot?.takeIf { it.isNotBlank() } ?: med.name
                         val doseStr = (log.dosageOverride ?: med.dosage)?.takeIf { it.isNotBlank() }
                         add(
                             buildString {
-                                append(dayLabel).append(" — ").append(med.name)
+                                append(dayLabel).append(" — ").append(name)
                                 if (doseStr != null) append(" · ").append(doseStr)
                                 append(" · ").append(takenLabels.joinToString(", "))
                             },

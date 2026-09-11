@@ -12,7 +12,9 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material.icons.outlined.Edit
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.FilledTonalButton
@@ -259,6 +261,7 @@ fun TodayScreen(
                             }
                         } else {
                             state.medications.forEach { med ->
+                                key(med.id) {
                                 Row(
                                     Modifier.fillMaxWidth().padding(top = 8.dp),
                                     verticalAlignment = Alignment.CenterVertically,
@@ -289,6 +292,14 @@ fun TodayScreen(
                                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                                         )
                                     }
+                                    if (med.hasDayLog) {
+                                        IconButton(onClick = { viewModel.requestDeleteDayMedLog(med.id) }) {
+                                            Icon(
+                                                Icons.Outlined.Delete,
+                                                contentDescription = stringResource(R.string.day_med_delete),
+                                            )
+                                        }
+                                    }
                                     IconButton(onClick = { viewModel.startEditMed(med.id) }) {
                                         Icon(Icons.Outlined.Edit, contentDescription = stringResource(R.string.catalog_edit_action))
                                     }
@@ -301,6 +312,7 @@ fun TodayScreen(
                                         )
                                         Text(MedsUtils.slotLabel(slot))
                                     }
+                                }
                                 }
                             }
                             FilledTonalButton(
@@ -543,9 +555,31 @@ fun TodayScreen(
             initialDosage = editor.dosage,
             initialTimes = editor.times.toSet(),
             initialRegular = editor.isRegular,
+            showScopeChoice = editor.existingId != null,
             onDismiss = viewModel::dismissMedEditor,
             onSave = viewModel::saveMedEditor,
             onHide = if (editor.existingId != null) viewModel::hideMedFromEditor else null,
+        )
+    }
+
+    state.pendingDeleteDayMedId?.let { medId ->
+        val medName = state.medications.find { it.id == medId }?.name.orEmpty()
+        AlertDialog(
+            onDismissRequest = viewModel::dismissDeleteDayMedLog,
+            title = { Text(stringResource(R.string.day_med_delete_confirm_title)) },
+            text = {
+                Text(stringResource(R.string.day_med_delete_confirm_body, medName))
+            },
+            confirmButton = {
+                TextButton(onClick = viewModel::confirmDeleteDayMedLog) {
+                    Text(stringResource(R.string.day_med_delete))
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = viewModel::dismissDeleteDayMedLog) {
+                    Text(stringResource(R.string.today_pick_date_cancel))
+                }
+            },
         )
     }
 
@@ -1022,6 +1056,8 @@ private fun saveMessageText(msg: String): String = when (msg) {
     "factor_added" -> stringResource(R.string.catalog_factor_added)
     "symptom_added" -> stringResource(R.string.catalog_symptom_added)
     "warning_added" -> stringResource(R.string.catalog_warning_added)
+    "day_med_updated" -> stringResource(R.string.day_med_updated)
+    "day_med_deleted" -> stringResource(R.string.day_med_deleted)
     "catalog_updated" -> stringResource(R.string.catalog_updated)
     "catalog_hidden" -> stringResource(R.string.catalog_hidden)
     else -> stringResource(R.string.today_save_error)

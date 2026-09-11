@@ -2,12 +2,8 @@ package com.moodlife.app.workers
 
 import android.app.NotificationChannel
 import android.app.NotificationManager
-import android.content.ContentValues
 import android.content.Context
-import android.net.Uri
 import android.os.Build
-import android.os.Environment
-import android.provider.MediaStore
 import androidx.core.app.NotificationCompat
 import androidx.hilt.work.HiltWorker
 import androidx.work.Constraints
@@ -26,8 +22,9 @@ import java.time.LocalDate
 import java.util.concurrent.TimeUnit
 
 /**
- * Monthly JSON backup into shared Documents/Trace/backups/ (MediaStore),
- * so the file is visible in the system Files app. No cloud upload.
+ * Monthly JSON backup into **app-private** filesDir/backups only.
+ * Never writes medical JSON to shared MediaStore / public Documents.
+ * User-visible cloud/folder copies remain explicit (share / weekly SAF).
  */
 @HiltWorker
 class MonthlyBackupWorker @AssistedInject constructor(
@@ -42,9 +39,8 @@ class MonthlyBackupWorker @AssistedInject constructor(
             val exported = jsonBackupExporter.exportToCache()
             val stamp = LocalDate.now().toString().take(7) // yyyy-MM
             val fileName = "trace-$stamp.json"
-            val savedPath = writeToPublicDocuments(applicationContext, exported.file, fileName)
-                ?: writeToAppDocumentsFallback(applicationContext, exported.file, fileName)
-            settingsRepository.set(SettingsRepository.KEY_BACKUP_LAST, savedPath)
+            val savedPath = writeToAppPrivate(applicationContext, exported.file, fileName)
+            settingsRepository.set(SettingsRepository.KEY_BACKUP_LAST, "private:$fileName")
             notifySaved(applicationContext, savedPath)
             Result.success()
         } catch (_: Exception) {
@@ -55,7 +51,6 @@ class MonthlyBackupWorker @AssistedInject constructor(
     companion object {
         const val UNIQUE_NAME = "monthly_trace_backup"
         private const val CHANNEL_ID = "trace_backup"
-        private const val RELATIVE_DIR = "Documents/Trace/backups"
 
         fun schedule(context: Context) {
             val request = PeriodicWorkRequestBuilder<MonthlyBackupWorker>(30, TimeUnit.DAYS)
@@ -67,56 +62,14 @@ class MonthlyBackupWorker @AssistedInject constructor(
                 .build()
             WorkManager.getInstance(context).enqueueUniquePeriodicWork(
                 UNIQUE_NAME,
-                ExistingPeriodicWorkPolicy.KEEP,
+                ExistingPeriodicWorkPolicy.UPDATE,
                 request,
             )
         }
 
-        /**
-         * Shared storage via MediaStore (API 29+). minSdk is 30 — no legacy WRITE permission.
-         */
-        private fun writeToPublicDocuments(context: Context, source: File, fileName: String): String? {
-            return try {
-                val resolver = context.contentResolver
-                val collection = MediaStore.Files.getContentUri("external")
-                // Remove previous month file with same display name if present (best-effort).
-                resolver.delete(
-                    collection,
-                    "${MediaStore.MediaColumns.DISPLAY_NAME}=? AND ${MediaStore.MediaColumns.RELATIVE_PATH}=?",
-                    arrayOf(fileName, "$RELATIVE_DIR/"),
-                )
-                val values = ContentValues().apply {
-                    put(MediaStore.MediaColumns.DISPLAY_NAME, fileName)
-                    put(MediaStore.MediaColumns.MIME_TYPE, "application/json")
-                    put(MediaStore.MediaColumns.RELATIVE_PATH, RELATIVE_DIR)
-                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                        put(MediaStore.MediaColumns.IS_PENDING, 1)
-                    }
-                }
-                val uri: Uri = resolver.insert(collection, values) ?: return null
-                resolver.openOutputStream(uri)?.use { out ->
-                    source.inputStream().use { input -> input.copyTo(out) }
-                } ?: run {
-                    resolver.delete(uri, null, null)
-                    return null
-                }
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                    val done = ContentValues().apply {
-                        put(MediaStore.MediaColumns.IS_PENDING, 0)
-                    }
-                    resolver.update(uri, done, null, null)
-                }
-                "$RELATIVE_DIR/$fileName"
-            } catch (_: Exception) {
-                null
-            }
-        }
-
-        /** Fallback: app-specific external Documents (still local-only). */
-        private fun writeToAppDocumentsFallback(context: Context, source: File, fileName: String): String {
-            val docs = context.getExternalFilesDir(Environment.DIRECTORY_DOCUMENTS)
-            val base = docs ?: context.filesDir
-            val dir = File(base, "Trace/backups")
+        /** App-private only — not visible to other apps / Files "Documents". */
+        private fun writeToAppPrivate(context: Context, source: File, fileName: String): String {
+            val dir = File(context.filesDir, "backups")
             if (!dir.exists()) dir.mkdirs()
             val target = File(dir, fileName)
             source.copyTo(target, overwrite = true)
@@ -134,13 +87,15 @@ class MonthlyBackupWorker @AssistedInject constructor(
                     ),
                 )
             }
+            // Do not put absolute paths with medical filenames into the shade text.
+            val safeLabel = pathLabel.substringAfterLast(File.separatorChar)
             val notification = NotificationCompat.Builder(context, CHANNEL_ID)
                 .setSmallIcon(R.mipmap.ic_launcher)
                 .setContentTitle(context.getString(R.string.backup_monthly_title))
-                .setContentText(context.getString(R.string.backup_monthly_text) + " " + pathLabel)
+                .setContentText(context.getString(R.string.backup_monthly_text) + " " + safeLabel)
                 .setStyle(
                     NotificationCompat.BigTextStyle()
-                        .bigText(context.getString(R.string.backup_monthly_text) + "\n" + pathLabel),
+                        .bigText(context.getString(R.string.backup_monthly_text) + "\n" + safeLabel),
                 )
                 .setAutoCancel(true)
                 .build()

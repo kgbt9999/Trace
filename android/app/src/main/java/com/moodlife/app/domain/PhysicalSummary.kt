@@ -118,9 +118,6 @@ object PhysicalSummary {
         fun avgFloat(values: List<Float>): Float? =
             values.takeIf { it.isNotEmpty() }?.average()?.toFloat()
 
-        fun sumInt(values: List<Int>): Int? =
-            values.takeIf { it.isNotEmpty() }?.sum()
-
         val protein = when (period) {
             PhysicalPeriod.DAY -> nutrition.mapNotNull { it.proteinG }.firstOrNull()
             else -> avgFloat(nutrition.mapNotNull { it.proteinG })
@@ -137,17 +134,18 @@ object PhysicalSummary {
             PhysicalPeriod.DAY -> nutrition.mapNotNull { it.calories }.firstOrNull()
             else -> avgFloat(nutrition.mapNotNull { it.calories?.toFloat() })?.toInt()
         }
+        // Week/Month/Quarter: averages per day with data (not period sums).
         val burned = when (period) {
             PhysicalPeriod.DAY -> activity.mapNotNull { it.calories }.firstOrNull()
-            else -> sumInt(activity.mapNotNull { it.calories })
+            else -> avgFloat(activity.mapNotNull { it.calories?.toFloat() })?.toInt()
         }
         val steps = when (period) {
             PhysicalPeriod.DAY -> activity.mapNotNull { it.steps }.firstOrNull()
-            else -> sumInt(activity.mapNotNull { it.steps })
+            else -> avgFloat(activity.mapNotNull { it.steps?.toFloat() })?.toInt()
         }
         val cardio = when (period) {
             PhysicalPeriod.DAY -> activity.mapNotNull { it.activeMinutes }.firstOrNull()
-            else -> sumInt(activity.mapNotNull { it.activeMinutes })
+            else -> avgFloat(activity.mapNotNull { it.activeMinutes?.toFloat() })?.toInt()
         }
         val sleepH = when (period) {
             PhysicalPeriod.DAY -> sleepRows.mapNotNull { it.sleepHours }.firstOrNull()
@@ -165,7 +163,11 @@ object PhysicalSummary {
         val sleepQ = sleepRows.mapNotNull { it.sleepQuality }.lastOrNull()
             ?: moodForSleep.firstOrNull { it.sleepQuality > 0 }?.sleepQuality
 
-        val weight = weightRows.maxByOrNull { it.date }?.weightKg
+        val weight = when (period) {
+            PhysicalPeriod.DAY -> weightRows.maxByOrNull { it.date }?.weightKg
+            else -> avgFloat(weightRows.mapNotNull { it.weightKg })
+                ?: weightRows.maxByOrNull { it.date }?.weightKg
+        }
 
         val cycleAnchor = if (period == PhysicalPeriod.DAY) anchorIso else to
         val cycle = periodSetting?.lastPeriodStart?.let { start ->

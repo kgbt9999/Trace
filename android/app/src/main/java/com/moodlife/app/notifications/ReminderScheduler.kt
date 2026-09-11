@@ -10,6 +10,9 @@ import java.util.Calendar
 /**
  * Schedules generic daily reminders via AlarmManager.
  * Prefs are read from SharedPreferences mirror written by ReminderPrefs (no sensitive payload).
+ *
+ * Med reminders follow the **current catalog scheme times** configured in Settings → notifications
+ * (HH:mm list), not per-day journal overrides («только этот день»).
  */
 object ReminderScheduler {
 

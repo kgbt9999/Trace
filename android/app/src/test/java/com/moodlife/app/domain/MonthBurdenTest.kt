@@ -58,4 +58,29 @@ class MonthBurdenTest {
         assertEquals(2, adh.scheduled)
         assertEquals(50, adh.percent)
     }
+
+    @Test
+    fun adherence_usesIntakeTimesSnapshot() {
+        val med = MedicationEntity(
+            id = "m1",
+            name = "литиевая соль",
+            intakeTimes = "[\"morning\",\"evening\",\"night\"]",
+            createdAt = 0,
+            updatedAt = 0,
+        )
+        val log = MedicationLogEntity(
+            id = "l1",
+            medicationId = "m1",
+            date = "2026-09-01",
+            taken = false,
+            slotsTaken = "{\"morning\":true,\"evening\":true}",
+            intakeTimesSnapshot = "[\"morning\",\"evening\"]",
+            createdAt = 0,
+            updatedAt = 0,
+        )
+        val adh = MonthBurden.adherence(listOf(log), listOf(med))
+        assertEquals(2, adh.taken)
+        assertEquals(2, adh.scheduled)
+        assertEquals(100, adh.percent)
+    }
 }

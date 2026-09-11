@@ -27,17 +27,23 @@ import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledTonalButton
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -52,6 +58,9 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.health.connect.client.PermissionController
 import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.moodlife.app.R
 import com.moodlife.app.data.local.entity.MoodEntryEntity
@@ -79,6 +88,16 @@ fun CalendarScreen(
     val hcLauncher = rememberLauncherForActivityResult(
         PermissionController.createRequestPermissionResultContract(),
     ) { physicalViewModel.onPermissionsGranted() }
+    val lifecycleOwner = LocalLifecycleOwner.current
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) {
+                physicalViewModel.refreshHcStatus()
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
 
     Column(
         Modifier
@@ -138,6 +157,7 @@ fun CalendarScreen(
             monthLabel = state.monthLabel,
             weeks = state.medMonthCells,
             onManage = viewModel::openMedsSettings,
+            onDayClick = viewModel::selectMedsDay,
         )
 
         Spacer(Modifier.height(16.dp))
@@ -159,7 +179,12 @@ fun CalendarScreen(
         val moon = MoonPhaseCalc.moonPhase(date)
         val dayIcon = state.dayIcons[date]
         ModalBottomSheet(onDismissRequest = viewModel::dismissSheet, sheetState = sheetState) {
-            Column(Modifier.padding(horizontal = 20.dp, vertical = 8.dp).padding(bottom = 28.dp)) {
+            Column(
+                Modifier
+                    .padding(horizontal = 20.dp, vertical = 8.dp)
+                    .padding(bottom = 28.dp)
+                    .verticalScroll(rememberScrollState()),
+            ) {
                 Text(DateUtils.formatRu(DateUtils.parseIso(date)), style = MaterialTheme.typography.titleLarge)
 
                 val contextBits = buildList {
@@ -180,63 +205,131 @@ fun CalendarScreen(
                 }
 
                 Spacer(Modifier.height(12.dp))
-                Text(stringResource(R.string.calendar_day_summary_title), style = MaterialTheme.typography.titleMedium)
-
-                if (entry != null) {
+                if (state.daySheetMode == DaySheetMode.MEDS_DIARY) {
                     Text(
-                        dayBriefLabel(entry),
-                        style = MaterialTheme.typography.bodyLarge,
-                        modifier = Modifier.padding(top = 6.dp),
+                        stringResource(R.string.calendar_day_meds_title),
+                        style = MaterialTheme.typography.titleMedium,
                     )
-                    Row(
-                        Modifier.fillMaxWidth().padding(top = 8.dp),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                    ) {
-                        SummaryChip(stringResource(R.string.axis_depressed_short), entry.depressed)
-                        SummaryChip(stringResource(R.string.axis_elevated_short), entry.elevated)
-                        SummaryChip(stringResource(R.string.axis_anxious_short), entry.anxious)
-                        SummaryChip(stringResource(R.string.axis_irritable_short), entry.irritable)
-                    }
-                    entry.sleepHours?.let { hours ->
+                    if (state.selectedDayMeds.isEmpty()) {
                         Text(
-                            stringResource(R.string.calendar_sleep_line, hours),
-                            style = MaterialTheme.typography.bodyMedium,
-                            modifier = Modifier.padding(top = 8.dp),
+                            stringResource(R.string.calendar_day_meds_empty),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.padding(top = 6.dp),
+                        )
+                    } else {
+                        state.selectedDayMeds.forEach { med ->
+                            DayMedDiaryRow(
+                                med = med,
+                                onToggleSlot = { slot -> viewModel.toggleMedSlot(med.medicationId, slot) },
+                                onDoseChange = { dose -> viewModel.updateDayDose(med.medicationId, dose) },
+                                onDeleteDayLog = if (med.hasLog) {
+                                    { viewModel.requestDeleteDayMedLog(med.medicationId) }
+                                } else {
+                                    null
+                                },
+                            )
+                        }
+                    }
+                    state.pendingDeleteDayMedId?.let { medId ->
+                        val medName = state.selectedDayMeds.find { it.medicationId == medId }?.name
+                            ?: state.medLinesByDate[date].orEmpty().find { it.medicationId == medId }?.name
+                            ?: ""
+                        androidx.compose.material3.AlertDialog(
+                            onDismissRequest = viewModel::dismissDeleteDayMedLog,
+                            title = { Text(stringResource(R.string.day_med_delete_confirm_title)) },
+                            text = {
+                                Text(stringResource(R.string.day_med_delete_confirm_body, medName))
+                            },
+                            confirmButton = {
+                                TextButton(onClick = viewModel::confirmDeleteDayMedLog) {
+                                    Text(stringResource(R.string.day_med_delete))
+                                }
+                            },
+                            dismissButton = {
+                                TextButton(onClick = viewModel::dismissDeleteDayMedLog) {
+                                    Text(stringResource(R.string.today_pick_date_cancel))
+                                }
+                            },
                         )
                     }
                 } else {
-                    Text(
-                        stringResource(R.string.calendar_no_entry),
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.padding(top = 6.dp),
-                    )
-                }
+                    Text(stringResource(R.string.calendar_day_summary_title), style = MaterialTheme.typography.titleMedium)
 
-                Text(
-                    stringResource(R.string.calendar_day_meds_title),
-                    style = MaterialTheme.typography.titleSmall,
-                    modifier = Modifier.padding(top = 14.dp),
-                )
-                if (state.selectedDayMeds.isEmpty()) {
-                    Text(
-                        stringResource(R.string.calendar_day_meds_empty),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.padding(top = 4.dp),
-                    )
-                } else {
-                    state.selectedDayMeds.forEach { med ->
-                        val dose = med.dosage?.takeIf { it.isNotBlank() }
+                    if (entry != null) {
                         Text(
-                            buildString {
-                                append(med.name)
-                                if (dose != null) append(" · ").append(dose)
-                                append(" · ").append(med.slotsDetail)
-                                append(" (").append(med.takenSlots).append('/').append(med.scheduledSlots).append(')')
-                            },
+                            dayBriefLabel(entry),
+                            style = MaterialTheme.typography.bodyLarge,
+                            modifier = Modifier.padding(top = 6.dp),
+                        )
+                        Row(
+                            Modifier.fillMaxWidth().padding(top = 8.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                        ) {
+                            SummaryChip(stringResource(R.string.axis_depressed_short), entry.depressed)
+                            SummaryChip(stringResource(R.string.axis_elevated_short), entry.elevated)
+                            SummaryChip(stringResource(R.string.axis_anxious_short), entry.anxious)
+                            SummaryChip(stringResource(R.string.axis_irritable_short), entry.irritable)
+                        }
+                        entry.sleepHours?.let { hours ->
+                            Text(
+                                stringResource(R.string.calendar_sleep_line, hours),
+                                style = MaterialTheme.typography.bodyMedium,
+                                modifier = Modifier.padding(top = 8.dp),
+                            )
+                        }
+                    } else {
+                        Text(
+                            stringResource(R.string.calendar_no_entry),
                             style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.padding(top = 6.dp),
+                        )
+                    }
+
+                    Text(
+                        stringResource(R.string.calendar_day_meds_list_title),
+                        style = MaterialTheme.typography.titleSmall,
+                        modifier = Modifier.padding(top = 14.dp),
+                    )
+                    val dayMeds = state.medLinesByDate[date].orEmpty()
+                        .filter { it.scheduledSlots > 0 || it.takenSlots > 0 || it.hasLog }
+                    if (dayMeds.isEmpty()) {
+                        Text(
+                            stringResource(R.string.calendar_day_meds_empty),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
                             modifier = Modifier.padding(top = 4.dp),
+                        )
+                    } else {
+                        dayMeds.forEach { med ->
+                            val dose = med.dosage?.takeIf { it.isNotBlank() }
+                            val line = buildString {
+                                append("• ")
+                                append(med.name)
+                                if (dose != null) {
+                                    append(" — ")
+                                    append(dose)
+                                }
+                                if (med.scheduledSlots > 0) {
+                                    append("  (")
+                                    append(med.takenSlots)
+                                    append('/')
+                                    append(med.scheduledSlots)
+                                    append(')')
+                                }
+                            }
+                            Text(
+                                line,
+                                style = MaterialTheme.typography.bodyMedium,
+                                modifier = Modifier.padding(top = 4.dp),
+                            )
+                        }
+                        Text(
+                            stringResource(R.string.calendar_day_meds_edit_hint),
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.padding(top = 8.dp),
                         )
                     }
                 }
@@ -340,11 +433,94 @@ fun CalendarScreen(
     }
 }
 
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun DayMedDiaryRow(
+    med: DayMedLine,
+    onToggleSlot: (String) -> Unit,
+    onDoseChange: (String) -> Unit,
+    onDeleteDayLog: (() -> Unit)? = null,
+) {
+    var doseDraft by remember(med.medicationId, med.dosage) {
+        mutableStateOf(med.dosage.orEmpty())
+    }
+    Surface(
+        shape = RoundedCornerShape(12.dp),
+        tonalElevation = 1.dp,
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(top = 8.dp),
+    ) {
+        Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Row(
+                Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween,
+            ) {
+                Text(
+                    med.name,
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.SemiBold,
+                    modifier = Modifier.weight(1f),
+                )
+                if (onDeleteDayLog != null) {
+                    TextButton(onClick = onDeleteDayLog) {
+                        Text(stringResource(R.string.day_med_delete))
+                    }
+                }
+            }
+            OutlinedTextField(
+                value = doseDraft,
+                onValueChange = { doseDraft = it },
+                label = { Text(stringResource(R.string.calendar_day_meds_edit_dose)) },
+                modifier = Modifier.fillMaxWidth(),
+                singleLine = true,
+            )
+            TextButton(
+                onClick = { onDoseChange(doseDraft) },
+                enabled = doseDraft.trim() != med.dosage.orEmpty().trim(),
+            ) {
+                Text(stringResource(R.string.today_save))
+            }
+            Text(
+                stringResource(R.string.calendar_day_meds_slots),
+                style = MaterialTheme.typography.labelMedium,
+            )
+            FlowRow(
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalArrangement = Arrangement.spacedBy(6.dp),
+            ) {
+                med.slotKeys.forEach { slot ->
+                    val taken = med.slotsTaken[slot] == true
+                    FilterChip(
+                        selected = taken,
+                        onClick = { onToggleSlot(slot) },
+                        label = {
+                            Text(
+                                buildString {
+                                    append(com.moodlife.app.util.MedsUtils.slotLabel(slot))
+                                    append(if (taken) " ✓" else "")
+                                },
+                            )
+                        },
+                    )
+                }
+            }
+            Text(
+                "${med.takenSlots}/${med.scheduledSlots} · ${med.slotsDetail}",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+    }
+}
+
 @Composable
 private fun CalendarMedsMonthSection(
     monthLabel: String,
     weeks: List<List<MedMonthCell>>,
     onManage: () -> Unit,
+    onDayClick: (String) -> Unit,
 ) {
     MoodCard {
         Text(stringResource(R.string.calendar_meds_section_title), style = MaterialTheme.typography.titleMedium)
@@ -364,10 +540,14 @@ private fun CalendarMedsMonthSection(
             weeks.forEach { week ->
                 Row(
                     Modifier.fillMaxWidth().padding(vertical = 2.dp),
-                    horizontalArrangement = Arrangement.spacedBy(3.dp),
+                    horizontalArrangement = Arrangement.spacedBy(2.dp),
                 ) {
                     week.forEach { cell ->
-                        MedMonthDayCell(cell, Modifier.weight(1f))
+                        MedMonthDayCell(
+                            cell = cell,
+                            modifier = Modifier.weight(1f),
+                            onClick = { cell.date?.let(onDayClick) },
+                        )
                     }
                 }
             }
@@ -379,53 +559,89 @@ private fun CalendarMedsMonthSection(
 }
 
 @Composable
-private fun MedMonthDayCell(cell: MedMonthCell, modifier: Modifier = Modifier) {
+private fun MedMonthDayCell(
+    cell: MedMonthCell,
+    modifier: Modifier = Modifier,
+    onClick: () -> Unit,
+) {
     val dayNum = cell.date?.substringAfterLast('-')?.trimStart('0')
-    val bg = when (cell.status) {
-        MedDayStatus.ALL -> Color(0xFF2BBFA0).copy(alpha = 0.22f)
-        MedDayStatus.PARTIAL -> Color(0xFFE8A838).copy(alpha = 0.22f)
-        MedDayStatus.MISSED -> Color(0xFFE57373).copy(alpha = 0.22f)
-        MedDayStatus.NONE -> MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.25f)
-    }
     val visible = cell.lines.filter { it.scheduledSlots > 0 || it.takenSlots > 0 }
+    val statusDot = when (cell.status) {
+        MedDayStatus.ALL -> Color(0xFF2BBFA0)
+        MedDayStatus.PARTIAL -> Color(0xFFE8A838)
+        MedDayStatus.MISSED -> Color(0xFFE57373)
+        MedDayStatus.NONE -> Color.Transparent
+    }
     Column(
         modifier
-            .aspectRatio(0.55f)
-            .clip(RoundedCornerShape(8.dp))
-            .background(bg)
-            .padding(horizontal = 2.dp, vertical = 3.dp),
+            .aspectRatio(0.62f)
+            .clip(RoundedCornerShape(6.dp))
+            .border(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.55f), RoundedCornerShape(6.dp))
+            .background(MaterialTheme.colorScheme.surface)
+            .clickable(enabled = cell.date != null, onClick = onClick)
+            .padding(horizontal = 2.dp, vertical = 2.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
-        Text(
-            dayNum ?: "",
-            style = MaterialTheme.typography.labelSmall,
-            fontWeight = FontWeight.SemiBold,
-            maxLines = 1,
-            fontSize = 9.sp,
-        )
-        visible.take(3).forEach { line ->
-            val dose = line.dosage?.trim()?.takeIf { it.isNotEmpty() }
+        Row(
+            Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.Center,
+        ) {
             Text(
-                buildString {
-                    append(line.name.trim().take(10))
-                    if (dose != null) {
-                        append('\n')
-                        append(dose.take(12))
-                    }
-                    append('\n')
-                    append(line.takenSlots)
-                    append('/')
-                    append(line.scheduledSlots)
-                },
+                dayNum ?: "",
                 style = MaterialTheme.typography.labelSmall,
-                fontSize = 7.sp,
-                lineHeight = 8.sp,
-                maxLines = 3,
-                overflow = TextOverflow.Ellipsis,
-                textAlign = TextAlign.Center,
-                color = MaterialTheme.colorScheme.onSurface,
-                modifier = Modifier.padding(top = 1.dp).fillMaxWidth(),
+                fontWeight = FontWeight.SemiBold,
+                maxLines = 1,
+                fontSize = 9.sp,
             )
+            if (statusDot != Color.Transparent) {
+                Box(
+                    Modifier
+                        .padding(start = 2.dp)
+                        .size(4.dp)
+                        .clip(CircleShape)
+                        .background(statusDot),
+                )
+            }
+        }
+        // Priority: stable per-med glyph + dosage (names omitted to keep cells readable).
+        visible.take(3).forEach { line ->
+            val dose = line.dosage?.trim()?.takeIf { it.isNotEmpty() } ?: "—"
+            val tint = medAccentColor(line.medicationId)
+            Row(
+                Modifier
+                    .padding(top = 1.dp)
+                    .fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(1.dp),
+            ) {
+                Box(
+                    Modifier
+                        .size(12.dp)
+                        .clip(CircleShape)
+                        .background(tint),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Text(
+                        medGlyph(line.name),
+                        fontSize = 7.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Color.White,
+                        maxLines = 1,
+                        lineHeight = 8.sp,
+                    )
+                }
+                Text(
+                    dose,
+                    style = MaterialTheme.typography.labelSmall,
+                    fontSize = 7.sp,
+                    lineHeight = 8.sp,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    modifier = Modifier.weight(1f, fill = false),
+                )
+            }
         }
         if (visible.size > 3) {
             Text(
@@ -488,6 +704,24 @@ private fun CalendarPhysicalSection(
                 }
             }
             else -> {
+                if (physical.grantedCount in 1 until physical.requiredCount) {
+                    Text(
+                        stringResource(
+                            R.string.physical_partial_perms,
+                            physical.grantedCount,
+                            physical.requiredCount,
+                        ),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(top = 8.dp),
+                    )
+                    OutlinedButton(
+                        onClick = onRequestPerm,
+                        modifier = Modifier.fillMaxWidth().padding(top = 6.dp),
+                    ) {
+                        Text(stringResource(R.string.settings_hc_request_more))
+                    }
+                }
                 FilledTonalButton(
                     onClick = onSync,
                     enabled = !physical.syncing,
@@ -562,7 +796,7 @@ private fun androidx.compose.foundation.layout.RowScope.CalendarDayCell(
         tint.copy(alpha = 0.55f)
     }
     val dayNum = iso?.substringAfterLast('-')?.trimStart('0')
-    Box(
+    Column(
         Modifier
             .weight(1f)
             .aspectRatio(0.85f)
@@ -577,6 +811,7 @@ private fun androidx.compose.foundation.layout.RowScope.CalendarDayCell(
                 },
             )
             .clickable(enabled = iso != null, onClick = onClick)
+            .padding(horizontal = 2.dp, vertical = 3.dp)
             .semantics {
                 contentDescription = buildString {
                     dayNum?.let { append("День $it") }
@@ -586,70 +821,68 @@ private fun androidx.compose.foundation.layout.RowScope.CalendarDayCell(
                 }
             },
     ) {
-        dayNum?.let {
-            Text(
-                it,
-                style = MaterialTheme.typography.labelMedium,
-                fontWeight = if (entry != null) FontWeight.SemiBold else FontWeight.Normal,
-                color = MaterialTheme.colorScheme.onSurface,
-                modifier = Modifier.align(Alignment.TopCenter).padding(top = 4.dp),
-            )
-        }
-        if (glyph != null) {
-            Text(
-                glyph,
-                fontSize = 11.sp,
-                fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.onSurface,
-                modifier = Modifier.align(Alignment.Center),
-            )
-        } else if (personalIcon != null) {
-            Text(
-                personalIcon,
-                fontSize = 12.sp,
-                modifier = Modifier.align(Alignment.Center),
-            )
-        }
         Row(
-            Modifier.align(Alignment.BottomCenter).padding(bottom = 3.dp),
-            horizontalArrangement = Arrangement.spacedBy(1.dp),
+            Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            if (personalIcon != null && glyph != null) {
-                Text(personalIcon, fontSize = 7.sp)
-            }
-            iso?.let { state.weatherByDate[it] }?.icon?.let { wIcon ->
-                Text(wIcon.take(2), fontSize = 7.sp)
-            }
-            if (moon != null) {
-                Text(moon.icon, fontSize = 8.sp)
-            }
-            if (isPeriod) {
-                Box(
-                    Modifier
-                        .size(width = 10.dp, height = 3.dp)
-                        .clip(RoundedCornerShape(50))
-                        .background(palette.cycle),
+            dayNum?.let {
+                Text(
+                    it,
+                    style = MaterialTheme.typography.labelMedium,
+                    fontWeight = if (entry != null) FontWeight.SemiBold else FontWeight.Normal,
+                    color = MaterialTheme.colorScheme.onSurface,
                 )
-            } else if (cycleMarkers?.isPms == true) {
-                Text("💭", fontSize = 7.sp)
-            } else if (cycleMarkers?.isOvulation == true) {
-                Text("✨", fontSize = 7.sp)
             }
-            when (iso?.let { state.medStatusByDate[it] }) {
-                MedDayStatus.ALL -> Box(
-                    Modifier.size(6.dp).clip(CircleShape).background(Color(0xFF2BBFA0)),
-                )
-                MedDayStatus.PARTIAL -> Box(
-                    Modifier.size(6.dp).clip(CircleShape).background(Color(0xFFE8A838)),
-                )
-                MedDayStatus.MISSED -> Box(
-                    Modifier.size(6.dp).clip(CircleShape).background(Color(0xFFE57373)),
-                )
-                else -> Unit
+            Row(horizontalArrangement = Arrangement.spacedBy(1.dp)) {
+                if (personalIcon != null) Text(personalIcon, fontSize = 8.sp)
+                if (glyph != null) {
+                    Text(glyph, fontSize = 9.sp, fontWeight = FontWeight.Bold)
+                }
+                iso?.let { state.weatherByDate[it] }?.icon?.let { Text(it.take(2), fontSize = 7.sp) }
+                if (moon != null) Text(moon.icon, fontSize = 7.sp)
+                if (isPeriod) {
+                    Box(
+                        Modifier
+                            .size(width = 8.dp, height = 3.dp)
+                            .clip(RoundedCornerShape(50))
+                            .background(palette.cycle),
+                    )
+                }
             }
         }
+        if (glyph != null || personalIcon != null) {
+            Spacer(Modifier.height(4.dp))
+            Text(
+                glyph ?: personalIcon.orEmpty(),
+                fontSize = 12.sp,
+                fontWeight = FontWeight.Bold,
+                modifier = Modifier.align(Alignment.CenterHorizontally),
+            )
+        }
     }
+}
+
+/** First letter badge glyph for a medication name (stable visual without full name). */
+private fun medGlyph(name: String): String {
+    val ch = name.trim().firstOrNull { it.isLetterOrDigit() } ?: '·'
+    return ch.uppercaseChar().toString()
+}
+
+/** Stable accent per medication id so the same med keeps the same color across days. */
+private fun medAccentColor(medicationId: String): Color {
+    val palette = listOf(
+        Color(0xFF5B8DEF),
+        Color(0xFF2BBFA0),
+        Color(0xFFE8A838),
+        Color(0xFF9B7EBD),
+        Color(0xFFE57373),
+        Color(0xFF4DB6AC),
+        Color(0xFFFF8A65),
+        Color(0xFF7986CB),
+    )
+    val idx = (medicationId.hashCode().and(0x7FFF_FFFF)) % palette.size
+    return palette[idx]
 }
 
 private fun dayGlyph(entry: MoodEntryEntity): String {

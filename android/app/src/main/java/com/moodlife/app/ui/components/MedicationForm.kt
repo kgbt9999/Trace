@@ -29,6 +29,13 @@ import androidx.compose.ui.unit.dp
 import com.moodlife.app.R
 import com.moodlife.app.util.MedsUtils
 
+enum class MedEditScope {
+    /** Journal for selected day only — catalog unchanged. */
+    DAY_ONLY,
+    /** Catalog default + propagate from selected date forward. */
+    SCHEME_FROM_DATE,
+}
+
 /**
  * Same add/edit medication sheet used from Today and Settings.
  * Local state so typing a name is not wiped by parent recomposition.
@@ -41,9 +48,12 @@ fun MedicationFormDialog(
     initialTimes: Set<String>,
     initialRegular: Boolean,
     onDismiss: () -> Unit,
-    onSave: (name: String, dosage: String, times: List<String>, isRegular: Boolean) -> Unit,
+    onSave: (name: String, dosage: String, times: List<String>, isRegular: Boolean, scope: MedEditScope) -> Unit,
     onHide: (() -> Unit)? = null,
     itemId: String = "new",
+    /** When true (Today edit), show day-only vs scheme-from-date choice. */
+    showScopeChoice: Boolean = false,
+    initialScope: MedEditScope = MedEditScope.DAY_ONLY,
 ) {
     var name by remember(itemId) { mutableStateOf(initialName) }
     var dosage by remember(itemId) { mutableStateOf(initialDosage) }
@@ -51,6 +61,7 @@ fun MedicationFormDialog(
         mutableStateOf(initialTimes.ifEmpty { setOf("morning", "evening") })
     }
     var isRegular by remember(itemId) { mutableStateOf(initialRegular) }
+    var scope by remember(itemId) { mutableStateOf(initialScope) }
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -59,7 +70,7 @@ fun MedicationFormDialog(
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .heightIn(max = 460.dp)
+                    .heightIn(max = 520.dp)
                     .verticalScroll(rememberScrollState()),
                 verticalArrangement = Arrangement.spacedBy(8.dp),
             ) {
@@ -77,6 +88,52 @@ fun MedicationFormDialog(
                     modifier = Modifier.fillMaxWidth(),
                     singleLine = true,
                 )
+                if (showScopeChoice) {
+                    Text(
+                        stringResource(R.string.settings_med_scope_title),
+                        style = MaterialTheme.typography.labelMedium,
+                    )
+                    Row(
+                        Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        RadioButton(
+                            selected = scope == MedEditScope.DAY_ONLY,
+                            onClick = { scope = MedEditScope.DAY_ONLY },
+                        )
+                        Column(Modifier.weight(1f).clickable { scope = MedEditScope.DAY_ONLY }) {
+                            Text(
+                                stringResource(R.string.settings_med_scope_day),
+                                style = MaterialTheme.typography.bodyMedium,
+                            )
+                            Text(
+                                stringResource(R.string.settings_med_scope_day_hint),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                    }
+                    Row(
+                        Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        RadioButton(
+                            selected = scope == MedEditScope.SCHEME_FROM_DATE,
+                            onClick = { scope = MedEditScope.SCHEME_FROM_DATE },
+                        )
+                        Column(Modifier.weight(1f).clickable { scope = MedEditScope.SCHEME_FROM_DATE }) {
+                            Text(
+                                stringResource(R.string.settings_med_scope_scheme),
+                                style = MaterialTheme.typography.bodyMedium,
+                            )
+                            Text(
+                                stringResource(R.string.settings_med_scope_scheme_hint),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                    }
+                }
                 Text(
                     stringResource(R.string.settings_med_mode),
                     style = MaterialTheme.typography.labelMedium,
@@ -131,6 +188,7 @@ fun MedicationFormDialog(
                         dosage.trim(),
                         times.toList().ifEmpty { listOf("morning", "evening") },
                         isRegular,
+                        if (showScopeChoice) scope else MedEditScope.SCHEME_FROM_DATE,
                     )
                 },
                 enabled = name.isNotBlank(),
@@ -154,7 +212,6 @@ fun MedicationFormDialog(
 
 @Composable
 fun IntakeChips(times: Set<String>, onChange: (Set<String>) -> Unit) {
-    // 2-column equal cells so «Утро/День/Вечер/Ночь» don’t wrap unevenly.
     Column(
         verticalArrangement = Arrangement.spacedBy(8.dp),
         modifier = Modifier
