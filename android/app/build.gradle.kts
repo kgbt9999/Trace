@@ -22,8 +22,8 @@ android {
         applicationId = "com.moodlife.app"
         minSdk = 30
         targetSdk = 35
-        versionCode = 1
-        versionName = "0.1.0-scaffold"
+        versionCode = 2
+        versionName = "0.2.0"
 
         testInstrumentationRunner = "com.moodlife.app.HiltTestRunner"
         vectorDrawables { useSupportLibrary = true }
@@ -68,7 +68,8 @@ android {
                 signingConfigs.getByName("debug")
             }
             isDebuggable = false
-            isMinifyEnabled = false
+            isMinifyEnabled = true
+            isShrinkResources = true
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro",
@@ -136,6 +137,10 @@ dependencies {
 
     // EncryptedSharedPreferences for API keys (Keystore-backed)
     implementation("androidx.security:security-crypto:1.1.0-alpha06")
+
+    // SQLCipher — encrypted Room database at rest
+    implementation("net.zetetic:android-database-sqlcipher:4.5.4")
+    implementation("androidx.sqlite:sqlite:2.4.0")
 
     // Testing
     testImplementation("junit:junit:4.13.2")

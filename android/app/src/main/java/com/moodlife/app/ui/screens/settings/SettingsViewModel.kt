@@ -77,7 +77,28 @@ data class SettingsUiState(
     val weeklyBackupEnabled: Boolean = false,
     val weeklyBackupFolderLabel: String? = null,
     val weeklyBackupLastStatus: String? = null,
-)
+) {
+    override fun toString(): String {
+        val redactedKey = when {
+            yandexApiKey.isEmpty() -> ""
+            else -> "•••(${yandexApiKey.length})"
+        }
+        return "SettingsUiState(allSymptoms=$allSymptoms, allMedications=$allMedications, " +
+            "factors=$factors, warningSigns=$warningSigns, crisisDoctor=$crisisDoctor, " +
+            "crisisSupport=$crisisSupport, crisisNotes=$crisisNotes, crisisWishes=$crisisWishes, " +
+            "crisisAvoid=$crisisAvoid, crisisOnWorsening=$crisisOnWorsening, " +
+            "crisisContacts=$crisisContacts, weatherLat=$weatherLat, weatherLon=$weatherLon, " +
+            "weatherCity=$weatherCity, yandexApiKey=$redactedKey, hcAvailable=$hcAvailable, " +
+            "hcHasPermissions=$hcHasPermissions, hcGrantedCount=$hcGrantedCount, " +
+            "hcRequiredCount=$hcRequiredCount, hcLastSyncLabel=$hcLastSyncLabel, " +
+            "hcLastRows=$hcLastRows, hcOriginLabels=$hcOriginLabels, floCount=$floCount, " +
+            "cycleLastStart=$cycleLastStart, cycleLength=$cycleLength, " +
+            "cyclePeriodLength=$cyclePeriodLength, cycleIrregular=$cycleIrregular, " +
+            "integrationMessage=$integrationMessage, prodromeHints=$prodromeHints, " +
+            "weeklyBackupEnabled=$weeklyBackupEnabled, weeklyBackupFolderLabel=$weeklyBackupFolderLabel, " +
+            "weeklyBackupLastStatus=$weeklyBackupLastStatus)"
+    }
+}
 
 @HiltViewModel
 class SettingsViewModel @Inject constructor(

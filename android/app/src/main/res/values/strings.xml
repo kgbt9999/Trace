@@ -133,6 +133,8 @@
     <string name="crisis_plan_edit_settings">Изменить в Настройках</string>
     <string name="crisis_helpline">Телефон доверия (Россия): %1$s (бесплатно, 24/7) или 112.</string>
     <string name="crisis_dial_unavailable">Не удалось открыть набор номера</string>
+    <string name="crisis_guide_url" translatable="false">https://bipolarfamily.ru/krizis/</string>
+    <string name="crisis_guide_unavailable">Не удалось открыть сайт. Телефоны доверия выше работают без интернета.</string>
 
     <!-- Onboarding -->
     <string name="onboarding_title">С чего начать</string>

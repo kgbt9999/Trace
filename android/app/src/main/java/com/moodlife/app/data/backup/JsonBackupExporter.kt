@@ -1,9 +1,11 @@
 package com.moodlife.app.data.backup
 
 import android.content.Context
+import com.moodlife.app.BuildConfig
 import com.moodlife.app.data.local.MoodLifeDatabase
 import com.moodlife.app.data.repository.SettingsRepository
 import com.moodlife.app.util.DateUtils
+import com.moodlife.app.util.ExportCache
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -48,7 +50,7 @@ class JsonBackupExporter @Inject constructor(
         val root = JSONObject()
         root.put("exportedAt", System.currentTimeMillis())
         root.put("app", "trace-android")
-        root.put("version", "0.1.0")
+        root.put("version", BuildConfig.VERSION_NAME)
         val monthScoped = dateFrom != null && dateTo != null
         val entryIds = if (monthScoped) {
             queryIds(db, "SELECT id FROM mood_entries WHERE date >= ? AND date <= ?", dateFrom!!, dateTo!!)
@@ -128,7 +130,8 @@ class JsonBackupExporter @Inject constructor(
 
     private suspend fun writeRoot(root: JSONObject, namePrefix: String): BackupFile {
         val stamp = SimpleDateFormat("yyyyMMdd-HHmmss", Locale.US).format(Date())
-        val file = File(context.cacheDir, "$namePrefix-$stamp.json")
+        val dir = ExportCache.dir(context)
+        val file = File(dir, "$namePrefix-$stamp.json")
         file.writeText(root.toString(2))
         // Do not persist absolute cache path into Room (leaks device layout; not user-facing).
         settingsRepository.set(SettingsRepository.KEY_BACKUP_LAST, namePrefix)
@@ -136,10 +139,10 @@ class JsonBackupExporter @Inject constructor(
     }
 
     private fun pruneOldCacheFiles() {
-        val dir = context.cacheDir ?: return
+        val dir = ExportCache.dir(context)
         val cutoff = System.currentTimeMillis() - CACHE_TTL_MS
         dir.listFiles()
-            ?.filter { it.isFile && it.name.startsWith("Trace-") && it.name.endsWith(".json") }
+            ?.filter { it.isFile && it.name.startsWith("Trace-") }
             ?.filter { it.lastModified() < cutoff }
             ?.forEach { it.delete() }
     }

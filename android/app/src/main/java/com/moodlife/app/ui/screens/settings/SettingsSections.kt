@@ -1,7 +1,9 @@
 package com.moodlife.app.ui.screens.settings
 
+import android.content.ActivityNotFoundException
 import android.content.Intent
 import android.net.Uri
+import android.widget.Toast
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -941,7 +943,14 @@ private fun CrisisSettingsSection(state: SettingsUiState, viewModel: SettingsVie
             )
             TextButton(
                 onClick = {
-                    context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://bipolarfamily.ru/krizis/")))
+                    val url = context.getString(R.string.crisis_guide_url)
+                    try {
+                        context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
+                    } catch (_: ActivityNotFoundException) {
+                        Toast.makeText(context, R.string.crisis_guide_unavailable, Toast.LENGTH_LONG).show()
+                    } catch (_: Exception) {
+                        Toast.makeText(context, R.string.crisis_guide_unavailable, Toast.LENGTH_LONG).show()
+                    }
                 },
             ) {
                 Text(stringResource(R.string.settings_crisis_open_guide))

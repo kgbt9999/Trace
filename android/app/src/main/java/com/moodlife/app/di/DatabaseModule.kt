@@ -23,11 +23,15 @@ import com.moodlife.app.data.local.dao.SymptomLogDao
 import com.moodlife.app.data.local.dao.WarningSignDao
 import com.moodlife.app.data.local.dao.WarningTriggerDao
 import com.moodlife.app.data.local.dao.WeatherDayDao
+import com.moodlife.app.data.secure.DatabaseEncryptionMigrator
+import com.moodlife.app.data.secure.DatabasePassphraseStore
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
 import dagger.hilt.android.qualifiers.ApplicationContext
 import dagger.hilt.components.SingletonComponent
+import net.sqlcipher.database.SQLiteDatabase
+import net.sqlcipher.database.SupportFactory
 import javax.inject.Singleton
 
 @Module
@@ -36,10 +40,19 @@ object DatabaseModule {
 
     @Provides
     @Singleton
-    fun provideDatabase(@ApplicationContext context: Context): MoodLifeDatabase =
-        Room.databaseBuilder(context, MoodLifeDatabase::class.java, "moodlife.db")
+    fun provideDatabase(
+        @ApplicationContext context: Context,
+        passphraseStore: DatabasePassphraseStore,
+    ): MoodLifeDatabase {
+        SQLiteDatabase.loadLibs(context)
+        val passphrase = passphraseStore.getOrCreatePassphrase()
+        DatabaseEncryptionMigrator.migrateIfNeeded(context, passphrase)
+        val factory = SupportFactory(SQLiteDatabase.getBytes(passphrase), null, false)
+        return Room.databaseBuilder(context, MoodLifeDatabase::class.java, DatabaseEncryptionMigrator.DB_NAME)
+            .openHelperFactory(factory)
             .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5)
             .build()
+    }
 
     @Provides fun provideMoodEntryDao(db: MoodLifeDatabase): MoodEntryDao = db.moodEntryDao()
     @Provides fun provideMedicationDao(db: MoodLifeDatabase): MedicationDao = db.medicationDao()

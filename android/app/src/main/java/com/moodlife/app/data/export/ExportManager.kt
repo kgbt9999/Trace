@@ -6,6 +6,7 @@ import androidx.core.content.FileProvider
 import com.moodlife.app.R
 import com.moodlife.app.data.backup.JsonBackupExporter
 import com.moodlife.app.data.local.entity.MoodEntryEntity
+import com.moodlife.app.util.ExportCache
 import dagger.hilt.android.qualifiers.ApplicationContext
 import java.io.File
 import javax.inject.Inject
@@ -48,7 +49,7 @@ class ExportManager @Inject constructor(
             ExportFormat.PDF -> {
                 val entries = doctorExportGenerator.loadMonthEntries(year, month)
                 val medsByDay = doctorExportGenerator.loadMedsByDay(year, month)
-                val file = File(context.cacheDir, "Trace-report-$label.pdf")
+                val file = File(ExportCache.dir(context), "Trace-report-$label.pdf")
                 PdfReportRenderer(context).write(file, year, month, entries, medsByDay)
                 ExportFile(file, ExportFormat.PDF)
             }
@@ -70,7 +71,7 @@ class ExportManager @Inject constructor(
     }
 
     private fun writeCache(name: String, text: String, format: ExportFormat): ExportFile {
-        val file = File(context.cacheDir, name)
+        val file = File(ExportCache.dir(context), name)
         file.writeText(text)
         return ExportFile(file, format)
     }
