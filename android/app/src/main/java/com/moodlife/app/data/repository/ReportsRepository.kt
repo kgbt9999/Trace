@@ -20,6 +20,19 @@ private fun defaultPeriod() = PeriodSettingEntity(
     lastPeriodStart = null, irregular = false, createdAt = 0, updatedAt = 0,
 )
 
+data class MedDoseSeries(
+    val medId: String,
+    val name: String,
+    val points: List<Pair<String, Float>>,
+)
+
+/** Extract first numeric dose from free-text dosage (e.g. "100 мг", "25mg", "0,5"). */
+internal fun parseDoseValue(raw: String?): Float? {
+    if (raw.isNullOrBlank()) return null
+    val match = Regex("""(\d+(?:[.,]\d+)?)""").find(raw) ?: return null
+    return match.groupValues[1].replace(',', '.').toFloatOrNull()
+}
+
 @Singleton
 class ReportsRepository @Inject constructor(
     private val moodEntryDao: MoodEntryDao,
@@ -39,7 +52,11 @@ class ReportsRepository @Inject constructor(
         ) { logs, meds -> MonthBurden.adherence(logs, meds) }
     }
 
-    fun observeMonthMedDayFractions(year: Int, month: Int): Flow<List<Pair<String, Float?>>> {
+    /**
+     * Per-medication dose series for the month: X = day-of-month label, Y = parsed numeric dose
+     * on days the medication was taken (from log/catalog dosage text).
+     */
+    fun observeMonthMedDoseSeries(year: Int, month: Int): Flow<List<MedDoseSeries>> {
         val (from, to) = DateUtils.monthRange(year, month)
         return combine(
             medicationLogDao.observeRange(from, to),
@@ -47,36 +64,38 @@ class ReportsRepository @Inject constructor(
         ) { logs, meds ->
             if (meds.isEmpty()) return@combine emptyList()
             val byDate = logs.groupBy { it.date }
-            val start = java.time.LocalDate.parse(from)
-            val end = java.time.LocalDate.parse(to)
-            buildList {
-                var d = start
+            meds.mapNotNull { med ->
+                val points = mutableListOf<Pair<String, Float>>()
+                var d = java.time.LocalDate.parse(from)
+                val end = java.time.LocalDate.parse(to)
                 while (!d.isAfter(end)) {
                     val iso = d.toString()
-                    val dayLogs = byDate[iso].orEmpty()
-                    var taken = 0
-                    var scheduled = 0
-                    meds.forEach { med ->
-                        val log = dayLogs.find { it.medicationId == med.id }
-                        val raw = log?.intakeTimesSnapshot?.takeIf { it.isNotBlank() } ?: med.intakeTimes
+                    val log = byDate[iso].orEmpty().find { it.medicationId == med.id }
+                    val dayLabel = d.dayOfMonth.toString()
+                    if (log != null) {
+                        val raw = log.intakeTimesSnapshot?.takeIf { it.isNotBlank() } ?: med.intakeTimes
                         val slots = com.moodlife.app.util.MedsUtils.parseIntakeTimes(raw)
                         val timed = slots.filter { it != "by-scheme" }
-                        if (timed.isEmpty()) {
-                            scheduled += 1
-                            if (log?.taken == true) taken += 1
+                        val anyTaken = if (timed.isEmpty()) {
+                            log.taken
                         } else {
-                            scheduled += timed.size
-                            taken += timed.count { slot ->
+                            timed.any { slot ->
                                 com.moodlife.app.util.MedsUtils.isSlotTaken(
-                                    log?.taken == true, log?.slotsTaken, slot, timed,
+                                    log.taken, log.slotsTaken, slot, timed,
                                 )
                             }
                         }
+                        if (anyTaken) {
+                            val doseRaw = log.dosageOverride?.takeIf { it.isNotBlank() } ?: med.dosage
+                            parseDoseValue(doseRaw)?.let { dose ->
+                                points.add(dayLabel to dose)
+                            }
+                        }
                     }
-                    val frac = if (scheduled <= 0) null else taken.toFloat() / scheduled
-                    add(iso.takeLast(2).trimStart('0').ifEmpty { "0" } to frac)
                     d = d.plusDays(1)
                 }
+                if (points.isEmpty()) null
+                else MedDoseSeries(medId = med.id, name = med.name, points = points)
             }
         }
     }

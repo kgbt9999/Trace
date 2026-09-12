@@ -34,16 +34,38 @@ fun MultiLineChart(
 ) {
     val nonEmpty = series.filter { it.points.isNotEmpty() }
     if (nonEmpty.isEmpty()) return
-    val count = nonEmpty.maxOf { it.points.size }
+    // Shared X axis from all labels (numeric day-of-month preferred, else insertion order).
+    val xLabels = nonEmpty
+        .flatMap { s -> s.points.map { it.first } }
+        .distinct()
+        .sortedWith(
+            compareBy(
+                { it.toIntOrNull() ?: Int.MAX_VALUE },
+                { it },
+            ),
+        )
+    val count = xLabels.size
     Column(modifier) {
         Canvas(Modifier.fillMaxWidth().height(180.dp)) {
             val stepX = size.width / (count - 1).coerceAtLeast(1)
+            val safeMax = maxY.coerceAtLeast(0.001f)
             nonEmpty.forEach { s ->
-                val pts = s.points.mapIndexed { i, (_, v) ->
-                    Offset(i * stepX, size.height - (v / maxY) * size.height)
+                val byX = s.points.associate { it.first to it.second }
+                val pts = xLabels.mapIndexedNotNull { i, x ->
+                    val v = byX[x] ?: return@mapIndexedNotNull null
+                    i to Offset(i * stepX, size.height - (v / safeMax) * size.height)
                 }
-                for (i in 1 until pts.size) {
-                    drawLine(s.color, pts[i - 1], pts[i], strokeWidth = 3f)
+                for (j in 1 until pts.size) {
+                    val (iPrev, p0) = pts[j - 1]
+                    val (iCur, p1) = pts[j]
+                    // Only connect adjacent days; skip gaps.
+                    if (iCur == iPrev + 1) {
+                        drawLine(s.color, p0, p1, strokeWidth = 3f)
+                    }
+                    // Always draw dots so single-day doses remain visible.
+                }
+                pts.forEach { (_, p) ->
+                    drawCircle(s.color, radius = 4f, center = p)
                 }
             }
         }

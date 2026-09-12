@@ -1881,8 +1881,16 @@ private fun OtherSettingsSection(viewModel: SettingsViewModel) {
     val chartsRaw by viewModel.observeReportsCharts().collectAsStateWithLifecycle(initialValue = null)
     val selfHelpOn = selfHelpRaw == "true"
     val chartIds = remember(chartsRaw) {
-        chartsRaw?.split(',')?.map { it.trim() }?.filter { it.isNotEmpty() }?.toSet()
-            ?: setOf("radar", "mood", "sleep", "energy", "alcohol", "safety", "burden")
+        val raw = chartsRaw?.split(',')?.map { it.trim() }?.filter { it.isNotEmpty() }?.toMutableSet()
+            ?: mutableSetOf(
+                "dashboard", "mood_sleep", "meddose", "heatmap", "scatter",
+                "level2", "level3", "radar", "priority", "burden",
+            )
+        if ("medgrid" in raw) {
+            raw.remove("medgrid")
+            raw.add("meddose")
+        }
+        raw.toSet()
     }
     var diaryOn by remember { mutableStateOf(false) }
     var diaryHour by remember { mutableIntStateOf(21) }
@@ -2002,7 +2010,7 @@ private fun OtherSettingsSection(viewModel: SettingsViewModel) {
             listOf(
                 "dashboard" to R.string.reports_dashboard_title,
                 "mood_sleep" to R.string.reports_mood_sleep_title,
-                "medgrid" to R.string.reports_med_intake_title,
+                "meddose" to R.string.reports_med_dose_title,
                 "heatmap" to R.string.reports_heatmap_title,
                 "scatter" to R.string.reports_scatter_title,
                 "level2" to R.string.reports_level2_title,

@@ -564,7 +564,7 @@ class SettingsViewModel @Inject constructor(
         settingsRepository.set(
             SettingsRepository.KEY_REPORTS_CHARTS,
             ids.joinToString(",").ifBlank {
-                "dashboard,mood_sleep,medgrid,heatmap,scatter,level2,level3,radar,priority,burden"
+                "dashboard,mood_sleep,meddose,heatmap,scatter,level2,level3,radar,priority,burden"
             },
         )
     }

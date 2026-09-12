@@ -255,6 +255,14 @@ class TodayViewModel @Inject constructor(
             }
         }
         viewModelScope.launch {
+            // Seed default symptom catalog once when empty (idempotent).
+            if (symptomRepository.countActive() == 0) {
+                symptomRepository.seedBasicSymptoms()
+            }
+        }
+        // Defer heavy week-ahead + Health Connect so first frame / day swipe stays light.
+        viewModelScope.launch {
+            delay(400)
             medicationRepository.ensureAllRegularWeekAhead()
             try {
                 if (healthConnectManager.isAvailable() && healthConnectManager.hasPermissions()) {
@@ -265,21 +273,33 @@ class TodayViewModel @Inject constructor(
             }
         }
         viewModelScope.launch {
-            _selectedDate.flatMapLatest { date ->
-                combine(
-                    checkInRepository.observeForDate(date),
-                    weatherRepository.observeForDate(date),
-                    externalHealthRepository.observeForDate(date),
-                ) { checkIns, weather, health -> Triple(checkIns, weather, health) }
-            }.collect { (checkIns, weather, health) ->
-                _uiState.update { it.copy(checkIns = checkIns, weather = weather, healthDays = health) }
-                maybePrefillSleepFromHealth(health)
-            }
+            _selectedDate
+                .flatMapLatest { date ->
+                    combine(
+                        checkInRepository.observeForDate(date),
+                        weatherRepository.observeForDate(date),
+                        externalHealthRepository.observeForDate(date),
+                    ) { checkIns, weather, health ->
+                        DaySideData(date, checkIns, weather, health)
+                    }
+                }
+                .collect { side ->
+                    if (side.date != _selectedDate.value) return@collect
+                    _uiState.update {
+                        it.copy(
+                            checkIns = side.checkIns,
+                            weather = side.weather,
+                            healthDays = side.health,
+                        )
+                    }
+                    maybePrefillSleepFromHealth(side.health)
+                }
         }
         viewModelScope.launch {
             combine(_selectedDate, periodRepository.observe()) { date, period ->
                 date to period
             }.collect { (date, period) ->
+                if (date != _selectedDate.value) return@collect
                 val moon = com.moodlife.app.domain.MoonPhaseCalc.moonPhase(date)
                 val cycleLabel = period?.lastPeriodStart?.takeIf { it.isNotBlank() }?.let { start ->
                     val m = com.moodlife.app.domain.CycleUtils.calcCyclePhase(
@@ -301,28 +321,30 @@ class TodayViewModel @Inject constructor(
             }
         }
         viewModelScope.launch {
-            _selectedDate.flatMapLatest { date ->
-                moodRepository.observeEntry(date).flatMapLatest { entry ->
-                    val factorLogs = if (entry != null) {
-                        factorRepository.observeLogsForEntry(entry.id)
-                    } else {
-                        flowOf(emptyList())
-                    }
-                    val warningLogs = if (entry != null) {
-                        warningSignRepository.observeTriggersForEntry(entry.id)
-                    } else {
-                        flowOf(emptyList())
-                    }
-                    combine(
-                        factorRepository.observeActive(),
-                        factorLogs,
-                        warningSignRepository.observeActive(),
-                        warningLogs,
-                    ) { factors, fLogs, signs, wLogs ->
-                        CatalogSnapshot(date, factors, fLogs, signs, wLogs)
+            _selectedDate
+                .flatMapLatest { date ->
+                    moodRepository.observeEntry(date).flatMapLatest { entry ->
+                        val factorLogs = if (entry != null) {
+                            factorRepository.observeLogsForEntry(entry.id)
+                        } else {
+                            flowOf(emptyList())
+                        }
+                        val warningLogs = if (entry != null) {
+                            warningSignRepository.observeTriggersForEntry(entry.id)
+                        } else {
+                            flowOf(emptyList())
+                        }
+                        combine(
+                            factorRepository.observeActive(),
+                            factorLogs,
+                            warningSignRepository.observeActive(),
+                            warningLogs,
+                        ) { factors, fLogs, signs, wLogs ->
+                            CatalogSnapshot(date, factors, fLogs, signs, wLogs)
+                        }
                     }
                 }
-            }.collect { snap -> applyCatalog(snap) }
+                .collect { snap -> applyCatalog(snap) }
         }
         viewModelScope.launch {
             combine(
@@ -340,35 +362,37 @@ class TodayViewModel @Inject constructor(
             }
         }
         viewModelScope.launch {
-            _selectedDate.flatMapLatest { date ->
-                moodRepository.observeEntry(date).flatMapLatest { entry ->
-                    val symptomLogsFlow = if (entry != null) {
-                        symptomRepository.observeLogsForEntry(entry.id)
-                    } else {
-                        flowOf(emptyList())
-                    }
-                    combine(
-                        flowOf(date),
-                        flowOf(entry),
-                        medicationRepository.observeVisibleInRange(date, date),
-                        medicationRepository.observeLogsForDate(date),
-                        symptomRepository.observeActive(),
-                        symptomLogsFlow,
-                        dayNoteRepository.observeForDate(date),
-                    ) { values ->
-                        @Suppress("UNCHECKED_CAST")
-                        DbSnapshot(
-                            date = values[0] as String,
-                            entry = values[1] as MoodEntryEntity?,
-                            meds = values[2] as List<MedicationEntity>,
-                            medLogs = values[3] as List<MedicationLogEntity>,
-                            symptoms = values[4] as List<SymptomEntity>,
-                            symptomLogs = values[5] as List<SymptomLogEntity>,
-                            notes = values[6] as List<DayNoteEntity>,
-                        )
+            _selectedDate
+                .flatMapLatest { date ->
+                    moodRepository.observeEntry(date).flatMapLatest { entry ->
+                        val symptomLogsFlow = if (entry != null) {
+                            symptomRepository.observeLogsForEntry(entry.id)
+                        } else {
+                            flowOf(emptyList())
+                        }
+                        combine(
+                            flowOf(date),
+                            flowOf(entry),
+                            medicationRepository.observeVisibleInRange(date, date),
+                            medicationRepository.observeLogsForDate(date),
+                            symptomRepository.observeActive(),
+                            symptomLogsFlow,
+                            dayNoteRepository.observeForDate(date),
+                        ) { values ->
+                            @Suppress("UNCHECKED_CAST")
+                            DbSnapshot(
+                                date = values[0] as String,
+                                entry = values[1] as MoodEntryEntity?,
+                                meds = values[2] as List<MedicationEntity>,
+                                medLogs = values[3] as List<MedicationLogEntity>,
+                                symptoms = values[4] as List<SymptomEntity>,
+                                symptomLogs = values[5] as List<SymptomLogEntity>,
+                                notes = values[6] as List<DayNoteEntity>,
+                            )
+                        }
                     }
                 }
-            }.collect { snap -> applySnapshot(snap) }
+                .collect { snap -> applySnapshot(snap) }
         }
     }
 
@@ -1178,21 +1202,65 @@ class TodayViewModel @Inject constructor(
     }
 
     /**
-     * Updates day chrome immediately, then switches the Room observation date.
-     * Keep [TodayUiState.date] unchanged until [applySnapshot] so same-day med/symptom
-     * merges do not keep the previous day's optimistic toggles.
+     * Clears pending writes / jobs, resets day-bound UI for [iso], then switches
+     * [_selectedDate] so Room collectors cannot paint the previous day onto the new one.
      */
     private fun selectDate(iso: String) {
         if (iso == _selectedDate.value) return
+        pendingSymptomWrites.clear()
+        axisPersistJob?.cancel()
+        axisPersistJob = null
+        symptomPersistJob?.cancel()
+        symptomPersistJob = null
+        prodromeJob?.cancel()
+        prodromeJob = null
+        _userEdited = false
+        editGeneration++
+        clearDayFields(iso)
+        _selectedDate.value = iso
+    }
+
+    /** Reset day-bound fields immediately so swipe never shows the previous day's scales. */
+    private fun clearDayFields(iso: String) {
         val todayIso = DateUtils.todayIso()
-        _uiState.update {
-            it.copy(
+        _uiState.update { current ->
+            current.copy(
+                date = iso,
                 dateLabel = formatDateLabel(iso),
                 isToday = iso == todayIso,
                 canGoNext = iso < todayIso,
+                depressed = 0,
+                elevated = 0,
+                anxious = 0,
+                irritable = 0,
+                energy = 0,
+                concentration = 0,
+                appetite = 0,
+                sociability = 0,
+                sleepHoursText = "",
+                sleepTime = "",
+                wakeTime = "",
+                sleepHoursManual = false,
+                sleepQuality = 0,
+                functioning = 0,
+                safetyCheck = 0,
+                alcoholUse = 0,
+                substanceUse = 0,
+                routineScore = 0,
+                episodePhase = null,
+                lastSavedAt = null,
+                moodEntryId = null,
+                medications = emptyList(),
+                symptoms = current.symptoms.map { it.copy(severity = 0) },
+                factors = current.factors.map { it.copy(active = false, intensity = 0) },
+                warnings = current.warnings.map { it.copy(active = false) },
+                prodromeHints = emptyList(),
+                dayNotes = emptyList(),
+                checkIns = emptyList(),
+                weather = null,
+                healthDays = emptyList(),
             )
         }
-        _selectedDate.value = iso
     }
 
     private fun markUserEdited() {
@@ -1284,6 +1352,7 @@ class TodayViewModel @Inject constructor(
     }
 
     private fun applySnapshot(snap: DbSnapshot) {
+        if (snap.date != _selectedDate.value) return
         val todayIso = DateUtils.todayIso()
         val medItems = snap.meds.map { med ->
             val log = snap.medLogs.find { it.medicationId == med.id }
@@ -1462,6 +1531,7 @@ class TodayViewModel @Inject constructor(
     }
 
     private fun applyCatalog(snap: CatalogSnapshot) {
+        if (snap.date != _selectedDate.value) return
         val logByFactor = snap.factorLogs.associateBy { it.factorId }
         val factorItems = snap.factors.map { f ->
             val intensity = logByFactor[f.id]?.intensity ?: 0
@@ -1693,6 +1763,13 @@ class TodayViewModel @Inject constructor(
         alcoholUse = alcoholUse,
         substanceUse = substanceUse,
         routineScore = routineScore,
+    )
+
+    private data class DaySideData(
+        val date: String,
+        val checkIns: List<MoodCheckInEntity>,
+        val weather: WeatherDayEntity?,
+        val health: List<com.moodlife.app.data.local.entity.ExternalHealthDayEntity>,
     )
 
     private data class DbSnapshot(

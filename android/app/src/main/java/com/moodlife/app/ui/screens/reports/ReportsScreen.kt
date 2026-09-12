@@ -39,7 +39,6 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.moodlife.app.R
 import com.moodlife.app.data.export.ExportFormat
 import com.moodlife.app.ui.components.GroupedBarChart
-import com.moodlife.app.ui.components.MedAdherenceGrid
 import com.moodlife.app.ui.components.MoodHeatmapChart
 import com.moodlife.app.ui.components.MoodSleepPolarityChart
 import com.moodlife.app.ui.components.MultiLineChart
@@ -223,12 +222,12 @@ fun ReportsScreen(viewModel: ReportsViewModel = hiltViewModel()) {
                 )
             }
         }
-        if ("medgrid" in charts && state.medDayFractions.isNotEmpty()) {
+        if (("meddose" in charts || "medgrid" in charts) && state.medDoseSeries.isNotEmpty()) {
             Spacer(Modifier.height(12.dp))
             MoodCard {
-                Text(stringResource(R.string.reports_med_intake_title), style = MaterialTheme.typography.titleMedium)
+                Text(stringResource(R.string.reports_med_dose_title), style = MaterialTheme.typography.titleMedium)
                 Text(
-                    stringResource(R.string.reports_med_intake_hint),
+                    stringResource(R.string.reports_med_dose_hint),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.padding(top = 4.dp, bottom = 8.dp),
@@ -240,7 +239,22 @@ fun ReportsScreen(viewModel: ReportsViewModel = hiltViewModel()) {
                         modifier = Modifier.padding(bottom = 8.dp),
                     )
                 }
-                MedAdherenceGrid(dayFractions = state.medDayFractions)
+                val palette = listOf(
+                    Color(0xFF2BBFA0),
+                    Color(0xFF5B8DEF),
+                    Color(0xFFE8A838),
+                    Color(0xFFBA68C8),
+                    Color(0xFFE57373),
+                    Color(0xFF66BB6A),
+                    Color(0xFF64B5F6),
+                    Color(0xFFFFB74D),
+                )
+                val chartSeries = state.medDoseSeries.mapIndexed { i, s ->
+                    ChartSeries(s.name, palette[i % palette.size], s.points)
+                }
+                val maxY = chartSeries.flatMap { it.points.map { p -> p.second } }
+                    .maxOrNull()?.coerceAtLeast(1f) ?: 1f
+                MultiLineChart(series = chartSeries, maxY = maxY)
                 if (state.medTakenLines.isNotEmpty()) {
                     Text(
                         stringResource(R.string.reports_med_taken_list_title),

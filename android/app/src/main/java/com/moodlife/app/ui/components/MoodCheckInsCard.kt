@@ -47,12 +47,13 @@ fun MoodCheckInsCard(
     checkIns: List<MoodCheckInEntity>,
     onSave: (slot: String, depressed: Int, elevated: Int, anxious: Int, irritable: Int, valuesJson: String?) -> Unit,
     modifier: Modifier = Modifier,
+    date: String = "",
     config: CheckInConfig = CheckInConfig.default(),
 ) {
-    val slots = remember(config) { config.slots.map { it.id to it.label } }
-    var activeSlot by remember(config) { mutableStateOf(slots.firstOrNull()?.first ?: "morning") }
+    val slots = remember(date, config) { config.slots.map { it.id to it.label } }
+    var activeSlot by remember(date, config) { mutableStateOf(slots.firstOrNull()?.first ?: "morning") }
     val existing = checkIns.find { it.timeOfDay == activeSlot }
-    val values = remember(activeSlot, existing?.id, existing?.updatedAt, config) {
+    val values = remember(date, activeSlot, existing?.id, existing?.updatedAt, config) {
         mutableStateMapOf<String, Int>().apply {
             config.axes.forEach { axis ->
                 put(axis.id, readAxisValue(existing, axis.id))

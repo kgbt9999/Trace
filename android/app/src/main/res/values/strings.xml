@@ -218,6 +218,8 @@
     <string name="physical_height_save">Сохранить рост</string>
     <string name="reports_med_intake_title">Приём лекарств</string>
     <string name="reports_med_intake_hint">Имя, доза и слоты по дням журнала.</string>
+    <string name="reports_med_dose_title">Дозы лекарств</string>
+    <string name="reports_med_dose_hint">Числовая доза по дням месяца (из текста дозировки) — отдельная линия на каждый препарат.</string>
     <string name="reports_heatmap_title">Тепловая карта настроения</string>
     <string name="reports_heatmap_hint">Интенсивность спада/подъёма по дням недели.</string>
     <string name="reports_dashboard_title">Сводка месяца</string>

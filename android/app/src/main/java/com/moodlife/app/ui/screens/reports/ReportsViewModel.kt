@@ -5,6 +5,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.moodlife.app.data.export.ExportFormat
 import com.moodlife.app.data.export.ExportManager
+import com.moodlife.app.data.repository.MedDoseSeries
 import com.moodlife.app.data.repository.ReportsRepository
 import com.moodlife.app.domain.InsightsEngine
 import com.moodlife.app.domain.MonthBurden
@@ -58,7 +59,7 @@ data class ReportsUiState(
     val alcoholSeries: List<Pair<String, Float>> = emptyList(),
     val routineSeries: List<Pair<String, Float>> = emptyList(),
     val safetySeries: List<Pair<String, Float>> = emptyList(),
-    val medDayFractions: List<Pair<String, Float?>> = emptyList(),
+    val medDoseSeries: List<MedDoseSeries> = emptyList(),
     val medTakenLines: List<String> = emptyList(),
     val heatCells: List<com.moodlife.app.ui.components.HeatCell> = emptyList(),
     val sleepMoodPoints: List<com.moodlife.app.ui.components.SleepMoodPoint> = emptyList(),
@@ -67,7 +68,7 @@ data class ReportsUiState(
 )
 
 private val DEFAULT_VISIBLE_CHARTS = setOf(
-    "dashboard", "mood_sleep", "medgrid", "heatmap", "scatter",
+    "dashboard", "mood_sleep", "meddose", "heatmap", "scatter",
     "level2", "level3", "radar", "priority", "burden",
 )
 
@@ -174,9 +175,9 @@ class ReportsViewModel @Inject constructor(
             missedMedSlots = (adherence.scheduled - adherence.taken).coerceAtLeast(0).takeIf { adherence.scheduled > 0 },
         )
     }.combine(
-        _yearMonth.flatMapLatest { (y, m) -> reportsRepository.observeMonthMedDayFractions(y, m) },
-    ) { state, fractions ->
-        state.copy(medDayFractions = fractions)
+        _yearMonth.flatMapLatest { (y, m) -> reportsRepository.observeMonthMedDoseSeries(y, m) },
+    ) { state, series ->
+        state.copy(medDoseSeries = series)
     }.combine(
         _yearMonth.flatMapLatest { (y, m) -> reportsRepository.observeMonthMedTakenLines(y, m) },
     ) { state, lines ->
@@ -190,8 +191,15 @@ class ReportsViewModel @Inject constructor(
         }
         viewModelScope.launch {
             settingsRepository.observe(com.moodlife.app.data.repository.SettingsRepository.KEY_REPORTS_CHARTS).collect { raw ->
-                val set = raw?.split(',')?.map { it.trim() }?.filter { it.isNotEmpty() }?.toSet()
-                if (set != null && set.isNotEmpty()) _visibleCharts.value = set
+                val set = raw?.split(',')?.map { it.trim() }?.filter { it.isNotEmpty() }?.toMutableSet()
+                if (set != null && set.isNotEmpty()) {
+                    // Migrate legacy medgrid preference to meddose.
+                    if ("medgrid" in set) {
+                        set.remove("medgrid")
+                        set.add("meddose")
+                    }
+                    _visibleCharts.value = set
+                }
             }
         }
     }

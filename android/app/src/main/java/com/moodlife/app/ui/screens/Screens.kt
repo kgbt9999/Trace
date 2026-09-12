@@ -154,43 +154,50 @@ fun TodayScreen(
                 val title = stringResource(TodaySections.titleRes(pref.id))
                 val help = stringResource(TodaySections.helpRes(pref.id))
                 when (pref.id) {
-                    TodaySections.Id.MOOD -> CollapsibleSection(
-                        title,
-                        initiallyExpanded = true,
-                        helpText = help,
-                        onEdit = { viewModel.openSettingsSection("layout") },
-                    ) {
-                        TrackableSection(
-                            section = "mood",
-                            state = state,
-                            viewModel = viewModel,
-                        )
+                    TodaySections.Id.MOOD -> key(state.date, state.checkInConfig) {
+                        CollapsibleSection(
+                            title,
+                            initiallyExpanded = true,
+                            helpText = help,
+                            onEdit = { viewModel.openSettingsSection("layout") },
+                        ) {
+                            TrackableSection(
+                                section = "mood",
+                                state = state,
+                                viewModel = viewModel,
+                            )
+                        }
                     }
-                    TodaySections.Id.EXTRA -> CollapsibleSection(
-                        title,
-                        initiallyExpanded = false,
-                        helpText = help,
-                        onEdit = { viewModel.openSettingsSection("layout") },
-                    ) {
-                        TrackableSection(
-                            section = "extra",
-                            state = state,
-                            viewModel = viewModel,
-                        )
+                    TodaySections.Id.EXTRA -> key(state.date, state.checkInConfig) {
+                        CollapsibleSection(
+                            title,
+                            initiallyExpanded = false,
+                            helpText = help,
+                            onEdit = { viewModel.openSettingsSection("layout") },
+                        ) {
+                            TrackableSection(
+                                section = "extra",
+                                state = state,
+                                viewModel = viewModel,
+                            )
+                        }
                     }
-                    TodaySections.Id.CLINICAL -> CollapsibleSection(
-                        title,
-                        initiallyExpanded = true,
-                        helpText = help,
-                        onEdit = { viewModel.openSettingsSection("layout") },
-                    ) {
-                        TrackableSection(
-                            section = "clinical",
-                            state = state,
-                            viewModel = viewModel,
-                        )
+                    TodaySections.Id.CLINICAL -> key(state.date, state.checkInConfig) {
+                        CollapsibleSection(
+                            title,
+                            initiallyExpanded = true,
+                            helpText = help,
+                            onEdit = { viewModel.openSettingsSection("layout") },
+                        ) {
+                            TrackableSection(
+                                section = "clinical",
+                                state = state,
+                                viewModel = viewModel,
+                            )
+                        }
                     }
-                    TodaySections.Id.CONTEXT -> CollapsibleSection(
+                    TodaySections.Id.CONTEXT -> key(state.date) {
+                    CollapsibleSection(
                         title,
                         initiallyExpanded = false,
                         subtitle = stringResource(R.string.today_context_hint),
@@ -222,30 +229,37 @@ fun TodayScreen(
                         }
                         HealthSummaryCards(state.healthDays, Modifier.padding(top = 8.dp))
                     }
-                    TodaySections.Id.CHECKINS -> CollapsibleSection(
-                        title,
-                        initiallyExpanded = false,
-                        subtitle = stringResource(R.string.checkins_hint),
-                        helpText = help,
-                        onEdit = { viewModel.openSettingsSection("layout") },
-                    ) {
-                        MoodCheckInsCard(
-                            checkIns = state.checkIns,
-                            onSave = viewModel::saveCheckIn,
-                            config = state.checkInConfig,
-                        )
+                    }
+                    TodaySections.Id.CHECKINS -> key(state.date, state.checkInConfig) {
+                        CollapsibleSection(
+                            title,
+                            initiallyExpanded = true,
+                            subtitle = stringResource(R.string.checkins_hint),
+                            helpText = help,
+                            onEdit = { viewModel.openSettingsSection("layout") },
+                        ) {
+                            MoodCheckInsCard(
+                                checkIns = state.checkIns,
+                                onSave = viewModel::saveCheckIn,
+                                date = state.date,
+                                config = state.checkInConfig,
+                            )
+                        }
                     }
                     // Sleep times stay as clock fields (not intensity chips): duration/bedtime
                     // need exact HH:mm. Quality/«дела» live in CLINICAL as unified trackables.
-                    TodaySections.Id.SLEEP -> CollapsibleSection(
-                        title,
-                        initiallyExpanded = false,
-                        helpText = help,
-                        onEdit = { viewModel.openSettingsSection("layout") },
-                    ) {
-                        SleepDetailsRow(state, viewModel)
+                    TodaySections.Id.SLEEP -> key(state.date) {
+                        CollapsibleSection(
+                            title,
+                            initiallyExpanded = false,
+                            helpText = help,
+                            onEdit = { viewModel.openSettingsSection("layout") },
+                        ) {
+                            SleepDetailsRow(state, viewModel)
+                        }
                     }
-                    TodaySections.Id.MEDS -> CollapsibleSection(
+                    TodaySections.Id.MEDS -> key(state.date) {
+                    CollapsibleSection(
                         title,
                         initiallyExpanded = false,
                         helpText = help,
@@ -326,25 +340,29 @@ fun TodayScreen(
                             }
                         }
                     }
-                    TodaySections.Id.SYMPTOMS -> CollapsibleSection(
-                        title,
-                        initiallyExpanded = false,
-                        helpText = help,
-                        onEdit = { viewModel.openSettingsSection("symptoms") },
-                    ) {
-                        TodaySymptomsBody(
-                            symptoms = state.symptoms,
-                            newSymptomScale = state.newSymptomScale,
-                            onUpdateSymptom = viewModel::updateSymptom,
-                            onSeedBasic = viewModel::seedBasicSymptoms,
-                            onAddSymptom = viewModel::addSymptomQuick,
-                            onOpenSettings = remember(viewModel) {
-                                { viewModel.openSettingsSection("symptoms") }
-                            },
-                            onScaleTypeChange = viewModel::onNewSymptomScaleChange,
-                        )
                     }
-                    TodaySections.Id.FACTORS -> CollapsibleSection(
+                    TodaySections.Id.SYMPTOMS -> key(state.date) {
+                        CollapsibleSection(
+                            title,
+                            initiallyExpanded = false,
+                            helpText = help,
+                            onEdit = { viewModel.openSettingsSection("symptoms") },
+                        ) {
+                            TodaySymptomsBody(
+                                symptoms = state.symptoms,
+                                newSymptomScale = state.newSymptomScale,
+                                onUpdateSymptom = viewModel::updateSymptom,
+                                onSeedBasic = viewModel::seedBasicSymptoms,
+                                onAddSymptom = viewModel::addSymptomQuick,
+                                onOpenSettings = remember(viewModel) {
+                                    { viewModel.openSettingsSection("symptoms") }
+                                },
+                                onScaleTypeChange = viewModel::onNewSymptomScaleChange,
+                            )
+                        }
+                    }
+                    TodaySections.Id.FACTORS -> key(state.date) {
+                    CollapsibleSection(
                         title,
                         initiallyExpanded = false,
                         helpText = help,
@@ -427,7 +445,9 @@ fun TodayScreen(
                             settingsLabel = stringResource(R.string.catalog_manage_settings),
                         )
                     }
-                    TodaySections.Id.WARNINGS -> CollapsibleSection(
+                    }
+                    TodaySections.Id.WARNINGS -> key(state.date) {
+                    CollapsibleSection(
                         title,
                         initiallyExpanded = false,
                         helpText = help,
@@ -460,7 +480,9 @@ fun TodayScreen(
                             settingsLabel = stringResource(R.string.catalog_manage_settings),
                         )
                     }
-                    TodaySections.Id.NOTES -> CollapsibleSection(
+                    }
+                    TodaySections.Id.NOTES -> key(state.date) {
+                    CollapsibleSection(
                         title,
                         initiallyExpanded = false,
                         helpText = help,
@@ -490,6 +512,7 @@ fun TodayScreen(
                         FilledTonalButton(onClick = viewModel::addDayNote, modifier = Modifier.padding(top = 4.dp)) {
                             Text(stringResource(R.string.today_add_note))
                         }
+                    }
                     }
                 }
             }
@@ -640,7 +663,7 @@ private fun TrackableSection(
     state: com.moodlife.app.ui.screens.today.TodayUiState,
     viewModel: TodayViewModel,
 ) {
-    val items = remember(state.trackables, section) {
+    val items = remember(state.date, state.trackables, state.checkInConfig, section) {
         TodayTrackables.forSection(state.trackables, section).filter { it.enabled }
     }
     val scaleColor = LocalMoodColors.current.functioning
