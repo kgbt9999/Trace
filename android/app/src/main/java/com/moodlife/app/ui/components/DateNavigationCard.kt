@@ -67,7 +67,14 @@ fun DateNavigationCard(
                     .clickable { showPicker = true },
                 horizontalAlignment = Alignment.CenterHorizontally,
             ) {
-                Text(dateLabel, style = MaterialTheme.typography.titleMedium)
+                Text(
+                    text = if (isToday) {
+                        stringResource(R.string.today_title)
+                    } else {
+                        dateLabel
+                    },
+                    style = MaterialTheme.typography.titleMedium,
+                )
                 if (!isToday) {
                     TextButton(onClick = onGoToday) {
                         Text(stringResource(R.string.today_go_today))

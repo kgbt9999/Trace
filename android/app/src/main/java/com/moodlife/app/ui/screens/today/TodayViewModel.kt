@@ -208,7 +208,7 @@ class TodayViewModel @Inject constructor(
         viewModelScope.launch {
             dayNavigation.openDay.collect { date ->
                 flushPendingEditsSuspend(forceClearEdited = true)
-                _selectedDate.value = date
+                selectDate(date)
             }
         }
         viewModelScope.launch {
@@ -1173,8 +1173,26 @@ class TodayViewModel @Inject constructor(
         if (iso == _selectedDate.value) return
         viewModelScope.launch {
             flushPendingEditsSuspend(forceClearEdited = true)
-            _selectedDate.value = iso
+            selectDate(iso)
         }
+    }
+
+    /**
+     * Updates day chrome immediately, then switches the Room observation date.
+     * Keep [TodayUiState.date] unchanged until [applySnapshot] so same-day med/symptom
+     * merges do not keep the previous day's optimistic toggles.
+     */
+    private fun selectDate(iso: String) {
+        if (iso == _selectedDate.value) return
+        val todayIso = DateUtils.todayIso()
+        _uiState.update {
+            it.copy(
+                dateLabel = formatDateLabel(iso),
+                isToday = iso == todayIso,
+                canGoNext = iso < todayIso,
+            )
+        }
+        _selectedDate.value = iso
     }
 
     private fun markUserEdited() {
@@ -1719,10 +1737,18 @@ class TodayViewModel @Inject constructor(
             isToday = date == DateUtils.todayIso(),
         )
 
-        private fun formatDateLabel(iso: String): String =
-            DateUtils.parseIso(iso).format(
-                DateTimeFormatter.ofPattern("d MMMM yyyy", Locale("ru")),
-            )
+        private fun formatDateLabel(iso: String): String {
+            val date = DateUtils.parseIso(iso)
+            val today = LocalDate.now()
+            return when (date) {
+                today -> "Сегодня"
+                today.minusDays(1) -> "Вчера"
+                today.plusDays(1) -> "Завтра"
+                else -> date.format(
+                    DateTimeFormatter.ofPattern("d MMMM yyyy", Locale("ru")),
+                )
+            }
+        }
 
         private fun formatTime(ts: Long): String =
             java.text.SimpleDateFormat("HH:mm", Locale("ru")).format(java.util.Date(ts))
