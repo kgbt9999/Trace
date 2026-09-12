@@ -1,7 +1,9 @@
 package com.moodlife.app.di
 
 import android.content.Context
+import android.util.Log
 import androidx.room.Room
+import androidx.room.RoomDatabase
 import com.moodlife.app.data.local.MoodLifeDatabase
 import com.moodlife.app.data.local.MoodLifeDatabase.Companion.MIGRATION_1_2
 import com.moodlife.app.data.local.MoodLifeDatabase.Companion.MIGRATION_2_3
@@ -38,20 +40,81 @@ import javax.inject.Singleton
 @InstallIn(SingletonComponent::class)
 object DatabaseModule {
 
+    private const val TAG = "DatabaseModule"
+
     @Provides
     @Singleton
     fun provideDatabase(
         @ApplicationContext context: Context,
         passphraseStore: DatabasePassphraseStore,
     ): MoodLifeDatabase {
-        SQLiteDatabase.loadLibs(context)
-        val passphrase = passphraseStore.getOrCreatePassphrase()
-        DatabaseEncryptionMigrator.migrateIfNeeded(context, passphrase)
+        val loaded = try {
+            SQLiteDatabase.loadLibs(context)
+            true
+        } catch (e: Exception) {
+            Log.e(TAG, "SQLCipher native libs failed to load; using plaintext", e)
+            false
+        }
+        if (!loaded) {
+            return openPlaintext(context)
+        }
+
+        val passphrase = try {
+            passphraseStore.getOrCreatePassphrase()
+        } catch (e: Exception) {
+            Log.e(TAG, "Passphrase store failed; opening plaintext Room DB", e)
+            return openPlaintext(context)
+        }
+
+        val useEncryption = DatabaseEncryptionMigrator.migrateIfNeeded(context, passphrase)
+        val plaintext = DatabaseEncryptionMigrator.isPlaintextDatabase(context)
+
+        if (!useEncryption || plaintext) {
+            Log.w(TAG, "Opening Room database without SQLCipher (plaintext fallback)")
+            return openPlaintext(context)
+        }
+
+        return try {
+            openEncrypted(context, passphrase)
+        } catch (e: Exception) {
+            Log.e(TAG, "Encrypted DB open failed", e)
+            if (DatabaseEncryptionMigrator.restorePlaintextBackup(context)) {
+                Log.w(TAG, "Restored plaintext backup after encrypted open failure")
+                openPlaintext(context)
+            } else {
+                // Last resort: try plaintext only if the file is readable as SQLite.
+                if (DatabaseEncryptionMigrator.isPlaintextDatabase(context)) {
+                    openPlaintext(context)
+                } else {
+                    throw e
+                }
+            }
+        }
+    }
+
+    private fun openEncrypted(context: Context, passphrase: CharArray): MoodLifeDatabase {
         val factory = SupportFactory(SQLiteDatabase.getBytes(passphrase), null, false)
-        return Room.databaseBuilder(context, MoodLifeDatabase::class.java, DatabaseEncryptionMigrator.DB_NAME)
+        val db = baseBuilder(context)
             .openHelperFactory(factory)
-            .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5)
             .build()
+        // Force openHelper init now so failures fall into provideDatabase catch,
+        // not a later random first-query crash on the main thread.
+        db.openHelper.writableDatabase
+        return db
+    }
+
+    private fun openPlaintext(context: Context): MoodLifeDatabase {
+        val db = baseBuilder(context).build()
+        db.openHelper.writableDatabase
+        return db
+    }
+
+    private fun baseBuilder(context: Context): RoomDatabase.Builder<MoodLifeDatabase> {
+        return Room.databaseBuilder(
+            context,
+            MoodLifeDatabase::class.java,
+            DatabaseEncryptionMigrator.DB_NAME,
+        ).addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5)
     }
 
     @Provides fun provideMoodEntryDao(db: MoodLifeDatabase): MoodEntryDao = db.moodEntryDao()

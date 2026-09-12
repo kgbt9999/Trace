@@ -1,6 +1,7 @@
 package com.moodlife.app.data.secure
 
 import android.content.Context
+import android.util.Log
 import net.sqlcipher.database.SQLiteDatabase
 import java.io.File
 
@@ -8,75 +9,164 @@ import java.io.File
  * One-shot migration of an existing plaintext Room DB to SQLCipher.
  * Keeps `moodlife.db.bak` until the encrypted file is verified.
  * Does not log passphrase or health data.
+ *
+ * Failures never throw to the caller — launch must remain possible via plaintext fallback.
  */
 object DatabaseEncryptionMigrator {
 
     const val DB_NAME = "moodlife.db"
 
+    private const val TAG = "DbEncryption"
+    private const val STATE_PREFS = "db_encryption_state"
+    private const val KEY_SKIP_MIGRATION = "skip_plaintext_migration"
+
     /**
-     * If a plaintext [DB_NAME] exists, encrypt it in place (via temp file + rename).
-     * No-op when the file is missing (fresh install) or already encrypted.
+     * @return true if [DB_NAME] is encrypted (or missing — Room+SQLCipher will create it),
+     *         false if plaintext must be used (migration failed / restored).
      */
-    fun migrateIfNeeded(context: Context, passphrase: CharArray) {
+    fun migrateIfNeeded(context: Context, passphrase: CharArray): Boolean {
         val dbFile = context.getDatabasePath(DB_NAME)
-        if (!dbFile.exists() || dbFile.length() == 0L) return
-        if (!isPlaintextSqlite(dbFile)) return
+        dbFile.parentFile?.mkdirs()
+
+        if (!dbFile.exists() || dbFile.length() == 0L) {
+            // Fresh install: Room will create an encrypted DB via SupportFactory.
+            return true
+        }
+        if (!isPlaintextSqlite(dbFile)) {
+            return true
+        }
+
+        val state = context.getSharedPreferences(STATE_PREFS, Context.MODE_PRIVATE)
+        if (state.getBoolean(KEY_SKIP_MIGRATION, false)) {
+            Log.i(TAG, "Skipping plaintext→SQLCipher migration (previous failure)")
+            return false
+        }
 
         val bakFile = File(dbFile.parentFile, "$DB_NAME.bak")
-        val tempFile = File(dbFile.parentFile, "$DB_NAME.encrypted.tmp")
+        val tempFile = File(dbFile.parentFile, "moodlife_enc_tmp.db")
 
-        // Discard stale temp from a previous interrupted attempt.
-        if (tempFile.exists()) tempFile.delete()
+        return try {
+            cleanupTemp(tempFile)
 
-        // Keep a recoverable copy of plaintext until encryption succeeds.
-        dbFile.copyTo(bakFile, overwrite = true)
+            // Room defaults to WAL; SQLCipher export needs a single main file.
+            preparePlaintextForExport(dbFile)
 
-        deleteSidecars(tempFile)
-        encryptPlaintextTo(dbFile, tempFile, passphrase)
+            dbFile.copyTo(bakFile, overwrite = true)
 
-        if (!tempFile.exists() || tempFile.length() == 0L) {
-            tempFile.delete()
+            encryptPlaintextTo(dbFile, tempFile, passphrase)
+
+            if (!tempFile.exists() || tempFile.length() == 0L) {
+                cleanupTemp(tempFile)
+                Log.e(TAG, "SQLCipher export produced an empty database")
+                markSkip(state)
+                return false
+            }
+
+            deleteSidecars(dbFile)
+            if (!dbFile.delete()) {
+                cleanupTemp(tempFile)
+                Log.e(TAG, "Could not replace plaintext database")
+                markSkip(state)
+                return false
+            }
+            if (!tempFile.renameTo(dbFile)) {
+                val copied = try {
+                    tempFile.copyTo(dbFile, overwrite = true)
+                    true
+                } catch (e: Exception) {
+                    Log.e(TAG, "Could not move encrypted database into place", e)
+                    false
+                }
+                cleanupTemp(tempFile)
+                if (!copied) {
+                    restoreFromBak(bakFile, dbFile)
+                    markSkip(state)
+                    return false
+                }
+            }
             deleteSidecars(tempFile)
-            error("SQLCipher export produced an empty database")
-        }
 
-        // Swap: remove plaintext (+ WAL/SHM), move encrypted into place.
-        deleteSidecars(dbFile)
-        if (!dbFile.delete()) {
-            tempFile.delete()
-            deleteSidecars(tempFile)
-            error("Could not replace plaintext database")
-        }
-        if (!tempFile.renameTo(dbFile)) {
-            // Restore from bak so the user keeps data.
-            bakFile.copyTo(dbFile, overwrite = true)
-            tempFile.delete()
-            error("Could not rename encrypted database into place")
-        }
-        deleteSidecars(tempFile)
+            try {
+                verifyEncrypted(dbFile, passphrase)
+            } catch (e: Exception) {
+                Log.e(TAG, "Encrypted database verification failed", e)
+                restoreFromBak(bakFile, dbFile)
+                markSkip(state)
+                return false
+            }
 
-        verifyEncrypted(dbFile, passphrase)
-        bakFile.delete()
-        deleteSidecars(bakFile)
+            bakFile.delete()
+            deleteSidecars(bakFile)
+            state.edit().remove(KEY_SKIP_MIGRATION).apply()
+            true
+        } catch (e: Exception) {
+            Log.e(TAG, "SQLCipher migration failed; keeping plaintext", e)
+            cleanupTemp(tempFile)
+            if (!dbFile.exists() || dbFile.length() == 0L) {
+                restoreFromBak(bakFile, dbFile)
+            }
+            if (dbFile.exists() && !isPlaintextSqlite(dbFile) && bakFile.exists()) {
+                restoreFromBak(bakFile, dbFile)
+            }
+            markSkip(state)
+            false
+        }
     }
 
-    private fun encryptPlaintextTo(plaintext: File, encryptedOut: File, passphrase: CharArray) {
-        // Open plaintext with empty key (SQLCipher opens standard SQLite this way).
-        val db = SQLiteDatabase.openDatabase(
-            plaintext.absolutePath,
-            "",
+    /** Restore plaintext from `.bak` after a failed encrypted open. */
+    fun restorePlaintextBackup(context: Context): Boolean {
+        val dbFile = context.getDatabasePath(DB_NAME)
+        val bakFile = File(dbFile.parentFile, "$DB_NAME.bak")
+        if (!bakFile.exists()) return false
+        return try {
+            restoreFromBak(bakFile, dbFile)
+            true
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to restore plaintext backup", e)
+            false
+        }
+    }
+
+    fun isPlaintextDatabase(context: Context): Boolean {
+        val dbFile = context.getDatabasePath(DB_NAME)
+        if (!dbFile.exists() || dbFile.length() == 0L) return false
+        return isPlaintextSqlite(dbFile)
+    }
+
+    private fun markSkip(state: android.content.SharedPreferences) {
+        state.edit().putBoolean(KEY_SKIP_MIGRATION, true).apply()
+    }
+
+    private fun preparePlaintextForExport(dbFile: File) {
+        android.database.sqlite.SQLiteDatabase.openDatabase(
+            dbFile.absolutePath,
             null,
-            SQLiteDatabase.OPEN_READWRITE,
-        )
+            android.database.sqlite.SQLiteDatabase.OPEN_READWRITE,
+        ).use { db ->
+            // PRAGMA that return rows must use rawQuery on Android framework SQLite.
+            db.rawQuery("PRAGMA wal_checkpoint(FULL)", null)?.use { while (it.moveToNext()) { /* drain */ } }
+            db.rawQuery("PRAGMA journal_mode=DELETE", null)?.use { while (it.moveToNext()) { /* drain */ } }
+        }
+        deleteSidecars(dbFile)
+    }
+
+    /**
+     * Create an encrypted DB, then pull plaintext into it via sqlcipher_export.
+     * Reverse of ATTACH-encrypted-from-plaintext — more reliable on SQLCipher 4.x Android.
+     */
+    private fun encryptPlaintextTo(plaintext: File, encryptedOut: File, passphrase: CharArray) {
+        encryptedOut.parentFile?.mkdirs()
+        if (encryptedOut.exists()) encryptedOut.delete()
+        deleteSidecars(encryptedOut)
+
+        val enc = SQLiteDatabase.openOrCreateDatabase(encryptedOut.absolutePath, passphrase, null)
         try {
-            val outPath = encryptedOut.absolutePath.replace("'", "''")
-            // Passphrase is hex-only from DatabasePassphraseStore — safe in SQL literal.
-            val keyLiteral = String(passphrase).replace("'", "''")
-            db.rawExecSQL("ATTACH DATABASE '$outPath' AS encrypted KEY '$keyLiteral';")
-            db.rawExecSQL("SELECT sqlcipher_export('encrypted');")
-            db.rawExecSQL("DETACH DATABASE encrypted;")
+            val inPath = plaintext.absolutePath.replace("'", "''")
+            enc.rawExecSQL("ATTACH DATABASE '$inPath' AS plaintext KEY '';")
+            enc.rawExecSQL("SELECT sqlcipher_export('main', 'plaintext');")
+            enc.rawExecSQL("DETACH DATABASE plaintext;")
         } finally {
-            db.close()
+            enc.close()
         }
     }
 
@@ -110,6 +200,19 @@ object DatabaseEncryptionMigrator {
         } catch (_: Exception) {
             false
         }
+    }
+
+    private fun restoreFromBak(bakFile: File, dbFile: File) {
+        if (!bakFile.exists()) return
+        deleteSidecars(dbFile)
+        if (dbFile.exists()) dbFile.delete()
+        bakFile.copyTo(dbFile, overwrite = true)
+        deleteSidecars(dbFile)
+    }
+
+    private fun cleanupTemp(tempFile: File) {
+        tempFile.delete()
+        deleteSidecars(tempFile)
     }
 
     private fun deleteSidecars(dbFile: File) {
