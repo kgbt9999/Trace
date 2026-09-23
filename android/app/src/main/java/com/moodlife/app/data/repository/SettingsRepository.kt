@@ -43,6 +43,16 @@ class SettingsRepository @Inject constructor(private val settingDao: SettingDao)
         const val KEY_CRISIS_WISHES = "crisis_wishes"
         const val KEY_CRISIS_AVOID = "crisis_avoid"
         const val KEY_ONBOARDING_DISMISSED = "onboarding_dismissed"
+        /** First-run wizard finished — "1" when done (preferred over dismissed card). */
+        const val KEY_ONBOARDING_COMPLETED = "onboarding_completed"
+        /** basic | advanced — Today surface density. */
+        const val KEY_UI_MODE = "ui_mode"
+        /** Comma-separated LaunchTips ids the user dismissed. */
+        const val KEY_SEEN_TIPS = "seen_tip_ids"
+        /** Soft daily nudge until meds added or dismissed — "1" pending. */
+        const val KEY_NUDGE_MEDS = "nudge_meds_pending"
+        /** Soft daily nudge until crisis contacts filled or dismissed — "1" pending. */
+        const val KEY_NUDGE_CRISIS = "nudge_crisis_pending"
         const val KEY_CRISIS_ON_WORSENING = "crisis_plan_on_worsening"
         /** JSON array of {id,label,phone} — see [com.moodlife.app.domain.CrisisContacts]. */
         const val KEY_CRISIS_CONTACTS = CrisisContacts.KEY
@@ -62,6 +72,10 @@ class SettingsRepository @Inject constructor(private val settingDao: SettingDao)
         const val KEY_WEEKLY_BACKUP_LAST = "weekly_backup_last"
         /** User height in cm (optional; also filled from Health Connect). */
         const val KEY_BODY_HEIGHT_CM = "body_height_cm"
+        /** Show body measurements block on Physical tab — "true" / "false", default off. */
+        const val KEY_BODY_MEASUREMENTS_ENABLED = "body_measurements_enabled"
+        /** Show lab results on Physical — "true"/"false"; absent defaults to on (Ornament-like). */
+        const val KEY_LAB_RESULTS_ENABLED = "lab_results_enabled"
         /** Nutrition goals JSON: {"kcal":N,"protein":N,"fat":N,"carbs":N} — optional. */
         const val KEY_NUTRITION_GOALS = "nutrition_goals_json"
         /** Check-in period scheme: morning_day_night | halves | hours */
@@ -76,6 +90,10 @@ class SettingsRepository @Inject constructor(private val settingDao: SettingDao)
         const val KEY_CHECKIN_CONFIG = "checkin_config_json"
         /** Comma-separated report chart ids that are visible. */
         const val KEY_REPORTS_CHARTS = "reports_charts_visible"
+        /** Comma-separated chart keys for display order on Reports tab. */
+        const val KEY_REPORTS_CHART_ORDER = "reports_charts_order"
+        /** One-time flag: "1" after merging newly introduced default chart keys. */
+        const val KEY_REPORTS_CHARTS_MIGRATED_V2 = "reports_charts_migrated_v2"
         const val KEY_NOTIF_DIARY_ENABLED = "notif_diary_enabled"
         const val KEY_NOTIF_DIARY_TIME = "notif_diary_time"
         const val KEY_NOTIF_MEDS_ENABLED = "notif_meds_enabled"

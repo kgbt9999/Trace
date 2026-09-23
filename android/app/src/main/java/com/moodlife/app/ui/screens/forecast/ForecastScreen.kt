@@ -29,6 +29,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.moodlife.app.R
 import com.moodlife.app.domain.ForecastEngine
 import com.moodlife.app.domain.MoonPhaseCalc
+import com.moodlife.app.ui.components.EmptyStateCard
 import com.moodlife.app.ui.components.MoodCard
 import com.moodlife.app.ui.components.PageHeader
 import com.moodlife.app.util.DateUtils
@@ -86,7 +87,7 @@ fun ForecastScreen(viewModel: ForecastViewModel = hiltViewModel()) {
             modifier = Modifier.padding(bottom = 8.dp),
         )
         if (days.isEmpty()) {
-            Text(stringResource(R.string.forecast_empty), style = MaterialTheme.typography.bodyMedium)
+            EmptyStateCard(message = stringResource(R.string.forecast_empty))
         } else {
             Text(
                 stringResource(R.string.forecast_feed_hint, days.size),

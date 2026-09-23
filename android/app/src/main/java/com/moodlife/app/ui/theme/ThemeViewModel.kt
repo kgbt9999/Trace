@@ -24,6 +24,14 @@ class ThemeViewModel @Inject constructor(
         .map { it ?: AppearanceId.MINIMAL.storage }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), AppearanceId.MINIMAL.storage)
 
+    val uiMode: StateFlow<String> = settingsRepository.observe(SettingsRepository.KEY_UI_MODE)
+        .map { it ?: com.moodlife.app.domain.UiMode.BASIC.storage }
+        .stateIn(
+            viewModelScope,
+            SharingStarted.WhileSubscribed(5_000),
+            com.moodlife.app.domain.UiMode.BASIC.storage,
+        )
+
     fun toggleDark(currentlyDark: Boolean) {
         viewModelScope.launch {
             settingsRepository.set(
@@ -39,5 +47,19 @@ class ThemeViewModel @Inject constructor(
 
     fun setAppearance(id: AppearanceId) {
         viewModelScope.launch { settingsRepository.set(SettingsRepository.KEY_APPEARANCE, id.storage) }
+    }
+
+    fun setUiMode(mode: com.moodlife.app.domain.UiMode) {
+        viewModelScope.launch {
+            settingsRepository.set(SettingsRepository.KEY_UI_MODE, mode.storage)
+            val prefs = com.moodlife.app.domain.TodaySections.parse(
+                settingsRepository.get(com.moodlife.app.domain.TodaySections.KEY),
+            )
+            val next = com.moodlife.app.domain.UiModeApplier.applyToSectionPrefs(mode, prefs)
+            settingsRepository.set(
+                com.moodlife.app.domain.TodaySections.KEY,
+                com.moodlife.app.domain.TodaySections.serialize(next),
+            )
+        }
     }
 }

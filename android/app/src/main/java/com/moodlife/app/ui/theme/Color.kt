@@ -120,7 +120,7 @@ internal object BrandColors {
             alcohol = if (dark) Color(0xFFC8B070) else Color(0xFF8A6840),
             substance = if (dark) Color(0xFFB090D0) else Color(0xFF705080),
             cycle = if (dark) Color(0xFFE078B0) else Color(0xFFB04080),
-            warning = if (dark) Color(0xFFE8C060) else Color(0xFFC89820),
+            warning = if (dark) Color(0xFFE0B060) else Color(0xFFD0893A),
             info = navy,
             success = teal,
         )

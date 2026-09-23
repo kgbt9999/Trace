@@ -23,6 +23,8 @@ object BackupSchema {
         "early_warning_signs",
         "warning_triggers",
         "flo_logs",
+        "body_measurements",
+        "lab_results",
     )
 
     /** Settings keys never written into backup JSON (secrets / transient paths). */
@@ -95,6 +97,14 @@ object BackupSchema {
         ),
         "flo_logs" to setOf(
             "id", "date", "flowLevel", "symptoms", "note", "source", "createdAt", "updatedAt",
+        ),
+        "body_measurements" to setOf(
+            "id", "date", "shoulderWidthCm", "bicepsCm", "chestCm", "underBustCm",
+            "waistCm", "hipsCm", "thighCm", "weightKg", "note", "createdAt", "updatedAt",
+        ),
+        "lab_results" to setOf(
+            "id", "name", "valueText", "valueNumeric", "unit", "date", "clinic",
+            "createdAt", "updatedAt",
         ),
     )
 

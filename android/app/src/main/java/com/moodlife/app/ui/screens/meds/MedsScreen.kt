@@ -29,6 +29,7 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.moodlife.app.R
+import com.moodlife.app.ui.components.EmptyStateCard
 import com.moodlife.app.ui.components.MoodCard
 import com.moodlife.app.ui.components.PageHeader
 
@@ -46,7 +47,7 @@ fun MedsScreen(viewModel: MedsViewModel = hiltViewModel()) {
             title = stringResource(R.string.tab_meds),
             subtitle = stringResource(R.string.meds_tab_subtitle),
         )
-        MoodCard(Modifier.padding(top = 8.dp)) {
+        MoodCard(Modifier.padding(top = 8.dp), tint = MaterialTheme.colorScheme.secondary) {
             Text(stringResource(R.string.meds_tab_week_title), style = MaterialTheme.typography.titleMedium)
             Text(
                 stringResource(R.string.meds_tab_week_hint),
@@ -87,22 +88,18 @@ fun MedsScreen(viewModel: MedsViewModel = hiltViewModel()) {
                     style = MaterialTheme.typography.bodyMedium,
                     modifier = Modifier.padding(top = 14.dp),
                 )
-            } ?: Text(
-                stringResource(R.string.meds_tab_adherence_empty),
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            } ?: EmptyStateCard(
+                message = stringResource(R.string.meds_tab_adherence_empty),
                 modifier = Modifier.padding(top = 14.dp),
             )
         }
 
         Spacer(Modifier.height(12.dp))
-        MoodCard {
+        MoodCard(tint = MaterialTheme.colorScheme.primary) {
             Text(stringResource(R.string.meds_tab_today_title), style = MaterialTheme.typography.titleMedium)
             if (state.todayRows.isEmpty()) {
-                Text(
-                    stringResource(R.string.meds_tab_empty),
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                EmptyStateCard(
+                    message = stringResource(R.string.meds_tab_empty),
                     modifier = Modifier.padding(top = 8.dp),
                 )
             } else {

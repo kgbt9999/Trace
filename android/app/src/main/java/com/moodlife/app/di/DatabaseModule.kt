@@ -9,11 +9,15 @@ import com.moodlife.app.data.local.MoodLifeDatabase.Companion.MIGRATION_1_2
 import com.moodlife.app.data.local.MoodLifeDatabase.Companion.MIGRATION_2_3
 import com.moodlife.app.data.local.MoodLifeDatabase.Companion.MIGRATION_3_4
 import com.moodlife.app.data.local.MoodLifeDatabase.Companion.MIGRATION_4_5
+import com.moodlife.app.data.local.MoodLifeDatabase.Companion.MIGRATION_5_6
+import com.moodlife.app.data.local.MoodLifeDatabase.Companion.MIGRATION_6_7
+import com.moodlife.app.data.local.dao.BodyMeasurementDao
 import com.moodlife.app.data.local.dao.DayNoteDao
 import com.moodlife.app.data.local.dao.ExternalHealthDayDao
 import com.moodlife.app.data.local.dao.FactorDao
 import com.moodlife.app.data.local.dao.FactorLogDao
 import com.moodlife.app.data.local.dao.FloLogDao
+import com.moodlife.app.data.local.dao.LabResultDao
 import com.moodlife.app.data.local.dao.MedicationDao
 import com.moodlife.app.data.local.dao.MedicationLogDao
 import com.moodlife.app.data.local.dao.MoodCheckInDao
@@ -114,7 +118,7 @@ object DatabaseModule {
             context,
             MoodLifeDatabase::class.java,
             DatabaseEncryptionMigrator.DB_NAME,
-        ).addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5)
+        ).addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7)
     }
 
     @Provides fun provideMoodEntryDao(db: MoodLifeDatabase): MoodEntryDao = db.moodEntryDao()
@@ -133,4 +137,6 @@ object DatabaseModule {
     @Provides fun provideWarningSignDao(db: MoodLifeDatabase): WarningSignDao = db.warningSignDao()
     @Provides fun provideWarningTriggerDao(db: MoodLifeDatabase): WarningTriggerDao = db.warningTriggerDao()
     @Provides fun provideFloLogDao(db: MoodLifeDatabase): FloLogDao = db.floLogDao()
+    @Provides fun provideBodyMeasurementDao(db: MoodLifeDatabase): BodyMeasurementDao = db.bodyMeasurementDao()
+    @Provides fun provideLabResultDao(db: MoodLifeDatabase): LabResultDao = db.labResultDao()
 }

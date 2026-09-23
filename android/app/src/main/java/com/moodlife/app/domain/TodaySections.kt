@@ -13,9 +13,13 @@ object TodaySections {
     const val KEY = "today_sections_v2"
 
     enum class Id(val defaultVisible: Boolean) {
-        MOOD(true),
-        EXTRA(true),
-        CLINICAL(true),
+        /** Legacy sheet — marking moved to [GRAPH_PARAMS]; kept for layout prefs migration. */
+        MOOD(false),
+        GRAPH_PARAMS(true),
+        /** Legacy — duplicates GRAPH_PARAMS marking. */
+        EXTRA(false),
+        /** Legacy — duplicates GRAPH_PARAMS marking. */
+        CLINICAL(false),
         CONTEXT(true),
         CHECKINS(true),
         SLEEP(true),
@@ -37,6 +41,7 @@ object TodaySections {
 
     fun titleRes(id: Id): Int = when (id) {
         Id.MOOD -> R.string.today_mood_section
+        Id.GRAPH_PARAMS -> R.string.today_graph_params_section
         Id.EXTRA -> R.string.today_extra_section
         Id.CLINICAL -> R.string.today_clinical_section
         Id.CONTEXT -> R.string.today_context_section
@@ -51,6 +56,7 @@ object TodaySections {
 
     fun helpRes(id: Id): Int = when (id) {
         Id.MOOD -> R.string.today_help_mood
+        Id.GRAPH_PARAMS -> R.string.today_help_graph_params
         Id.EXTRA -> R.string.today_help_extra
         Id.CLINICAL -> R.string.today_help_clinical
         Id.CONTEXT -> R.string.today_help_context
@@ -76,12 +82,28 @@ object TodaySections {
                 byId[id] = Pref(id, o.optBoolean("visible", id.defaultVisible), o.optInt("order", i))
             }
             val merged = Id.entries.mapIndexed { i, id ->
-                byId[id] ?: Pref(id, id.defaultVisible, 1000 + i)
+                byId[id] ?: Pref(id, id.defaultVisible, defaultOrderIndex(id))
             }
             merged.sortedBy { it.order }.mapIndexed { i, p -> p.copy(order = i) }
         } catch (_: Exception) {
             defaults()
         }
+    }
+
+    /** Stable insert order for newly added section ids (e.g. GRAPH_PARAMS after MOOD). */
+    private fun defaultOrderIndex(id: Id): Int = when (id) {
+        Id.MOOD -> 0
+        Id.GRAPH_PARAMS -> 1
+        Id.EXTRA -> 2
+        Id.CLINICAL -> 3
+        Id.CONTEXT -> 4
+        Id.CHECKINS -> 5
+        Id.SLEEP -> 6
+        Id.MEDS -> 7
+        Id.SYMPTOMS -> 8
+        Id.FACTORS -> 9
+        Id.WARNINGS -> 10
+        Id.NOTES -> 11
     }
 
     fun serialize(prefs: List<Pref>): String {

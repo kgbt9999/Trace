@@ -1,5 +1,6 @@
 package com.moodlife.app.ui.screens.calendar
 
+import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.moodlife.app.data.local.dao.DayNoteDao
@@ -16,6 +17,7 @@ import com.moodlife.app.data.repository.PeriodRepository
 import com.moodlife.app.data.repository.SettingsRepository
 import com.moodlife.app.domain.CalendarDayIcons
 import com.moodlife.app.domain.CalendarUserIcons
+import com.moodlife.app.domain.MedAccentColors
 import com.moodlife.app.ui.navigation.DayNavigationState
 import com.moodlife.app.util.DateUtils
 import com.moodlife.app.util.MedsUtils
@@ -78,6 +80,8 @@ data class CalendarUiState(
     val pendingDeleteDayMedId: String? = null,
     /** Top calendar → summary sheet; meds calendar → editable day diary. */
     val daySheetMode: DaySheetMode = DaySheetMode.SUMMARY,
+    /** Overview / Meds / Physical sub-tab (persisted across process death). */
+    val subTab: String = "Overview",
 )
 
 enum class DaySheetMode { SUMMARY, MEDS_DIARY }
@@ -92,16 +96,41 @@ class CalendarViewModel @Inject constructor(
     private val medicationRepository: MedicationRepository,
     private val dayNavigation: DayNavigationState,
     private val settingsRepository: SettingsRepository,
+    private val savedStateHandle: SavedStateHandle,
 ) : ViewModel() {
 
-    private val _yearMonth = MutableStateFlow(LocalDate.now().year to (LocalDate.now().monthValue - 1))
-    private val _selected = MutableStateFlow<String?>(null)
+    private val _yearMonth = MutableStateFlow(
+        (savedStateHandle.get<Int>(KEY_YEAR) ?: LocalDate.now().year) to
+            (savedStateHandle.get<Int>(KEY_MONTH) ?: (LocalDate.now().monthValue - 1)),
+    )
+    private val _selected = MutableStateFlow(savedStateHandle.get<String?>(KEY_SELECTED))
+    private val _subTab = MutableStateFlow(savedStateHandle.get<String>(KEY_SUBTAB) ?: "Overview")
     private val _showDayIconPicker = MutableStateFlow(false)
     private val _iconNoteDraft = MutableStateFlow("")
     private val _pendingDeleteDayMedId = MutableStateFlow<String?>(null)
     private val _daySheetMode = MutableStateFlow(DaySheetMode.SUMMARY)
     /** Optimistic hide of day-log rows until Room catches up: "date|medicationId". */
     private val _removedDayLogs = MutableStateFlow<Set<String>>(emptySet())
+
+    init {
+        viewModelScope.launch {
+            dayNavigation.calendarSubTab.collect { tab ->
+                setSubTab(tab)
+            }
+        }
+        viewModelScope.launch {
+            _yearMonth.collect { (y, m) ->
+                savedStateHandle[KEY_YEAR] = y
+                savedStateHandle[KEY_MONTH] = m
+            }
+        }
+        viewModelScope.launch {
+            _selected.collect { savedStateHandle[KEY_SELECTED] = it }
+        }
+        viewModelScope.launch {
+            _subTab.collect { savedStateHandle[KEY_SUBTAB] = it }
+        }
+    }
 
     val uiState: StateFlow<CalendarUiState> = combine(
         combine(
@@ -191,10 +220,15 @@ class CalendarViewModel @Inject constructor(
         },
     ) { state, notes ->
         state.copy(selectedNotes = notes)
+    }.combine(_subTab) { state, subTab ->
+        state.copy(subTab = subTab)
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), CalendarUiState())
 
     fun prevMonth() = _yearMonth.update { (y, m) -> if (m == 0) (y - 1) to 11 else y to (m - 1) }
     fun nextMonth() = _yearMonth.update { (y, m) -> if (m == 11) (y + 1) to 0 else y to (m + 1) }
+    fun setSubTab(tab: String) {
+        _subTab.value = tab
+    }
     fun selectDay(date: String) {
         _daySheetMode.value = DaySheetMode.SUMMARY
         _selected.value = date
@@ -217,6 +251,8 @@ class CalendarViewModel @Inject constructor(
     fun openCycleSettings() = dayNavigation.navigateToSettings("cycle")
     fun openMedsSettings() = dayNavigation.navigateToSettings("meds")
     fun openHcSettings() = dayNavigation.navigateToSettings("integrations")
+    fun openPhysicalTab() = dayNavigation.navigateToCalendarSubTab("Physical")
+    fun openMedsTab() = dayNavigation.navigateToCalendarSubTab("Meds")
 
     fun openDayIconPicker() { _showDayIconPicker.value = true }
     fun dismissDayIconPicker() { _showDayIconPicker.value = false }
@@ -333,35 +369,55 @@ class CalendarViewModel @Inject constructor(
         val end = LocalDate.parse(to)
         val result = linkedMapOf<String, List<DayMedLine>>()
         var d = start
+        val todayIso = DateUtils.todayIso()
         while (!d.isAfter(end)) {
             val iso = d.toString()
-            result[iso] = dayMedLines(byDate[iso].orEmpty(), meds)
+            result[iso] = dayMedLines(iso, byDate[iso].orEmpty(), meds, todayIso)
                 .filterNot { dayLogKey(iso, it.medicationId) in removedDayLogs }
             d = d.plusDays(1)
         }
         return result
     }
 
+    /**
+     * Past days: only real medication_logs rows.
+     * Today and future: also show planned active regular meds (no log yet).
+     * One visible line per normalized name when possible.
+     */
     private fun dayMedLines(
+        dateIso: String,
         dayLogs: List<MedicationLogEntity>,
         meds: List<MedicationEntity>,
+        todayIso: String,
     ): List<DayMedLine> {
         val medById = meds.associateBy { it.id }
-        val seen = linkedSetOf<String>()
+        val seenIds = linkedSetOf<String>()
+        val seenNames = linkedSetOf<String>()
         val lines = mutableListOf<DayMedLine>()
 
         // Prefer journal snapshots for the day (handles taper / ramp / stopped A).
         for (log in dayLogs.sortedBy { it.medicationId }) {
             val med = medById[log.medicationId] ?: continue
-            seen += med.id
+            val nameKey = MedAccentColors.normalizeName(
+                medicationRepository.effectiveName(med, log),
+            )
+            if (nameKey.isNotEmpty() && nameKey in seenNames) continue
+            seenIds += med.id
+            if (nameKey.isNotEmpty()) seenNames += nameKey
             lines += buildDayLine(med, log)
         }
-        // Active regular catalog meds without a log yet (planned for day).
-        for (med in meds) {
-            if (med.id in seen) continue
-            if (!med.isActive) continue
-            if (!med.isRegular) continue
-            lines += buildDayLine(med, null)
+        // Planned catalog lines: today and future only — never backfill past days.
+        if (dateIso >= todayIso) {
+            for (med in meds) {
+                if (med.id in seenIds) continue
+                if (!med.isActive) continue
+                if (!med.isRegular) continue
+                val nameKey = MedAccentColors.normalizeName(med.name)
+                if (nameKey.isNotEmpty() && nameKey in seenNames) continue
+                seenIds += med.id
+                if (nameKey.isNotEmpty()) seenNames += nameKey
+                lines += buildDayLine(med, null)
+            }
         }
         return lines
     }
@@ -440,6 +496,13 @@ class CalendarViewModel @Inject constructor(
     }
 
     private fun dayLogKey(date: String, medicationId: String) = "$date|$medicationId"
+
+    companion object {
+        private const val KEY_YEAR = "cal_year"
+        private const val KEY_MONTH = "cal_month"
+        private const val KEY_SELECTED = "cal_selected"
+        private const val KEY_SUBTAB = "cal_subtab"
+    }
 
     private data class CalendarPartial(
         val ym: Pair<Int, Int>,

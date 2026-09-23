@@ -59,13 +59,12 @@ import androidx.navigation.compose.rememberNavController
 import com.moodlife.app.R
 import com.moodlife.app.ui.components.CrisisPlanHeaderAction
 import com.moodlife.app.ui.components.FitOneLineText
+import com.moodlife.app.ui.components.OnboardingWizard
 import com.moodlife.app.ui.navigation.CrisisChipUiState
 import com.moodlife.app.ui.navigation.NavHostViewModel
 import com.moodlife.app.ui.screens.TodayScreen
 import com.moodlife.app.ui.screens.calendar.CalendarScreen
 import com.moodlife.app.ui.screens.forecast.ForecastScreen
-import com.moodlife.app.ui.screens.meds.MedsScreen
-import com.moodlife.app.ui.screens.physical.PhysicalScreen
 import com.moodlife.app.ui.screens.reports.ReportsScreen
 import com.moodlife.app.ui.screens.guide.GuideScreen
 import com.moodlife.app.ui.screens.selfhelp.SelfHelpScreen
@@ -93,38 +92,51 @@ fun MoodLifeNavHost(
     themeViewModel: ThemeViewModel = hiltViewModel(),
 ) {
     val navController = rememberNavController()
-    val selfHelpEnabled by navHostViewModel.selfHelpTabEnabled.collectAsStateWithLifecycle()
-    val tabs = buildList {
-        add(MoodLifeTab.Today)
-        add(MoodLifeTab.Calendar)
-        add(MoodLifeTab.Reports)
-        add(MoodLifeTab.Forecast)
-        if (selfHelpEnabled) add(MoodLifeTab.SelfHelp)
-        add(MoodLifeTab.Settings)
-    }
+    val showWizard by navHostViewModel.showOnboardingWizard.collectAsStateWithLifecycle()
+    // Bottom bar: Today, Calendar, Reports, Forecast, Settings.
+    // Meds / Physical stay routable from Calendar subtabs (and navigateToTab).
+    val tabs = listOf(
+        MoodLifeTab.Today,
+        MoodLifeTab.Calendar,
+        MoodLifeTab.Reports,
+        MoodLifeTab.Forecast,
+        MoodLifeTab.Settings,
+    )
     val crisisState by navHostViewModel.crisisState.collectAsStateWithLifecycle()
     val isWide = LocalConfiguration.current.screenWidthDp >= 600
     val dark = LocalDarkTheme.current
 
+    val overlayRoutes = setOf(
+        MoodLifeTab.Guide.route,
+        MoodLifeTab.Sources.route,
+        MoodLifeTab.SelfHelp.route,
+    )
+    fun navigateToTab(route: String) {
+        val current = navController.currentDestination?.route
+        if (current in overlayRoutes) {
+            navController.popBackStack(MoodLifeTab.Today.route, inclusive = false)
+        }
+        val isToday = route == MoodLifeTab.Today.route
+        navController.navigate(route) {
+            popUpTo(navController.graph.findStartDestination().id) {
+                saveState = !isToday
+            }
+            launchSingleTop = true
+            restoreState = !isToday
+        }
+    }
+
     LaunchedEffect(navHostViewModel) {
         navHostViewModel.dayNavigation.switchTab.collect { route ->
-            navController.navigate(route) {
-                popUpTo(navController.graph.findStartDestination().id) { saveState = true }
-                launchSingleTop = true
-                restoreState = true
-            }
+            navigateToTab(route)
         }
     }
 
     val navBackStackEntry by navController.currentBackStackEntryAsState()
     val selectedRoutes = navBackStackEntry?.destination?.hierarchy?.mapNotNull { it.route }?.toSet().orEmpty()
-    val onSelect: (MoodLifeTab) -> Unit = { tab ->
-        navController.navigate(tab.route) {
-            popUpTo(navController.graph.findStartDestination().id) { saveState = true }
-            launchSingleTop = true
-            restoreState = true
-        }
-    }
+    // Overlay-only routes (Guide/Sources) sit above Today. Bottom-nav saveState would
+    // persist them on the start destination; restoring Today then resurfaces Guide.
+    val onSelect: (MoodLifeTab) -> Unit = { tab -> navigateToTab(tab.route) }
 
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background,
@@ -138,10 +150,15 @@ fun MoodLifeNavHost(
                     onToggleTheme = { themeViewModel.toggleDark(dark) },
                     onOpenSelfHelp = {
                         navController.navigate(MoodLifeTab.SelfHelp.route) {
+                            popUpTo(navController.graph.findStartDestination().id) {
+                                saveState = true
+                            }
                             launchSingleTop = true
+                            restoreState = true
                         }
                     },
                     onOpenGuide = {
+                        // Overlay: do not participate in bottom-tab save/restore.
                         navController.navigate(MoodLifeTab.Guide.route) {
                             launchSingleTop = true
                         }
@@ -178,8 +195,17 @@ fun MoodLifeNavHost(
             ) {
                 composable(MoodLifeTab.Today.route) { TodayScreen() }
                 composable(MoodLifeTab.Calendar.route) { CalendarScreen() }
-                composable(MoodLifeTab.Meds.route) { MedsScreen() }
-                composable(MoodLifeTab.Physical.route) { PhysicalScreen() }
+                // Legacy deep-links: Meds/Physical live under Calendar subtabs.
+                composable(MoodLifeTab.Meds.route) {
+                    LaunchedEffect(Unit) {
+                        navHostViewModel.dayNavigation.navigateToCalendarSubTab("Meds")
+                    }
+                }
+                composable(MoodLifeTab.Physical.route) {
+                    LaunchedEffect(Unit) {
+                        navHostViewModel.dayNavigation.navigateToCalendarSubTab("Physical")
+                    }
+                }
                 composable(MoodLifeTab.Reports.route) { ReportsScreen() }
                 composable(MoodLifeTab.Forecast.route) { ForecastScreen() }
                 composable(MoodLifeTab.SelfHelp.route) { SelfHelpScreen() }
@@ -188,6 +214,16 @@ fun MoodLifeNavHost(
                 composable(MoodLifeTab.Guide.route) { GuideScreen() }
             }
         }
+    }
+
+    if (showWizard) {
+        OnboardingWizard(
+            onComplete = navHostViewModel::completeOnboarding,
+            onOpenMedsSettings = {
+                navHostViewModel.openMedsSettings()
+                navigateToTab(MoodLifeTab.Settings.route)
+            },
+        )
     }
 }
 
@@ -228,6 +264,11 @@ private fun MoodLifeHeader(
                 onOpenSettings = onOpenCrisis,
             )
             val selfHelpCd = stringResource(R.string.tab_selfhelp)
+            val guideCd = stringResource(R.string.guide_title)
+            val sourcesCd = stringResource(R.string.tab_sources)
+            val themeCd = stringResource(
+                if (dark) R.string.header_theme_light else R.string.header_theme_dark,
+            )
             IconButton(
                 onClick = onOpenSelfHelp,
                 modifier = Modifier.semantics { contentDescription = selfHelpCd },
@@ -240,7 +281,7 @@ private fun MoodLifeHeader(
             }
             IconButton(
                 onClick = onOpenGuide,
-                modifier = Modifier.semantics { contentDescription = "Инструкция" },
+                modifier = Modifier.semantics { contentDescription = guideCd },
             ) {
                 Icon(
                     imageVector = Icons.Outlined.HelpOutline,
@@ -250,7 +291,7 @@ private fun MoodLifeHeader(
             }
             IconButton(
                 onClick = onOpenSources,
-                modifier = Modifier.semantics { contentDescription = "Источники" },
+                modifier = Modifier.semantics { contentDescription = sourcesCd },
             ) {
                 Icon(
                     imageVector = Icons.Outlined.MenuBook,
@@ -260,13 +301,7 @@ private fun MoodLifeHeader(
             }
             IconButton(
                 onClick = onToggleTheme,
-                modifier = Modifier.semantics {
-                    contentDescription = if (dark) {
-                        "Включить светлую тему"
-                    } else {
-                        "Включить тёмную тему"
-                    }
-                },
+                modifier = Modifier.semantics { contentDescription = themeCd },
             ) {
                 Icon(
                     imageVector = if (dark) Icons.Outlined.LightMode else Icons.Outlined.DarkMode,

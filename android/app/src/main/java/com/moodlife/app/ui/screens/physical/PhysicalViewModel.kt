@@ -3,9 +3,13 @@ package com.moodlife.app.ui.screens.physical
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.moodlife.app.data.health.HealthConnectManager
+import com.moodlife.app.data.local.entity.BodyMeasurementEntity
 import com.moodlife.app.data.local.entity.ExternalHealthDayEntity
+import com.moodlife.app.data.local.entity.LabResultEntity
 import com.moodlife.app.data.local.entity.PeriodSettingEntity
+import com.moodlife.app.data.repository.BodyMeasurementRepository
 import com.moodlife.app.data.repository.ExternalHealthRepository
+import com.moodlife.app.data.repository.LabResultRepository
 import com.moodlife.app.data.repository.MoodRepository
 import com.moodlife.app.data.repository.PeriodRepository
 import com.moodlife.app.data.repository.SettingsRepository
@@ -19,8 +23,10 @@ import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
@@ -48,6 +54,13 @@ data class PhysicalUiState(
     val summary: PhysicalAggregate? = null,
     val heightCm: Float? = null,
     val goals: NutritionGoals = NutritionGoals(),
+    val bodyMeasurementsEnabled: Boolean = true,
+    val labResultsEnabled: Boolean = true,
+    val bodyMeasurementForDate: BodyMeasurementEntity? = null,
+    val bodyMeasurementHistory: List<BodyMeasurementEntity> = emptyList(),
+    val chartHcDays: List<ExternalHealthDayEntity> = emptyList(),
+    val labResultForDate: List<LabResultEntity> = emptyList(),
+    val labResultHistory: List<LabResultEntity> = emptyList(),
 )
 
 @OptIn(ExperimentalCoroutinesApi::class)
@@ -58,6 +71,8 @@ class PhysicalViewModel @Inject constructor(
     private val moodRepository: MoodRepository,
     private val periodRepository: PeriodRepository,
     private val settingsRepository: SettingsRepository,
+    private val bodyMeasurementRepository: BodyMeasurementRepository,
+    private val labResultRepository: LabResultRepository,
 ) : ViewModel() {
 
     private val _period = MutableStateFlow(PhysicalPeriod.DAY)
@@ -80,25 +95,73 @@ class PhysicalViewModel @Inject constructor(
         PhysicalSummary.rangeFor(period, anchor)
     }
 
+    /** Charts look back up to 90 days ending at anchor (still offline-first). */
+    private val chartRangeFlow = _anchor.map { anchor ->
+        val end = LocalDate.parse(anchor)
+        val start = end.minusDays(89)
+        start.toString() to end.toString()
+    }
+
+    private val coreDataFlow = combine(
+        rangeFlow.flatMapLatest { (from, to) ->
+            externalHealthRepository.observeRange(from, to)
+        },
+        rangeFlow.flatMapLatest { (from, to) ->
+            moodRepository.observeRange(from, to)
+        },
+        periodRepository.observe(),
+        settingsRepository.observe(SettingsRepository.KEY_BODY_HEIGHT_CM),
+        settingsRepository.observe(SettingsRepository.KEY_NUTRITION_GOALS),
+    ) { days, moods, periodSetting, heightRaw, goalsRaw ->
+        CoreData(days, moods, periodSetting, heightRaw, goalsRaw)
+    }
+
+    /** Eager flags so toggles are never blocked by body/labs DAO issues. */
+    private val bodyEnabledFlow: StateFlow<Boolean> =
+        settingsRepository.observe(SettingsRepository.KEY_BODY_MEASUREMENTS_ENABLED)
+            .map { it != "false" }
+            .stateIn(viewModelScope, SharingStarted.Eagerly, true)
+
+    private val labsEnabledFlow: StateFlow<Boolean> =
+        settingsRepository.observe(SettingsRepository.KEY_LAB_RESULTS_ENABLED)
+            .map { it != "false" }
+            .stateIn(viewModelScope, SharingStarted.Eagerly, true)
+
+    private val bodyFlow = combine(
+        _anchor.flatMapLatest { date -> bodyMeasurementRepository.observeByDate(date) },
+        chartRangeFlow.flatMapLatest { (from, to) -> bodyMeasurementRepository.observeRange(from, to) },
+    ) { current, history -> current to history }
+        .catch { emit(null to emptyList()) }
+
+    private val labsFlow = combine(_anchor, chartRangeFlow) { date, range -> date to range }
+        .flatMapLatest { (date, range) ->
+            labResultRepository.observeRange(range.first, range.second).map { all ->
+                all.filter { it.date == date } to all
+            }
+        }
+        .catch { emit(emptyList<LabResultEntity>() to emptyList()) }
+
+    private val navFlow = combine(_period, _anchor, _syncing, _message, _hc) { a, b, c, d, e ->
+        NavBundle(a, b, c, d, e)
+    }
+
+    private val chartHcFlow = chartRangeFlow.flatMapLatest { (from, to) ->
+        externalHealthRepository.observeRange(from, to)
+    }.catch { emit(emptyList()) }
+
     val uiState: StateFlow<PhysicalUiState> = combine(
-        combine(
-            rangeFlow.flatMapLatest { (from, to) ->
-                externalHealthRepository.observeRange(from, to)
-            },
-            rangeFlow.flatMapLatest { (from, to) ->
-                moodRepository.observeRange(from, to)
-            },
-            periodRepository.observe(),
-            settingsRepository.observe(SettingsRepository.KEY_BODY_HEIGHT_CM),
-            settingsRepository.observe(SettingsRepository.KEY_NUTRITION_GOALS),
-        ) { days, moods, periodSetting, heightRaw, goalsRaw ->
-            Quint(days, moods, periodSetting, heightRaw, goalsRaw)
+        combine(coreDataFlow, navFlow, _didAutoSync) { data, nav, didAuto ->
+            Triple(data, nav, didAuto)
         },
-        combine(_period, _anchor, _syncing, _message, _hc) { a, b, c, d, e ->
-            Quint2(a, b, c, d, e)
+        bodyEnabledFlow,
+        labsEnabledFlow,
+        combine(bodyFlow, labsFlow, chartHcFlow) { body, labs, chartHc ->
+            Triple(body, labs, chartHc)
         },
-        _didAutoSync,
-    ) { data, nav, didAuto ->
+    ) { base, bodyOn, labsOn, tracking ->
+        val data = base.first
+        val nav = base.second
+        val didAuto = base.third
         val height = data.heightRaw?.toFloatOrNull()
         val goals = NutritionGoals.parse(data.goalsRaw)
         val summary = PhysicalSummary.aggregate(
@@ -110,6 +173,8 @@ class PhysicalViewModel @Inject constructor(
             heightCm = height,
             goals = goals,
         )
+        val (bodyCurrent, bodyHistory) = tracking.first
+        val (labCurrent, labHistory) = tracking.second
         PhysicalUiState(
             days = data.days,
             available = nav.hc.available,
@@ -127,8 +192,33 @@ class PhysicalViewModel @Inject constructor(
             summary = summary,
             heightCm = height,
             goals = goals,
+            bodyMeasurementsEnabled = bodyOn,
+            labResultsEnabled = labsOn,
+            bodyMeasurementForDate = bodyCurrent,
+            bodyMeasurementHistory = bodyHistory,
+            chartHcDays = tracking.third,
+            labResultForDate = labCurrent,
+            labResultHistory = labHistory,
         )
-    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), PhysicalUiState())
+    }.stateIn(viewModelScope, SharingStarted.Eagerly, PhysicalUiState())
+
+    fun setBodyMeasurementsEnabled(enabled: Boolean) {
+        viewModelScope.launch {
+            settingsRepository.set(
+                SettingsRepository.KEY_BODY_MEASUREMENTS_ENABLED,
+                if (enabled) "true" else "false",
+            )
+        }
+    }
+
+    fun setLabResultsEnabled(enabled: Boolean) {
+        viewModelScope.launch {
+            settingsRepository.set(
+                SettingsRepository.KEY_LAB_RESULTS_ENABLED,
+                if (enabled) "true" else "false",
+            )
+        }
+    }
 
     init {
         viewModelScope.launch {
@@ -191,6 +281,61 @@ class PhysicalViewModel @Inject constructor(
         }
     }
 
+    fun saveBodyMeasurement(
+        shoulderWidthCm: Float?,
+        bicepsCm: Float?,
+        chestCm: Float?,
+        underBustCm: Float?,
+        waistCm: Float?,
+        hipsCm: Float?,
+        thighCm: Float?,
+        weightKg: Float?,
+    ) {
+        viewModelScope.launch {
+            bodyMeasurementRepository.upsertForDate(
+                date = _anchor.value,
+                shoulderWidthCm = shoulderWidthCm,
+                bicepsCm = bicepsCm,
+                chestCm = chestCm,
+                underBustCm = underBustCm,
+                waistCm = waistCm,
+                hipsCm = hipsCm,
+                thighCm = thighCm,
+                weightKg = weightKg,
+            )
+        }
+    }
+
+    fun saveLabEntry(
+        name: String,
+        valueText: String,
+        unit: String?,
+        date: String,
+        clinic: String?,
+        id: String? = null,
+    ) {
+        viewModelScope.launch {
+            labResultRepository.upsertEntry(
+                id = id,
+                name = name,
+                valueText = valueText,
+                unit = unit,
+                date = date,
+                clinic = clinic,
+            )
+        }
+    }
+
+    fun deleteLabEntry(id: String) {
+        viewModelScope.launch { labResultRepository.deleteById(id) }
+    }
+
+    fun saveBodyMeasurementField(date: String, fieldId: String, value: Float?) {
+        viewModelScope.launch {
+            bodyMeasurementRepository.upsertSingleField(date, fieldId, value)
+        }
+    }
+
     fun refreshHcStatus() {
         viewModelScope.launch { refreshHcStatusInternal() }
     }
@@ -244,7 +389,7 @@ class PhysicalViewModel @Inject constructor(
         return DateTimeFormatter.ofPattern("d MMM, HH:mm", Locale("ru")).format(zoned)
     }
 
-    private data class Quint(
+    private data class CoreData(
         val days: List<ExternalHealthDayEntity>,
         val moods: List<com.moodlife.app.data.local.entity.MoodEntryEntity>,
         val periodSetting: PeriodSettingEntity?,
@@ -252,7 +397,7 @@ class PhysicalViewModel @Inject constructor(
         val goalsRaw: String?,
     )
 
-    private data class Quint2(
+    private data class NavBundle(
         val period: PhysicalPeriod,
         val anchor: String,
         val syncing: Boolean,

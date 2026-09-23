@@ -1,13 +1,16 @@
 package com.moodlife.app.ui.components
 
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ExpandLess
 import androidx.compose.material.icons.filled.ExpandMore
@@ -26,6 +29,9 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
@@ -42,11 +48,13 @@ fun CollapsibleSection(
     subtitle: String? = null,
     helpText: String? = null,
     onEdit: (() -> Unit)? = null,
+    accent: Color = MaterialTheme.colorScheme.primary,
+    leadingIcon: ImageVector? = null,
     content: @Composable () -> Unit,
 ) {
     var expanded by rememberSaveable(title) { mutableStateOf(initiallyExpanded) }
     var showHelp by rememberSaveable(title) { mutableStateOf(false) }
-    MoodCard(modifier, contentPadding = false) {
+    MoodCard(modifier, contentPadding = false, tint = accent) {
         Row(
             Modifier
                 .fillMaxWidth()
@@ -70,6 +78,30 @@ fun CollapsibleSection(
                     .padding(horizontal = 12.dp, vertical = 12.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
+                Box(
+                    Modifier
+                        .padding(end = 10.dp)
+                        .size(32.dp)
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(accent.copy(alpha = 0.18f)),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    if (leadingIcon != null) {
+                        Icon(
+                            leadingIcon,
+                            contentDescription = null,
+                            tint = accent,
+                            modifier = Modifier.size(18.dp),
+                        )
+                    } else {
+                        Box(
+                            Modifier
+                                .size(width = 4.dp, height = 14.dp)
+                                .clip(RoundedCornerShape(2.dp))
+                                .background(accent),
+                        )
+                    }
+                }
                 Column(Modifier.weight(1f)) {
                     Text(title, style = MaterialTheme.typography.titleMedium)
                     if (!expanded && !subtitle.isNullOrBlank()) {

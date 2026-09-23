@@ -24,13 +24,32 @@ class DayNavigationState @Inject constructor() {
     private val _sourcesHighlight = MutableStateFlow<String?>(null)
     val sourcesHighlight: StateFlow<String?> = _sourcesHighlight.asStateFlow()
 
+    /** Calendar Overview / Meds / Physical — sticky for deep-links from legacy meds/physical routes. */
+    private val _calendarSubTab = MutableSharedFlow<String>(extraBufferCapacity = 1)
+    val calendarSubTab: SharedFlow<String> = _calendarSubTab.asSharedFlow()
+
     fun navigateToDay(isoDate: String) {
         _openDay.tryEmit(isoDate)
         _switchTab.tryEmit("today")
     }
 
     fun navigateToTab(route: String) {
-        _switchTab.tryEmit(route)
+        when (route) {
+            "meds" -> {
+                _calendarSubTab.tryEmit("Meds")
+                _switchTab.tryEmit("calendar")
+            }
+            "physical" -> {
+                _calendarSubTab.tryEmit("Physical")
+                _switchTab.tryEmit("calendar")
+            }
+            else -> _switchTab.tryEmit(route)
+        }
+    }
+
+    fun navigateToCalendarSubTab(subTab: String) {
+        _calendarSubTab.tryEmit(subTab)
+        _switchTab.tryEmit("calendar")
     }
 
     fun navigateToSettings(section: String) {

@@ -1,32 +1,22 @@
 package com.moodlife.app.ui.screens
 
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.outlined.Delete
-import androidx.compose.material.icons.outlined.Edit
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Checkbox
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -38,6 +28,22 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.outlined.ShowChart
+import androidx.compose.material.icons.outlined.Delete
+import androidx.compose.material.icons.outlined.Edit
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.res.stringResource
@@ -54,6 +60,7 @@ import com.moodlife.app.domain.ClinicalAlerts
 import com.moodlife.app.domain.MoodScales
 import com.moodlife.app.domain.TodaySections
 import com.moodlife.app.domain.TodayTrackables
+import com.moodlife.app.domain.UiMode
 import com.moodlife.app.ui.components.AlertBanner
 import com.moodlife.app.ui.components.AxisScaleEditDialog
 import com.moodlife.app.ui.components.CatalogAddRow
@@ -62,7 +69,9 @@ import com.moodlife.app.ui.components.ChipToggleRow
 import com.moodlife.app.ui.components.CollapsibleSection
 import com.moodlife.app.ui.components.DateNavigationCard
 import com.moodlife.app.ui.components.EditCatalogItemDialog
+import com.moodlife.app.ui.components.EmptyStateCard
 import com.moodlife.app.ui.components.HealthSummaryCards
+import com.moodlife.app.ui.components.LaunchTipCard
 import com.moodlife.app.ui.components.MedicationFormDialog
 import com.moodlife.app.ui.components.MoodCheckInsCard
 import com.moodlife.app.ui.components.OnboardingCard
@@ -85,6 +94,7 @@ import java.util.Locale
 private val SymptomYesNo = listOf("Нет", "Да")
 private val SymptomQual4Lmh = listOf("Нет", "Меньше обычного", "Как обычно", "Больше обычного")
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun TodayScreen(
     viewModel: TodayViewModel = hiltViewModel(),
@@ -146,53 +156,61 @@ fun TodayScreen(
             )
         }
 
-        state.sectionPrefs
-            .filter { it.visible }
+        state.launchTipMessageRes?.let { tipRes ->
+            Spacer(modifier = Modifier.height(8.dp))
+            LaunchTipCard(
+                message = stringResource(tipRes),
+                onDismiss = viewModel::dismissLaunchTip,
+                modifier = Modifier.padding(bottom = 4.dp),
+            )
+        }
+
+        val duplicateSheets = setOf(
+            TodaySections.Id.MOOD,
+            TodaySections.Id.EXTRA,
+            TodaySections.Id.CLINICAL,
+        )
+        val visiblePrefs = state.sectionPrefs
+            .filter { it.visible && it.id !in duplicateSheets }
             .sortedBy { it.order }
-            .forEachIndexed { index, pref ->
+        val corePrefs = if (state.uiMode == UiMode.BASIC) {
+            visiblePrefs.filter { it.id in com.moodlife.app.domain.UiModeBasicCore }
+        } else {
+            visiblePrefs
+        }
+        val extraPrefs = if (state.uiMode == UiMode.BASIC) {
+            visiblePrefs.filter { it.id !in com.moodlife.app.domain.UiModeBasicCore }
+        } else {
+            emptyList()
+        }
+
+        corePrefs.forEachIndexed { index, pref ->
                 if (index > 0) Spacer(modifier = Modifier.height(12.dp))
                 val title = stringResource(TodaySections.titleRes(pref.id))
                 val help = stringResource(TodaySections.helpRes(pref.id))
                 when (pref.id) {
-                    TodaySections.Id.MOOD -> key(state.date, state.checkInConfig) {
+                    // MOOD / EXTRA / CLINICAL sheets removed: marking lives only in GRAPH_PARAMS.
+                    TodaySections.Id.MOOD,
+                    TodaySections.Id.EXTRA,
+                    TodaySections.Id.CLINICAL -> Unit
+                    TodaySections.Id.GRAPH_PARAMS -> {
                         CollapsibleSection(
                             title,
                             initiallyExpanded = true,
                             helpText = help,
                             onEdit = { viewModel.openSettingsSection("layout") },
                         ) {
-                            TrackableSection(
-                                section = "mood",
-                                state = state,
-                                viewModel = viewModel,
+                            Text(
+                                stringResource(R.string.today_chart_params_pick),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
-                        }
-                    }
-                    TodaySections.Id.EXTRA -> key(state.date, state.checkInConfig) {
-                        CollapsibleSection(
-                            title,
-                            initiallyExpanded = false,
-                            helpText = help,
-                            onEdit = { viewModel.openSettingsSection("layout") },
-                        ) {
-                            TrackableSection(
-                                section = "extra",
+                            Spacer(Modifier.height(8.dp))
+                            GraphParamsTrackablePicker(
                                 state = state,
                                 viewModel = viewModel,
-                            )
-                        }
-                    }
-                    TodaySections.Id.CLINICAL -> key(state.date, state.checkInConfig) {
-                        CollapsibleSection(
-                            title,
-                            initiallyExpanded = true,
-                            helpText = help,
-                            onEdit = { viewModel.openSettingsSection("layout") },
-                        ) {
-                            TrackableSection(
-                                section = "clinical",
-                                state = state,
-                                viewModel = viewModel,
+                                onToggle = viewModel::toggleTrackable,
+                                onScale = viewModel::setTrackableScale,
                             )
                         }
                     }
@@ -266,7 +284,7 @@ fun TodayScreen(
                         onEdit = { viewModel.openSettingsSection("meds") },
                     ) {
                         if (state.medications.isEmpty()) {
-                            Text(stringResource(R.string.today_meds_empty), style = MaterialTheme.typography.bodyMedium)
+                            EmptyStateCard(message = stringResource(R.string.today_meds_empty))
                             FilledTonalButton(
                                 onClick = { viewModel.openSettingsSection("meds") },
                                 modifier = Modifier.fillMaxWidth().padding(top = 10.dp),
@@ -381,7 +399,7 @@ fun TodayScreen(
                             modifier = Modifier.padding(bottom = 8.dp),
                         )
                         if (state.factors.isEmpty()) {
-                            Text(stringResource(R.string.today_factors_empty), style = MaterialTheme.typography.bodyMedium)
+                            EmptyStateCard(message = stringResource(R.string.today_factors_empty))
                             FilledTonalButton(onClick = viewModel::seedBasicFactors) {
                                 Text(stringResource(R.string.today_seed_factors))
                             }
@@ -454,7 +472,7 @@ fun TodayScreen(
                         onEdit = { viewModel.openSettingsSection("warnings") },
                     ) {
                         if (state.warnings.isEmpty()) {
-                            Text(stringResource(R.string.today_warnings_empty), style = MaterialTheme.typography.bodyMedium)
+                            EmptyStateCard(message = stringResource(R.string.today_warnings_empty))
                             FilledTonalButton(onClick = viewModel::seedBasicWarnings) {
                                 Text(stringResource(R.string.today_seed_warnings))
                             }
@@ -489,10 +507,8 @@ fun TodayScreen(
                         onEdit = { viewModel.openSettingsSection("layout") },
                     ) {
                         if (state.dayNotes.isEmpty()) {
-                            Text(
-                                text = stringResource(R.string.today_notes_empty),
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            EmptyStateCard(
+                                message = stringResource(R.string.today_notes_empty),
                                 modifier = Modifier.padding(bottom = 8.dp),
                             )
                         }
@@ -516,6 +532,42 @@ fun TodayScreen(
                     }
                 }
             }
+
+        if (state.uiMode == UiMode.BASIC) {
+            Spacer(modifier = Modifier.height(12.dp))
+            CollapsibleSection(
+                title = stringResource(R.string.today_more_sections),
+                initiallyExpanded = false,
+                helpText = stringResource(R.string.today_more_sections_hint),
+                accent = MaterialTheme.colorScheme.secondary,
+            ) {
+                Text(
+                    stringResource(R.string.today_more_sections_body),
+                    style = MaterialTheme.typography.bodyMedium,
+                )
+                if (extraPrefs.isNotEmpty()) {
+                    Text(
+                        extraPrefs.map { stringResource(TodaySections.titleRes(it.id)) }
+                            .joinToString(", "),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(top = 6.dp),
+                    )
+                }
+                Button(
+                    onClick = { viewModel.setUiMode(UiMode.ADVANCED) },
+                    modifier = Modifier.fillMaxWidth().padding(top = 10.dp).heightIn(min = 48.dp),
+                ) {
+                    Text(stringResource(R.string.ui_mode_switch_advanced))
+                }
+                OutlinedButton(
+                    onClick = { viewModel.openSettingsSection("layout") },
+                    modifier = Modifier.fillMaxWidth().padding(top = 8.dp).heightIn(min = 48.dp),
+                ) {
+                    Text(stringResource(R.string.today_more_open_layout))
+                }
+            }
+        }
 
         state.episodePhase?.let { phase ->
             Spacer(modifier = Modifier.height(8.dp))
@@ -658,113 +710,156 @@ fun TodayScreen(
 }
 
 @Composable
+private fun GraphParamsTrackablePicker(
+    state: com.moodlife.app.ui.screens.today.TodayUiState,
+    viewModel: TodayViewModel,
+    onToggle: (String) -> Unit,
+    onScale: (String, String) -> Unit,
+) {
+    val sections = listOf(
+        "mood" to R.string.today_mood_section,
+        "extra" to R.string.today_extra_section,
+        "clinical" to R.string.today_clinical_section,
+    )
+    val scaleIds = listOf("0-5", "0-10", "options", "yesno")
+    val scaleColor = LocalMoodColors.current.functioning
+    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        sections.forEach { (section, titleRes) ->
+            val items = com.moodlife.app.domain.TodayTrackables.forSection(state.trackables, section)
+            if (items.isEmpty()) return@forEach
+            Text(
+                stringResource(titleRes),
+                style = MaterialTheme.typography.titleSmall,
+                color = MaterialTheme.colorScheme.primary,
+            )
+            items.forEach { item ->
+                Column(Modifier.padding(vertical = 4.dp)) {
+                    Row(
+                        Modifier
+                            .fillMaxWidth()
+                            .clickable { onToggle(item.key) }
+                            .padding(vertical = 2.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Checkbox(
+                            checked = item.enabled,
+                            onCheckedChange = { onToggle(item.key) },
+                        )
+                        Text(
+                            trackableLabel(item.key, null),
+                            style = MaterialTheme.typography.bodyMedium,
+                            modifier = Modifier.padding(start = 4.dp).weight(1f),
+                        )
+                    }
+                    if (item.enabled) {
+                        Row(
+                            Modifier.padding(start = 40.dp),
+                            horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        ) {
+                            scaleIds.forEach { scale ->
+                                FilterChip(
+                                    selected = item.scaleType == scale,
+                                    onClick = { onScale(item.key, scale) },
+                                    label = { Text(scale) },
+                                )
+                            }
+                        }
+                        Spacer(Modifier.height(6.dp))
+                        TrackableValueInput(
+                            item = item,
+                            state = state,
+                            viewModel = viewModel,
+                            scaleColor = scaleColor,
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun TrackableValueInput(
+    item: com.moodlife.app.domain.TodayTrackables.Item,
+    state: com.moodlife.app.ui.screens.today.TodayUiState,
+    viewModel: TodayViewModel,
+    scaleColor: androidx.compose.ui.graphics.Color,
+) {
+    val value = trackableValue(item.key, state)
+    val sourceId = CitationTopics.sourceIdForAxis(item.key)
+    val axisCfg = state.checkInConfig.axes.find { it.id == item.key }
+    val label = trackableLabel(item.key, axisCfg?.label)
+    val color = if (item.key == "safetyCheck") LocalMoodColors.current.safety else scaleColor
+    when (item.scaleType) {
+        "options" -> {
+            val options = trackableOptions(item.key)
+            ScaleInput(
+                label = label,
+                value = value.coerceIn(0, options.lastIndex.coerceAtLeast(0)),
+                onValueChange = { applyTrackableValue(item.key, it, viewModel) },
+                color = color,
+                options = options,
+                hint = axisHint(item.key),
+                citationSourceId = sourceId,
+                onOpenSources = { viewModel.openSources(sourceId) },
+            )
+        }
+        "yesno" -> ScaleInput(
+            label = label,
+            value = value.coerceIn(0, 1),
+            onValueChange = { applyTrackableValue(item.key, it, viewModel) },
+            color = color,
+            options = listOf("Нет", "Да"),
+            hint = axisHint(item.key),
+            citationSourceId = sourceId,
+            onOpenSources = { viewModel.openSources(sourceId) },
+        )
+        else -> {
+            val max = TodayTrackables.maxFor(item.scaleType, 5)
+            val axis = MoodScales.MOOD_AXES.find { it.key == item.key }
+            val customAnchors = axisCfg?.anchors()
+            ScaleInput(
+                label = label,
+                value = value.coerceIn(0, max),
+                onValueChange = { applyTrackableValue(item.key, it, viewModel) },
+                color = color,
+                max = max,
+                anchors = when {
+                    customAnchors != null -> customAnchors
+                    max == 5 -> axis?.anchors ?: MoodScales.INTENSITY_ANCHORS_COMPACT
+                    else -> null
+                },
+                hint = axisHint(item.key),
+                citationSourceId = sourceId,
+                onOpenSources = { viewModel.openSources(sourceId) },
+            )
+        }
+    }
+}
+
+@Composable
 private fun TrackableSection(
     section: String,
     state: com.moodlife.app.ui.screens.today.TodayUiState,
     viewModel: TodayViewModel,
 ) {
+    // Kept for any residual callers; primary marking is GraphParamsTrackablePicker.
     val items = remember(state.date, state.trackables, state.checkInConfig, section) {
         TodayTrackables.forSection(state.trackables, section).filter { it.enabled }
     }
     val scaleColor = LocalMoodColors.current.functioning
     if (items.isEmpty()) {
-        Text(
-            stringResource(R.string.today_trackables_empty),
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
-        FilledTonalButton(
-            onClick = { viewModel.openSettingsSection("layout") },
-            modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
-        ) {
-            Text(stringResource(R.string.today_trackables_configure))
-        }
+        EmptyStateCard(message = stringResource(R.string.today_trackables_empty))
         return
     }
-    Text(
-        stringResource(R.string.today_trackables_hint),
-        style = MaterialTheme.typography.bodySmall,
-        color = MaterialTheme.colorScheme.onSurfaceVariant,
-        modifier = Modifier.padding(bottom = 8.dp),
-    )
-    ChipToggleRow(
-        items = items.map { item ->
-            val value = trackableValue(item.key, state)
-            val axisCfg = state.checkInConfig.axes.find { it.id == item.key }
-            ChipToggleItem(
-                id = item.key,
-                label = trackableLabel(item.key, axisCfg?.label),
-                active = value > 0,
-                color = if (item.key == "safetyCheck") LocalMoodColors.current.safety else scaleColor,
-            )
-        },
-        onToggle = { key ->
-            val current = trackableValue(key, state)
-            val item = items.find { it.key == key } ?: return@ChipToggleRow
-            if (current > 0) {
-                applyTrackableValue(key, 0, viewModel)
-            } else {
-                val starter = when (item.scaleType) {
-                    "yesno" -> 1
-                    "options" -> 1
-                    else -> 1
-                }
-                applyTrackableValue(key, starter, viewModel)
-            }
-        },
-        onEdit = { _ -> viewModel.openSettingsSection("layout") },
-    )
-    items.filter { trackableValue(it.key, state) > 0 }.forEach { item ->
-        val value = trackableValue(item.key, state)
-        val sourceId = CitationTopics.sourceIdForAxis(item.key)
-        val axisCfg = state.checkInConfig.axes.find { it.id == item.key }
-        val label = trackableLabel(item.key, axisCfg?.label)
-        val color = if (item.key == "safetyCheck") LocalMoodColors.current.safety else scaleColor
-        when (item.scaleType) {
-            "options" -> {
-                val options = trackableOptions(item.key)
-                ScaleInput(
-                    label = label,
-                    value = value.coerceIn(0, options.lastIndex.coerceAtLeast(0)),
-                    onValueChange = { applyTrackableValue(item.key, it, viewModel) },
-                    color = color,
-                    options = options,
-                    hint = axisHint(item.key),
-                    citationSourceId = sourceId,
-                    onOpenSources = { viewModel.openSources(sourceId) },
-                )
-            }
-            "yesno" -> ScaleInput(
-                label = label,
-                value = value.coerceIn(0, 1),
-                onValueChange = { applyTrackableValue(item.key, it, viewModel) },
-                color = color,
-                options = listOf("Нет", "Да"),
-                hint = axisHint(item.key),
-                citationSourceId = sourceId,
-                onOpenSources = { viewModel.openSources(sourceId) },
-            )
-            else -> {
-                val max = TodayTrackables.maxFor(item.scaleType, 5)
-                val axis = MoodScales.MOOD_AXES.find { it.key == item.key }
-                val customAnchors = axisCfg?.anchors()
-                ScaleInput(
-                    label = label,
-                    value = value.coerceIn(0, max),
-                    onValueChange = { applyTrackableValue(item.key, it, viewModel) },
-                    color = color,
-                    max = max,
-                    anchors = when {
-                        customAnchors != null -> customAnchors
-                        max == 5 -> axis?.anchors ?: MoodScales.INTENSITY_ANCHORS_COMPACT
-                        else -> null
-                    },
-                    hint = axisHint(item.key),
-                    citationSourceId = sourceId,
-                    onOpenSources = { viewModel.openSources(sourceId) },
-                )
-            }
-        }
+    items.forEach { item ->
+        TrackableValueInput(
+            item = item,
+            state = state,
+            viewModel = viewModel,
+            scaleColor = scaleColor,
+        )
+        Spacer(Modifier.height(8.dp))
     }
 }
 
@@ -843,7 +938,7 @@ private fun TodaySymptomsBody(
     onScaleTypeChange: (String) -> Unit,
 ) {
     if (symptoms.isEmpty()) {
-        Text(stringResource(R.string.today_symptoms_empty), style = MaterialTheme.typography.bodyMedium)
+        EmptyStateCard(message = stringResource(R.string.today_symptoms_empty))
         FilledTonalButton(onClick = onSeedBasic) {
             Text(stringResource(R.string.today_seed_symptoms))
         }
@@ -1119,12 +1214,12 @@ private fun extraAxisBinding(
 }
 
 private fun phaseLabel(phase: String): String = when (phase) {
-    "euthymic" -> "Эйтимия"
-    "prodromal_depression" -> "Продром депрессии"
-    "prodromal_mania" -> "Продром мании"
-    "acute_depression" -> "Острая депрессия"
-    "acute_mania" -> "Острый подъём"
-    "mixed" -> "Смешанный эпизод"
-    "recovery" -> "Восстановление"
+    "euthymic" -> "Ровные отметки по шкалам"
+    "prodromal_depression" -> "Ранние признаки спада по шкалам"
+    "prodromal_mania" -> "Ранние признаки подъёма по шкалам"
+    "acute_depression" -> "Выраженный спад по шкалам"
+    "acute_mania" -> "Выраженный подъём по шкалам"
+    "mixed" -> "Смешанные отметки по шкалам"
+    "recovery" -> "Отметки ближе к обычным"
     else -> phase
 }

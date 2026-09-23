@@ -3,15 +3,22 @@ package com.moodlife.app.data.repository
 import com.moodlife.app.data.local.dao.MedicationDao
 import com.moodlife.app.data.local.dao.MedicationLogDao
 import com.moodlife.app.data.local.dao.MoodEntryDao
+import com.moodlife.app.data.local.dao.WarningSignDao
+import com.moodlife.app.data.local.dao.WarningTriggerDao
 import com.moodlife.app.data.local.entity.MoodEntryEntity
 import com.moodlife.app.data.local.entity.PeriodSettingEntity
 import com.moodlife.app.domain.ForecastEngine
 import com.moodlife.app.domain.InsightsEngine
+import com.moodlife.app.domain.MedAccentColors
 import com.moodlife.app.domain.MonthBurden
 import com.moodlife.app.util.DateUtils
+import com.moodlife.app.util.MedsUtils
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.mapLatest
+import java.time.LocalDate
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -26,6 +33,22 @@ data class MedDoseSeries(
     val points: List<Pair<String, Float>>,
 )
 
+data class WarningSignStat(
+    val name: String,
+    val count: Int,
+    val avgIntensity: Float,
+)
+
+data class MonthEntrySummary(
+    val year: Int,
+    val month: Int, // 0-based
+    val label: String,
+    val entryCount: Int,
+    val avgPolarity: Float?,
+    val avgSleepHours: Float?,
+    val medNames: List<String>,
+)
+
 /** Extract first numeric dose from free-text dosage (e.g. "100 мг", "25mg", "0,5"). */
 internal fun parseDoseValue(raw: String?): Float? {
     if (raw.isNullOrBlank()) return null
@@ -33,11 +56,14 @@ internal fun parseDoseValue(raw: String?): Float? {
     return match.groupValues[1].replace(',', '.').toFloatOrNull()
 }
 
+@OptIn(ExperimentalCoroutinesApi::class)
 @Singleton
 class ReportsRepository @Inject constructor(
     private val moodEntryDao: MoodEntryDao,
     private val medicationLogDao: MedicationLogDao,
     private val medicationDao: MedicationDao,
+    private val warningTriggerDao: WarningTriggerDao,
+    private val warningSignDao: WarningSignDao,
 ) {
     fun observeMonthEntries(year: Int, month: Int): Flow<List<MoodEntryEntity>> {
         val (from, to) = DateUtils.monthRange(year, month)
@@ -52,9 +78,56 @@ class ReportsRepository @Inject constructor(
         ) { logs, meds -> MonthBurden.adherence(logs, meds) }
     }
 
+    /** Per-day adherence fraction for calendar-style med grid (null = no logs that day). */
+    fun observeMonthAdherenceDays(year: Int, month: Int): Flow<List<Pair<String, Float?>>> {
+        val (from, to) = DateUtils.monthRange(year, month)
+        return combine(
+            medicationLogDao.observeRange(from, to),
+            medicationDao.observeVisibleInRange(from, to),
+        ) { logs, meds ->
+            val byDate = logs.groupBy { it.date }
+            val byId = meds.associateBy { it.id }
+            val start = LocalDate.parse(from)
+            val end = LocalDate.parse(to)
+            buildList {
+                var d = start
+                while (!d.isAfter(end)) {
+                    val iso = d.toString()
+                    val dayLogs = byDate[iso].orEmpty()
+                    if (dayLogs.isEmpty()) {
+                        add(d.dayOfMonth.toString() to null)
+                    } else {
+                        var taken = 0
+                        var scheduled = 0
+                        dayLogs.forEach { log ->
+                            val med = byId[log.medicationId] ?: return@forEach
+                            val raw = log.intakeTimesSnapshot?.takeIf { it.isNotBlank() } ?: med.intakeTimes
+                            val slots = MedsUtils.parseIntakeTimes(raw)
+                            val timed = slots.filter { it != "by-scheme" }
+                            if (timed.isEmpty()) {
+                                scheduled += 1
+                                if (log.taken) taken += 1
+                            } else {
+                                scheduled += timed.size
+                                taken += timed.count { slot ->
+                                    MedsUtils.isSlotTaken(log.taken, log.slotsTaken, slot, timed)
+                                }
+                            }
+                        }
+                        add(
+                            d.dayOfMonth.toString() to
+                                if (scheduled <= 0) null else taken.toFloat() / scheduled,
+                        )
+                    }
+                    d = d.plusDays(1)
+                }
+            }
+        }
+    }
+
     /**
-     * Per-medication dose series for the month: X = day-of-month label, Y = parsed numeric dose
-     * on days the medication was taken (from log/catalog dosage text).
+     * Per-medication dose series for the month.
+     * Same normalized name → one series (points merged).
      */
     fun observeMonthMedDoseSeries(year: Int, month: Int): Flow<List<MedDoseSeries>> {
         val (from, to) = DateUtils.monthRange(year, month)
@@ -64,25 +137,26 @@ class ReportsRepository @Inject constructor(
         ) { logs, meds ->
             if (meds.isEmpty()) return@combine emptyList()
             val byDate = logs.groupBy { it.date }
-            meds.mapNotNull { med ->
+            val byName = linkedMapOf<String, MedDoseSeries>()
+            meds.forEach { med ->
+                val nameKey = MedAccentColors.normalizeName(med.name)
+                if (nameKey.isEmpty()) return@forEach
                 val points = mutableListOf<Pair<String, Float>>()
-                var d = java.time.LocalDate.parse(from)
-                val end = java.time.LocalDate.parse(to)
+                var d = LocalDate.parse(from)
+                val end = LocalDate.parse(to)
                 while (!d.isAfter(end)) {
                     val iso = d.toString()
                     val log = byDate[iso].orEmpty().find { it.medicationId == med.id }
                     val dayLabel = d.dayOfMonth.toString()
                     if (log != null) {
                         val raw = log.intakeTimesSnapshot?.takeIf { it.isNotBlank() } ?: med.intakeTimes
-                        val slots = com.moodlife.app.util.MedsUtils.parseIntakeTimes(raw)
+                        val slots = MedsUtils.parseIntakeTimes(raw)
                         val timed = slots.filter { it != "by-scheme" }
                         val anyTaken = if (timed.isEmpty()) {
                             log.taken
                         } else {
                             timed.any { slot ->
-                                com.moodlife.app.util.MedsUtils.isSlotTaken(
-                                    log.taken, log.slotsTaken, slot, timed,
-                                )
+                                MedsUtils.isSlotTaken(log.taken, log.slotsTaken, slot, timed)
                             }
                         }
                         if (anyTaken) {
@@ -94,9 +168,23 @@ class ReportsRepository @Inject constructor(
                     }
                     d = d.plusDays(1)
                 }
-                if (points.isEmpty()) null
-                else MedDoseSeries(medId = med.id, name = med.name, points = points)
+                if (points.isEmpty()) return@forEach
+                val existing = byName[nameKey]
+                if (existing == null) {
+                    byName[nameKey] = MedDoseSeries(
+                        medId = med.id,
+                        name = med.name.trim(),
+                        points = points,
+                    )
+                } else {
+                    val merged = (existing.points + points)
+                        .groupBy({ it.first }, { it.second })
+                        .map { (day, doses) -> day to (doses.maxOrNull() ?: 0f) }
+                        .sortedWith(compareBy({ it.first.toIntOrNull() ?: Int.MAX_VALUE }, { it.first }))
+                    byName[nameKey] = existing.copy(points = merged)
+                }
             }
+            byName.values.toList()
         }
     }
 
@@ -109,8 +197,8 @@ class ReportsRepository @Inject constructor(
         ) { logs, meds ->
             if (meds.isEmpty()) return@combine emptyList()
             val byDate = logs.groupBy { it.date }
-            val start = java.time.LocalDate.parse(from)
-            val end = java.time.LocalDate.parse(to)
+            val start = LocalDate.parse(from)
+            val end = LocalDate.parse(to)
             buildList {
                 var d = start
                 while (!d.isAfter(end)) {
@@ -120,15 +208,13 @@ class ReportsRepository @Inject constructor(
                     meds.forEach { med ->
                         val log = dayLogs.find { it.medicationId == med.id } ?: return@forEach
                         val raw = log.intakeTimesSnapshot?.takeIf { it.isNotBlank() } ?: med.intakeTimes
-                        val slots = com.moodlife.app.util.MedsUtils.parseIntakeTimes(raw)
+                        val slots = MedsUtils.parseIntakeTimes(raw)
                         val timed = slots.filter { it != "by-scheme" }
                         val takenLabels = if (timed.isEmpty()) {
                             if (log.taken) listOf("день") else emptyList()
                         } else {
                             timed.filter { slot ->
-                                com.moodlife.app.util.MedsUtils.isSlotTaken(
-                                    log.taken, log.slotsTaken, slot, timed,
-                                )
+                                MedsUtils.isSlotTaken(log.taken, log.slotsTaken, slot, timed)
                             }
                         }
                         if (takenLabels.isEmpty()) return@forEach
@@ -144,6 +230,77 @@ class ReportsRepository @Inject constructor(
                     }
                     d = d.plusDays(1)
                 }
+            }
+        }
+    }
+
+    /**
+     * Frequency and average intensity of early-warning signs logged this month.
+     * Counts and intensity only — not progress toward an episode.
+     */
+    fun observeMonthWarningStats(year: Int, month: Int): Flow<List<WarningSignStat>> {
+        val (from, to) = DateUtils.monthRange(year, month)
+        return moodEntryDao.observeRange(from, to).mapLatest { entries ->
+            if (entries.isEmpty()) return@mapLatest emptyList()
+            val triggers = warningTriggerDao.listForEntries(entries.map { it.id })
+                .filter { it.intensity > 0 }
+            if (triggers.isEmpty()) return@mapLatest emptyList()
+            val signs = warningSignDao.observeAll().first().associateBy { it.id }
+            triggers.groupBy { it.warningSignId }.mapNotNull { (signId, list) ->
+                val name = signs[signId]?.name?.takeIf { it.isNotBlank() } ?: return@mapNotNull null
+                WarningSignStat(
+                    name = name,
+                    count = list.size,
+                    avgIntensity = list.map { it.intensity }.average().toFloat(),
+                )
+            }.sortedByDescending { it.count }
+        }
+    }
+
+    /** Last [count] months of diary aggregates — «сводка записей», not episode typing. */
+    fun observeRecentMonthSummaries(count: Int = 6): Flow<List<MonthEntrySummary>> {
+        val today = LocalDate.now()
+        val start = today.withDayOfMonth(1).minusMonths((count - 1).toLong())
+        val from = start.toString()
+        val to = today.toString()
+        return combine(
+            moodEntryDao.observeRange(from, to),
+            medicationLogDao.observeRange(from, to),
+            medicationDao.observeVisibleInRange(from, to),
+        ) { entries, logs, meds ->
+            val medById = meds.associateBy { it.id }
+            (0 until count).map { offset ->
+                val ym = today.withDayOfMonth(1).minusMonths((count - 1 - offset).toLong())
+                val y = ym.year
+                val m = ym.monthValue - 1
+                val (mFrom, mTo) = DateUtils.monthRange(y, m)
+                val monthEntries = entries.filter { it.date in mFrom..mTo }
+                val avgPol = monthEntries
+                    .map { (it.elevated - it.depressed).toFloat() }
+                    .average()
+                    .takeIf { monthEntries.isNotEmpty() }
+                    ?.toFloat()
+                val avgSleep = monthEntries.mapNotNull { it.sleepHours?.toFloat() }
+                    .average()
+                    .takeIf { !it.isNaN() }
+                    ?.toFloat()
+                val names = logs.filter { it.date in mFrom..mTo }
+                    .mapNotNull { log ->
+                        val med = medById[log.medicationId]
+                        (log.nameSnapshot?.takeIf { it.isNotBlank() } ?: med?.name)?.trim()
+                    }
+                    .filter { it.isNotEmpty() }
+                    .distinctBy { MedAccentColors.normalizeName(it) }
+                    .sorted()
+                MonthEntrySummary(
+                    year = y,
+                    month = m,
+                    label = "${DateUtils.MONTH_NAMES_RU[m]} $y",
+                    entryCount = monthEntries.size,
+                    avgPolarity = avgPol,
+                    avgSleepHours = avgSleep,
+                    medNames = names,
+                )
             }
         }
     }

@@ -537,6 +537,20 @@ class SettingsViewModel @Inject constructor(
         settingsRepository.set(SettingsRepository.KEY_SELFHELP_TAB, if (enabled) "true" else "false")
     }
 
+    fun setBodyMeasurementsEnabled(enabled: Boolean) = viewModelScope.launch {
+        settingsRepository.set(
+            SettingsRepository.KEY_BODY_MEASUREMENTS_ENABLED,
+            if (enabled) "true" else "false",
+        )
+    }
+
+    fun setLabResultsEnabled(enabled: Boolean) = viewModelScope.launch {
+        settingsRepository.set(
+            SettingsRepository.KEY_LAB_RESULTS_ENABLED,
+            if (enabled) "true" else "false",
+        )
+    }
+
     fun setCheckInScheme(scheme: String) = viewModelScope.launch {
         settingsRepository.set(SettingsRepository.KEY_CHECKIN_SCHEME, scheme)
     }
@@ -564,9 +578,28 @@ class SettingsViewModel @Inject constructor(
         settingsRepository.set(
             SettingsRepository.KEY_REPORTS_CHARTS,
             ids.joinToString(",").ifBlank {
-                "dashboard,mood_sleep,meddose,heatmap,scatter,level2,level3,radar,priority,burden"
+                com.moodlife.app.domain.ReportsCharts.serializeVisible(
+                    com.moodlife.app.domain.ReportsCharts.defaultVisible,
+                )
             },
         )
+    }
+
+    fun observeReportsChartOrder() = settingsRepository.observe(SettingsRepository.KEY_REPORTS_CHART_ORDER)
+
+    fun setReportsChartOrder(ids: List<String>) = viewModelScope.launch {
+        settingsRepository.set(
+            SettingsRepository.KEY_REPORTS_CHART_ORDER,
+            ids.joinToString(","),
+        )
+    }
+
+    fun moveReportsChart(order: List<String>, from: Int, to: Int) {
+        if (from !in order.indices || to !in order.indices || from == to) return
+        val next = order.toMutableList()
+        val item = next.removeAt(from)
+        next.add(to, item)
+        setReportsChartOrder(next)
     }
 
     fun saveDiaryReminder(context: android.content.Context, enabled: Boolean, hour: Int, minute: Int) =
@@ -596,6 +629,10 @@ class SettingsViewModel @Inject constructor(
         }
 
     fun observeSelfHelpTab() = settingsRepository.observe(SettingsRepository.KEY_SELFHELP_TAB)
+    fun observeBodyMeasurementsEnabled() =
+        settingsRepository.observe(SettingsRepository.KEY_BODY_MEASUREMENTS_ENABLED)
+    fun observeLabResultsEnabled() =
+        settingsRepository.observe(SettingsRepository.KEY_LAB_RESULTS_ENABLED)
     fun observeCheckInScheme() = settingsRepository.observe(SettingsRepository.KEY_CHECKIN_SCHEME)
     fun observeCheckInAxes() = settingsRepository.observe(SettingsRepository.KEY_CHECKIN_AXES)
     fun observeCheckInConfig() = settingsRepository.observe(SettingsRepository.KEY_CHECKIN_CONFIG)

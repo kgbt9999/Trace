@@ -22,6 +22,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -109,18 +110,22 @@ fun PhysicalStateSections(
     summary: PhysicalAggregate?,
     onPrevDay: (() -> Unit)? = null,
     onNextDay: (() -> Unit)? = null,
+    onConfigureCycle: (() -> Unit)? = null,
     modifier: Modifier = Modifier,
 ) {
+    val mood = LocalMoodColors.current
     if (summary == null) {
-        Text(
-            stringResource(R.string.physical_empty),
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = modifier,
-        )
+        Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            EmptyStateCard(message = stringResource(R.string.physical_empty))
+            CycleSectionCard(
+                cycleDay = null,
+                cyclePhaseLabel = null,
+                onConfigureCycle = onConfigureCycle,
+                accent = mood.cycle,
+            )
+        }
         return
     }
-    val mood = LocalMoodColors.current
     Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(10.dp)) {
         KbjuNutritionCard(
             summary = summary,
@@ -128,7 +133,7 @@ fun PhysicalStateSections(
             onNextDay = onNextDay,
         )
 
-        MoodCard {
+        MoodCard(tint = MaterialTheme.colorScheme.primary) {
             Text(
                 stringResource(R.string.physical_body_title),
                 style = MaterialTheme.typography.titleSmall,
@@ -141,45 +146,18 @@ fun PhysicalStateSections(
                 verticalArrangement = Arrangement.spacedBy(8.dp),
             ) {
                 CompactMetric(
-                    label = stringResource(R.string.physical_height),
-                    value = summary.heightCm?.let { String.format(Locale("ru"), "%.0f см", it) } ?: "—",
-                )
-                CompactMetric(
                     label = stringResource(R.string.physical_weight),
                     value = summary.weightKg?.let { String.format(Locale("ru"), "%.1f кг", it) } ?: "—",
                 )
             }
         }
 
-        MoodCard {
-            Text(
-                stringResource(R.string.physical_cycle_title),
-                style = MaterialTheme.typography.titleSmall,
-                fontWeight = FontWeight.SemiBold,
-                color = mood.cycle,
-            )
-            if (summary.cycleDay == null) {
-                Text(
-                    stringResource(R.string.physical_cycle_empty),
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(top = 6.dp),
-                )
-            } else {
-                Text(
-                    stringResource(R.string.physical_cycle_day, summary.cycleDay),
-                    style = MaterialTheme.typography.bodyLarge,
-                    modifier = Modifier.padding(top = 6.dp),
-                )
-                summary.cyclePhaseLabel?.let {
-                    Text(
-                        stringResource(R.string.physical_cycle_phase, it),
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
-            }
-        }
+        CycleSectionCard(
+            cycleDay = summary.cycleDay,
+            cyclePhaseLabel = summary.cyclePhaseLabel,
+            onConfigureCycle = onConfigureCycle,
+            accent = mood.cycle,
+        )
 
         MoodCard {
             Text(
@@ -248,6 +226,52 @@ fun PhysicalStateSections(
 }
 
 @Composable
+private fun CycleSectionCard(
+    cycleDay: Int?,
+    cyclePhaseLabel: String?,
+    onConfigureCycle: (() -> Unit)?,
+    accent: Color,
+) {
+    MoodCard(tint = accent) {
+        Text(
+            stringResource(R.string.physical_cycle_title),
+            style = MaterialTheme.typography.titleSmall,
+            fontWeight = FontWeight.SemiBold,
+            color = accent,
+        )
+        if (cycleDay == null) {
+            EmptyStateCard(
+                message = stringResource(R.string.physical_cycle_empty),
+                modifier = Modifier.padding(top = 8.dp),
+            )
+        } else {
+            Text(
+                stringResource(R.string.physical_cycle_day, cycleDay),
+                style = MaterialTheme.typography.bodyLarge,
+                modifier = Modifier.padding(top = 6.dp),
+            )
+            cyclePhaseLabel?.let {
+                Text(
+                    stringResource(R.string.physical_cycle_phase, it),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        }
+        if (onConfigureCycle != null) {
+            OutlinedButton(
+                onClick = onConfigureCycle,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 10.dp),
+            ) {
+                Text(stringResource(R.string.calendar_cycle_settings))
+            }
+        }
+    }
+}
+
+@Composable
 private fun KbjuNutritionCard(
     summary: PhysicalAggregate,
     onPrevDay: (() -> Unit)?,
@@ -276,30 +300,26 @@ private fun KbjuNutritionCard(
                 MacroBarColumn(
                     label = stringResource(R.string.physical_macro_protein),
                     current = summary.proteinG,
-                    goal = summary.goals.proteinG,
+                    goal = null,
                     modifier = Modifier.weight(1f),
                 )
                 MacroBarColumn(
                     label = stringResource(R.string.physical_macro_fat),
                     current = summary.fatG,
-                    goal = summary.goals.fatG,
+                    goal = null,
                     modifier = Modifier.weight(1f),
                 )
                 MacroBarColumn(
                     label = stringResource(R.string.physical_macro_carbs),
                     current = summary.carbsG,
-                    goal = summary.goals.carbsG,
+                    goal = null,
                     modifier = Modifier.weight(1f),
                 )
             }
 
             val eaten = summary.caloriesEaten
-            val norm = summary.goals.kcal
             val burned = summary.caloriesBurned
-            val progress = when {
-                eaten == null || norm == null || norm <= 0 -> 0f
-                else -> (eaten.toFloat() / norm).coerceIn(0f, 1f)
-            }
+            val progress = 0f
 
             Row(
                 Modifier.fillMaxWidth(),
@@ -308,13 +328,13 @@ private fun KbjuNutritionCard(
             ) {
                 Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.weight(1f)) {
                     Text(
-                        formatIntRu(norm),
+                        formatIntRu(eaten),
                         color = KbjuWhite,
                         fontSize = 22.sp,
                         fontWeight = FontWeight.Bold,
                     )
                     Text(
-                        stringResource(R.string.physical_kcal_norm),
+                        stringResource(R.string.physical_kcal_eaten),
                         color = KbjuWhite.copy(alpha = 0.85f),
                         style = MaterialTheme.typography.labelMedium,
                     )
@@ -375,11 +395,9 @@ private fun KbjuNutritionCard(
                 }
             }
 
-            // Accessibility labels matching mockup: норма | съедено | сожжено
+            // Accessibility: eaten · burned (goals live in body measurements)
             Text(
                 buildString {
-                    append(stringResource(R.string.physical_kcal_norm))
-                    append(" · ")
                     append(stringResource(R.string.physical_kcal_eaten))
                     append(" · ")
                     append(stringResource(R.string.physical_kcal_burned))

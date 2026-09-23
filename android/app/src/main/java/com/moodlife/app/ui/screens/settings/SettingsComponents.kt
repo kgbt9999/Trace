@@ -83,17 +83,7 @@ private fun Spacer8() {
 
 @Composable
 fun SettingsEmptyState(text: String, modifier: Modifier = Modifier) {
-    Card(
-        modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f)),
-    ) {
-        Text(
-            text,
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.padding(20.dp),
-        )
-    }
+    com.moodlife.app.ui.components.EmptyStateCard(message = text, modifier = modifier)
 }
 
 @Composable

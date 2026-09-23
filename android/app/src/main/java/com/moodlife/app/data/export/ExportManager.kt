@@ -17,6 +17,7 @@ enum class ExportFormat(val mime: String, val ext: String, val labelRes: Int) {
     HTML("text/html", "html", R.string.export_format_html),
     CSV("text/csv", "csv", R.string.export_format_csv),
     PDF("application/pdf", "pdf", R.string.export_format_pdf),
+    PATIENT_HTML("text/html", "html", R.string.export_format_patient_html),
 }
 
 @Singleton
@@ -40,7 +41,11 @@ class ExportManager @Inject constructor(
             }
             ExportFormat.HTML -> {
                 val html = doctorExportGenerator.generateHtml(year, month)
-                writeCache("Trace-report-$label.html", html, ExportFormat.HTML)
+                writeCache("Trace-doctor-$label.html", html, ExportFormat.HTML)
+            }
+            ExportFormat.PATIENT_HTML -> {
+                val html = doctorExportGenerator.generatePatientHtml(year, month)
+                writeCache("Trace-patient-$label.html", html, ExportFormat.PATIENT_HTML)
             }
             ExportFormat.CSV -> {
                 val entries = doctorExportGenerator.loadMonthEntries(year, month)
@@ -49,8 +54,33 @@ class ExportManager @Inject constructor(
             ExportFormat.PDF -> {
                 val entries = doctorExportGenerator.loadMonthEntries(year, month)
                 val medsByDay = doctorExportGenerator.loadMedsByDay(year, month)
-                val file = File(ExportCache.dir(context), "Trace-report-$label.pdf")
-                PdfReportRenderer(context).write(file, year, month, entries, medsByDay)
+                val medDoseSeries = doctorExportGenerator.loadMedDoseSeries(year, month)
+                val labResults = doctorExportGenerator.loadLabResults(year, month)
+                val earlySigns = doctorExportGenerator.loadEarlySignFrequency(year, month)
+                val notes = doctorExportGenerator.loadNoteExcerpts(year, month)
+                val medAdherence = doctorExportGenerator.loadMedAdherence(year, month)
+                val caseHistory = doctorExportGenerator.loadCaseHistory(year, month)
+                val crisis = doctorExportGenerator.loadCrisisPlan()
+                val file = File(ExportCache.dir(context), "Trace-doctor-$label.pdf")
+                PdfReportRenderer(context).write(
+                    file = file,
+                    year = year,
+                    month = month,
+                    entries = entries,
+                    medsByDay = medsByDay,
+                    medDoseSeries = medDoseSeries,
+                    labResults = labResults,
+                    earlySignFrequency = earlySigns,
+                    noteExcerpts = notes,
+                    medAdherence = medAdherence,
+                    caseHistoryRows = caseHistory,
+                    crisisDoctor = crisis.doctor,
+                    crisisSupport = crisis.support,
+                    crisisNotes = crisis.notes,
+                    crisisWishes = crisis.wishes,
+                    crisisAvoid = crisis.avoid,
+                    crisisContacts = crisis.contacts,
+                )
                 ExportFile(file, ExportFormat.PDF)
             }
         }
@@ -77,20 +107,20 @@ class ExportManager @Inject constructor(
     }
 
     private fun buildCsv(entries: List<MoodEntryEntity>): String {
+        // Clinician-safe default: no alcohol/substance columns; no episode-phase diagnostic key.
         val header = listOf(
             "date", "depressed", "elevated", "anxious", "irritable",
             "energy", "concentration", "appetite", "sociability",
             "sleep_hours", "sleep_quality", "sleep_time", "wake_time",
-            "functioning", "safety", "alcohol", "substance", "routine",
-            "episode", "note",
+            "functioning", "safety", "routine", "note",
         ).joinToString(",")
         val rows = entries.joinToString("\n") { e ->
             listOf(
                 e.date, e.depressed, e.elevated, e.anxious, e.irritable,
                 e.energy, e.concentration, e.appetite, e.sociability,
                 e.sleepHours ?: "", e.sleepQuality, e.sleepTime.orEmpty(), e.wakeTime.orEmpty(),
-                e.functioning, e.safetyCheck, e.alcoholUse, e.substanceUse, e.routineScore,
-                csvEscape(e.episodePhase.orEmpty()), csvEscape(e.note.orEmpty()),
+                e.functioning, e.safetyCheck, e.routineScore,
+                csvEscape(e.note.orEmpty()),
             ).joinToString(",")
         }
         return "$header\n$rows"

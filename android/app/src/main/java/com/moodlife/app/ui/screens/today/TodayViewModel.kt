@@ -177,6 +177,9 @@ data class TodayUiState(
     val checkInConfig: com.moodlife.app.domain.CheckInConfig = com.moodlife.app.domain.CheckInConfig.default(),
     val trackables: List<com.moodlife.app.domain.TodayTrackables.Item> =
         com.moodlife.app.domain.TodayTrackables.defaults(),
+    val uiMode: com.moodlife.app.domain.UiMode = com.moodlife.app.domain.UiMode.BASIC,
+    val launchTipId: String? = null,
+    val launchTipMessageRes: Int? = null,
 )
 
 @OptIn(ExperimentalCoroutinesApi::class)
@@ -217,6 +220,30 @@ class TodayViewModel @Inject constructor(
         viewModelScope.launch {
             settingsRepository.observe(TodaySections.KEY).collect { raw ->
                 _uiState.update { it.copy(sectionPrefs = TodaySections.parse(raw)) }
+            }
+        }
+        viewModelScope.launch {
+            settingsRepository.observe(SettingsRepository.KEY_UI_MODE).collect { raw ->
+                _uiState.update { it.copy(uiMode = com.moodlife.app.domain.UiMode.parse(raw)) }
+            }
+        }
+        viewModelScope.launch {
+            combine(
+                settingsRepository.observe(SettingsRepository.KEY_ONBOARDING_COMPLETED),
+                settingsRepository.observe(SettingsRepository.KEY_ONBOARDING_DISMISSED),
+                settingsRepository.observe(SettingsRepository.KEY_SEEN_TIPS),
+            ) { completed, dismissed, seen ->
+                val ready = completed == "1" || dismissed == "1"
+                if (!ready) {
+                    null to null
+                } else {
+                    val tip = com.moodlife.app.domain.LaunchTips.next(seen)
+                    tip?.id to tip?.messageRes
+                }
+            }.collect { pair ->
+                val id = pair.first
+                val res = pair.second
+                _uiState.update { it.copy(launchTipId = id, launchTipMessageRes = res) }
             }
         }
         viewModelScope.launch {
@@ -1087,6 +1114,30 @@ class TodayViewModel @Inject constructor(
     fun dismissOnboarding() {
         viewModelScope.launch {
             settingsRepository.set(SettingsRepository.KEY_ONBOARDING_DISMISSED, "1")
+            settingsRepository.set(SettingsRepository.KEY_ONBOARDING_COMPLETED, "1")
+        }
+    }
+
+    fun dismissLaunchTip() {
+        val tipId = _uiState.value.launchTipId ?: return
+        viewModelScope.launch {
+            val seen = com.moodlife.app.domain.LaunchTips.parseSeen(
+                settingsRepository.get(SettingsRepository.KEY_SEEN_TIPS),
+            ).toMutableSet()
+            seen += tipId
+            settingsRepository.set(
+                SettingsRepository.KEY_SEEN_TIPS,
+                com.moodlife.app.domain.LaunchTips.serializeSeen(seen),
+            )
+        }
+    }
+
+    fun setUiMode(mode: com.moodlife.app.domain.UiMode) {
+        viewModelScope.launch {
+            settingsRepository.set(SettingsRepository.KEY_UI_MODE, mode.storage)
+            val prefs = TodaySections.parse(settingsRepository.get(TodaySections.KEY))
+            val next = com.moodlife.app.domain.UiModeApplier.applyToSectionPrefs(mode, prefs)
+            settingsRepository.set(TodaySections.KEY, TodaySections.serialize(next))
         }
     }
 

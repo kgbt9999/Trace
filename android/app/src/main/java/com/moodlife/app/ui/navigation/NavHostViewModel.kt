@@ -1,5 +1,6 @@
 package com.moodlife.app.ui.navigation
 
+import android.content.Context
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.moodlife.app.data.local.entity.MoodEntryEntity
@@ -7,9 +8,14 @@ import com.moodlife.app.data.repository.MoodRepository
 import com.moodlife.app.data.repository.SettingsRepository
 import com.moodlife.app.data.repository.SymptomRepository
 import com.moodlife.app.data.repository.WarningSignRepository
+import com.moodlife.app.domain.TodaySections
+import com.moodlife.app.domain.UiMode
+import com.moodlife.app.domain.UiModeBasicCore
 import com.moodlife.app.domain.WorseningDetector
+import com.moodlife.app.notifications.ReminderScheduler
 import com.moodlife.app.util.DateUtils
 import dagger.hilt.android.lifecycle.HiltViewModel
+import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -18,6 +24,7 @@ import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.launch
 import javax.inject.Inject
 
 data class CrisisChipUiState(
@@ -42,6 +49,7 @@ class NavHostViewModel @Inject constructor(
     private val symptomRepository: SymptomRepository,
     private val warningSignRepository: WarningSignRepository,
     private val settingsRepository: SettingsRepository,
+    @ApplicationContext private val appContext: Context,
 ) : ViewModel() {
 
     val crisisState: StateFlow<CrisisChipUiState> = run {
@@ -94,7 +102,56 @@ class NavHostViewModel @Inject constructor(
         .map { raw -> raw == "true" }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), false)
 
+    /** Show first-run wizard until completed (legacy dismissed card counts as done). */
+    val showOnboardingWizard: StateFlow<Boolean> = combine(
+        settingsRepository.observe(SettingsRepository.KEY_ONBOARDING_COMPLETED),
+        settingsRepository.observe(SettingsRepository.KEY_ONBOARDING_DISMISSED),
+    ) { completed, dismissed ->
+        completed != "1" && dismissed != "1"
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), false)
+
     fun openCrisisSettings() = dayNavigation.navigateToSettings("crisis")
+
+    fun openMedsSettings() = dayNavigation.navigateToSettings("meds")
+
+    fun completeOnboarding(
+        uiMode: UiMode,
+        skippedMeds: Boolean,
+        skippedCrisis: Boolean,
+        crisisDoctor: String,
+        crisisSupport: String,
+    ) {
+        viewModelScope.launch {
+            settingsRepository.set(SettingsRepository.KEY_ONBOARDING_COMPLETED, "1")
+            settingsRepository.set(SettingsRepository.KEY_ONBOARDING_DISMISSED, "1")
+            settingsRepository.set(SettingsRepository.KEY_UI_MODE, uiMode.storage)
+            if (uiMode == UiMode.BASIC) {
+                val refined = TodaySections.defaults().map { pref ->
+                    when (pref.id) {
+                        in UiModeBasicCore -> pref.copy(visible = true)
+                        TodaySections.Id.EXTRA,
+                        TodaySections.Id.CLINICAL,
+                        TodaySections.Id.CONTEXT,
+                        TodaySections.Id.FACTORS,
+                        TodaySections.Id.WARNINGS,
+                        -> pref.copy(visible = false)
+                        else -> pref
+                    }
+                }
+                settingsRepository.set(TodaySections.KEY, TodaySections.serialize(refined))
+            }
+            if (crisisDoctor.isNotBlank()) {
+                settingsRepository.set(SettingsRepository.KEY_CRISIS_DOCTOR, crisisDoctor)
+            }
+            if (crisisSupport.isNotBlank()) {
+                settingsRepository.set(SettingsRepository.KEY_CRISIS_SUPPORT, crisisSupport)
+            }
+            settingsRepository.set(SettingsRepository.KEY_NUDGE_MEDS, if (skippedMeds) "1" else "0")
+            settingsRepository.set(SettingsRepository.KEY_NUDGE_CRISIS, if (skippedCrisis) "1" else "0")
+            ReminderScheduler.setNudgeMeds(appContext, skippedMeds)
+            ReminderScheduler.setNudgeCrisis(appContext, skippedCrisis)
+        }
+    }
 
     private fun sliceFlow(date: String) = moodRepository.observeEntry(date).flatMapLatest { entry ->
         if (entry == null) {

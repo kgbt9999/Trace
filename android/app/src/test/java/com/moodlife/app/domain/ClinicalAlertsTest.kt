@@ -26,6 +26,8 @@ class ClinicalAlertsTest {
     @Test
     fun phaseInfo_hidesEuthymia() {
         assertNull(ClinicalAlerts.phaseInfo("euthymic"))
-        assertEquals("Смешанный эпизод", ClinicalAlerts.phaseInfo("mixed")?.label)
+        val mixed = ClinicalAlerts.phaseInfo("mixed")
+        assertEquals("Одновременно спад и подъём (дневник)", mixed?.label)
+        assert(mixed?.description?.contains("не диагноз") == true)
     }
 }

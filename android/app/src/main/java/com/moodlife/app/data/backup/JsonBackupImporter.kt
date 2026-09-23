@@ -43,7 +43,11 @@ class JsonBackupImporter @Inject constructor(
                 val arr = root.optJSONArray(table) ?: continue
                 for (i in 0 until arr.length()) {
                     val row = arr.getJSONObject(i)
-                    if (insertRow(db, table, row)) rows++
+                    if (table == "lab_results") {
+                        rows += insertLabRows(db, row)
+                    } else if (insertRow(db, table, row)) {
+                        rows++
+                    }
                 }
             }
             db.setTransactionSuccessful()
@@ -176,6 +180,53 @@ class JsonBackupImporter @Inject constructor(
         } finally {
             db.endTransaction()
         }
+    }
+
+    /**
+     * Supports v7 flexible lab rows and expands legacy v6 wide rows (markers + note).
+     */
+    private fun insertLabRows(db: SupportSQLiteDatabase, row: JSONObject): Int {
+        // v7 shape already has name + valueText
+        if (row.has("name") && (row.has("valueText") || row.has("valueNumeric"))) {
+            return if (insertRow(db, "lab_results", row)) 1 else 0
+        }
+        // Legacy v6: date-scoped columns
+        val idBase = row.optString("id").ifBlank { java.util.UUID.randomUUID().toString() }
+        val date = row.optString("date")
+        if (date.isBlank()) return 0
+        val createdAt = row.optLong("createdAt", System.currentTimeMillis())
+        val updatedAt = row.optLong("updatedAt", createdAt)
+        var n = 0
+        fun insert(suffix: String, name: String, value: Double?, unit: String, text: String? = null) {
+            val valueText = text ?: value?.let {
+                if (it == it.toLong().toDouble()) it.toLong().toString() else it.toString()
+            } ?: return
+            val id = "$idBase-$suffix"
+            db.execSQL(
+                """
+                INSERT OR REPLACE INTO lab_results
+                (id, name, valueText, valueNumeric, unit, date, clinic, createdAt, updatedAt)
+                VALUES (?, ?, ?, ?, ?, ?, NULL, ?, ?)
+                """.trimIndent(),
+                arrayOf(id, name, valueText, value, unit, date, createdAt, updatedAt),
+            )
+            n++
+        }
+        fun realOrNull(key: String): Double? =
+            if (row.has(key) && row.opt(key) != JSONObject.NULL) row.optDouble(key) else null
+        insert("tsh", "ТТГ", realOrNull("tsh"), "мЕд/л")
+        insert("creatinine", "Креатинин", realOrNull("creatinine"), "мкмоль/л")
+        insert("calcium", "Кальций в крови", realOrNull("calcium"), "ммоль/л")
+        insert("lithium", "Литий в крови", realOrNull("lithium"), "ммоль/л")
+        insert("ferritin", "Ферритин", realOrNull("ferritin"), "нг/мл")
+        insert("vitd", "25-ОН витамин D", realOrNull("vitaminD25Oh"), "нг/мл")
+        insert("freet4", "Т4 свободный", realOrNull("freeT4"), "пмоль/л")
+        insert("b12", "Витамин B12", realOrNull("vitaminB12"), "пг/мл")
+        val urine = row.optString("urineAnalysisNote").trim()
+        if (urine.isNotEmpty()) insert("oam", "Общий анализ мочи", null, "", urine)
+        val note = row.optString("note").trim()
+        if (note.isNotEmpty()) insert("note", "Заметка к анализам", null, "", note)
+        return n
     }
 
     /**

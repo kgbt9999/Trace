@@ -17,9 +17,12 @@ object NotificationHelper {
 
     const val CHANNEL_DIARY = "diary_reminders"
     const val CHANNEL_MEDS = "med_reminders"
+    const val CHANNEL_NUDGE = "gentle_nudges"
 
     const val TYPE_DIARY = "diary"
     const val TYPE_MEDS = "meds"
+    const val TYPE_NUDGE_MEDS = "nudge_meds"
+    const val TYPE_NUDGE_CRISIS = "nudge_crisis"
 
     fun ensureChannels(context: Context) {
         val nm = context.getSystemService(NotificationManager::class.java) ?: return
@@ -41,20 +44,35 @@ object NotificationHelper {
                 description = context.getString(R.string.notif_channel_meds_desc)
             },
         )
+        nm.createNotificationChannel(
+            NotificationChannel(
+                CHANNEL_NUDGE,
+                context.getString(R.string.notif_channel_nudge),
+                NotificationManager.IMPORTANCE_LOW,
+            ).apply {
+                description = context.getString(R.string.notif_channel_nudge_desc)
+            },
+        )
     }
 
     fun showReminder(context: Context, type: String, requestCode: Int) {
         ensureChannels(context)
-        val channel = if (type == TYPE_MEDS) CHANNEL_MEDS else CHANNEL_DIARY
-        val title = if (type == TYPE_MEDS) {
-            context.getString(R.string.notif_meds_title)
-        } else {
-            context.getString(R.string.notif_diary_title)
+        val channel = when (type) {
+            TYPE_MEDS -> CHANNEL_MEDS
+            TYPE_NUDGE_MEDS, TYPE_NUDGE_CRISIS -> CHANNEL_NUDGE
+            else -> CHANNEL_DIARY
         }
-        val text = if (type == TYPE_MEDS) {
-            context.getString(R.string.notif_meds_text)
-        } else {
-            context.getString(R.string.notif_diary_text)
+        val title = when (type) {
+            TYPE_MEDS -> context.getString(R.string.notif_meds_title)
+            TYPE_NUDGE_MEDS -> context.getString(R.string.notif_nudge_meds_title)
+            TYPE_NUDGE_CRISIS -> context.getString(R.string.notif_nudge_crisis_title)
+            else -> context.getString(R.string.notif_diary_title)
+        }
+        val text = when (type) {
+            TYPE_MEDS -> context.getString(R.string.notif_meds_text)
+            TYPE_NUDGE_MEDS -> context.getString(R.string.notif_nudge_meds_text)
+            TYPE_NUDGE_CRISIS -> context.getString(R.string.notif_nudge_crisis_text)
+            else -> context.getString(R.string.notif_diary_text)
         }
         val launch = PendingIntent.getActivity(
             context,

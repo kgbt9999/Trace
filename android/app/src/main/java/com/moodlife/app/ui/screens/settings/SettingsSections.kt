@@ -1246,6 +1246,46 @@ private fun IntegrationsSettingsSection(
         }
 
         SettingsCard(
+            title = stringResource(R.string.settings_physical_tracking_title),
+            description = stringResource(R.string.settings_physical_tracking_desc),
+        ) {
+            val bodyOnRaw by viewModel.observeBodyMeasurementsEnabled()
+                .collectAsStateWithLifecycle(initialValue = null)
+            val labsOnRaw by viewModel.observeLabResultsEnabled()
+                .collectAsStateWithLifecycle(initialValue = null)
+            val bodyOn = bodyOnRaw != "false"
+            val labsOn = labsOnRaw != "false"
+            Row(
+                Modifier.fillMaxWidth().heightIn(min = 48.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    stringResource(R.string.settings_body_measurements_enable),
+                    Modifier.weight(1f),
+                    style = MaterialTheme.typography.bodyMedium,
+                )
+                Switch(checked = bodyOn, onCheckedChange = viewModel::setBodyMeasurementsEnabled)
+            }
+            Row(
+                Modifier.fillMaxWidth().heightIn(min = 48.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    stringResource(R.string.settings_lab_results_enable),
+                    Modifier.weight(1f),
+                    style = MaterialTheme.typography.bodyMedium,
+                )
+                Switch(checked = labsOn, onCheckedChange = viewModel::setLabResultsEnabled)
+            }
+            Text(
+                stringResource(R.string.settings_physical_tracking_disclaimer),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(top = 4.dp),
+            )
+        }
+
+        SettingsCard(
             title = stringResource(R.string.settings_import_file_title),
             description = stringResource(R.string.settings_import_file_hint),
         ) {
@@ -1327,6 +1367,28 @@ private fun AppearanceSettingsSection(themeViewModel: ThemeViewModel) {
                     )
                 }
             }
+            Spacer(Modifier.height(16.dp))
+            Text(stringResource(R.string.ui_mode_title), style = MaterialTheme.typography.titleSmall)
+            Text(
+                stringResource(R.string.ui_mode_settings_hint),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(top = 4.dp, bottom = 8.dp),
+            )
+            val uiModeRaw by themeViewModel.uiMode.collectAsStateWithLifecycle()
+            val uiMode = com.moodlife.app.domain.UiMode.parse(uiModeRaw)
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                FilterChip(
+                    selected = uiMode == com.moodlife.app.domain.UiMode.BASIC,
+                    onClick = { themeViewModel.setUiMode(com.moodlife.app.domain.UiMode.BASIC) },
+                    label = { Text(stringResource(R.string.ui_mode_basic)) },
+                )
+                FilterChip(
+                    selected = uiMode == com.moodlife.app.domain.UiMode.ADVANCED,
+                    onClick = { themeViewModel.setUiMode(com.moodlife.app.domain.UiMode.ADVANCED) },
+                    label = { Text(stringResource(R.string.ui_mode_advanced)) },
+                )
+            }
         }
     }
 }
@@ -1388,9 +1450,9 @@ private fun DataSettingsSection(
                 modifier = Modifier.fillMaxWidth().padding(top = 6.dp),
             ) {
                 Column(Modifier.fillMaxWidth()) {
-                    Text(stringResource(R.string.reports_export_doctor_report))
+                    Text(stringResource(R.string.reports_export_readable))
                     Text(
-                        stringResource(R.string.reports_export_doctor_hint),
+                        stringResource(R.string.reports_export_readable_hint),
                         style = MaterialTheme.typography.labelSmall,
                     )
                 }
@@ -1431,9 +1493,18 @@ private fun DataSettingsSection(
             if (doctorFormatDialog) {
                 AlertDialog(
                     onDismissRequest = { doctorFormatDialog = false },
-                    title = { Text(stringResource(R.string.reports_export_doctor_report)) },
+                    title = { Text(stringResource(R.string.reports_export_readable)) },
                     text = {
                         Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                            TextButton(
+                                onClick = {
+                                    doctorFormatDialog = false
+                                    onExportFormat(ExportFormat.PATIENT_HTML)
+                                },
+                                modifier = Modifier.fillMaxWidth(),
+                            ) {
+                                Text(stringResource(R.string.export_format_patient_html))
+                            }
                             TextButton(
                                 onClick = {
                                     doctorFormatDialog = false
@@ -1830,7 +1901,14 @@ private fun LayoutSettingsSection(viewModel: SettingsViewModel) {
             title = stringResource(R.string.settings_layout),
             description = stringResource(R.string.settings_layout_desc),
         ) {
-            prefs.sortedBy { it.order }.forEachIndexed { index, pref ->
+            val layoutPrefs = prefs
+                .filter {
+                    it.id != com.moodlife.app.domain.TodaySections.Id.MOOD &&
+                        it.id != com.moodlife.app.domain.TodaySections.Id.EXTRA &&
+                        it.id != com.moodlife.app.domain.TodaySections.Id.CLINICAL
+                }
+                .sortedBy { it.order }
+            layoutPrefs.forEachIndexed { index, pref ->
                 Row(
                     Modifier.fillMaxWidth().heightIn(min = 52.dp).padding(vertical = 4.dp),
                     verticalAlignment = Alignment.CenterVertically,
@@ -1849,18 +1927,26 @@ private fun LayoutSettingsSection(viewModel: SettingsViewModel) {
                     TextButton(
                         onClick = {
                             if (index > 0) {
-                                prefs = com.moodlife.app.domain.TodaySections.move(prefs, index, index - 1)
+                                val from = prefs.indexOfFirst { it.id == layoutPrefs[index].id }
+                                val to = prefs.indexOfFirst { it.id == layoutPrefs[index - 1].id }
+                                if (from >= 0 && to >= 0) {
+                                    prefs = com.moodlife.app.domain.TodaySections.move(prefs, from, to)
+                                }
                             }
                         },
                         enabled = index > 0,
                     ) { Text("↑") }
                     TextButton(
                         onClick = {
-                            if (index < prefs.lastIndex) {
-                                prefs = com.moodlife.app.domain.TodaySections.move(prefs, index, index + 1)
+                            if (index < layoutPrefs.lastIndex) {
+                                val from = prefs.indexOfFirst { it.id == layoutPrefs[index].id }
+                                val to = prefs.indexOfFirst { it.id == layoutPrefs[index + 1].id }
+                                if (from >= 0 && to >= 0) {
+                                    prefs = com.moodlife.app.domain.TodaySections.move(prefs, from, to)
+                                }
                             }
                         },
-                        enabled = index < prefs.lastIndex,
+                        enabled = index < layoutPrefs.lastIndex,
                     ) { Text("↓") }
                 }
             }
@@ -1883,9 +1969,11 @@ private fun OtherSettingsSection(viewModel: SettingsViewModel) {
     val chartIds = remember(chartsRaw) {
         val raw = chartsRaw?.split(',')?.map { it.trim() }?.filter { it.isNotEmpty() }?.toMutableSet()
             ?: mutableSetOf(
-                "dashboard", "mood_sleep", "meddose", "heatmap", "scatter",
-                "level2", "level3", "radar", "priority", "burden",
+                "dashboard", "mood_line", "radar", "heatmap", "mood_sleep",
+                "warnings", "meddose", "med_adherence",
             )
+        raw.remove("history")
+        raw.remove("burden")
         if ("medgrid" in raw) {
             raw.remove("medgrid")
             raw.add("meddose")
@@ -2007,23 +2095,33 @@ private fun OtherSettingsSection(viewModel: SettingsViewModel) {
             title = stringResource(R.string.reports_charts_settings_title),
             description = stringResource(R.string.reports_charts_settings_desc),
         ) {
-            listOf(
-                "dashboard" to R.string.reports_dashboard_title,
-                "mood_sleep" to R.string.reports_mood_sleep_title,
-                "meddose" to R.string.reports_med_dose_title,
-                "heatmap" to R.string.reports_heatmap_title,
-                "scatter" to R.string.reports_scatter_title,
-                "level2" to R.string.reports_level2_title,
-                "level3" to R.string.reports_level3_title,
-                "radar" to R.string.reports_radar_title,
-                "burden" to R.string.reports_burden_title,
-                "priority" to R.string.reports_priority_title,
-            ).forEach { (id, res) ->
+            val orderRaw by viewModel.observeReportsChartOrder().collectAsStateWithLifecycle(initialValue = null)
+            val chartOrder = remember(orderRaw) {
+                com.moodlife.app.domain.ReportsCharts.parseOrder(orderRaw).map { it.key }
+            }
+            Text(
+                stringResource(R.string.reports_charts_order_hint),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(bottom = 8.dp),
+            )
+            chartOrder.forEachIndexed { index, id ->
+                if (id == "history") return@forEachIndexed
+                val res = com.moodlife.app.domain.ReportsCharts.Id.fromKey(id)?.titleRes
+                    ?: return@forEachIndexed
                 Row(
                     Modifier.fillMaxWidth().heightIn(min = 44.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     Text(stringResource(res), Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium)
+                    TextButton(
+                        onClick = { viewModel.moveReportsChart(chartOrder, index, index - 1) },
+                        enabled = index > 0,
+                    ) { Text(stringResource(R.string.reports_charts_move_up)) }
+                    TextButton(
+                        onClick = { viewModel.moveReportsChart(chartOrder, index, index + 1) },
+                        enabled = index < chartOrder.lastIndex,
+                    ) { Text(stringResource(R.string.reports_charts_move_down)) }
                     Switch(
                         checked = id in chartIds,
                         onCheckedChange = { on ->

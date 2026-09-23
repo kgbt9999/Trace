@@ -2,10 +2,12 @@ package com.moodlife.app.ui.screens.physical
 
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -13,6 +15,7 @@ import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -20,6 +23,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
@@ -30,6 +34,8 @@ import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.moodlife.app.R
+import com.moodlife.app.ui.components.BodyMeasurementsSection
+import com.moodlife.app.ui.components.LabResultsSection
 import com.moodlife.app.ui.components.MoodCard
 import com.moodlife.app.ui.components.PageHeader
 import com.moodlife.app.ui.components.PhysicalDateNav
@@ -37,7 +43,10 @@ import com.moodlife.app.ui.components.PhysicalPeriodToggles
 import com.moodlife.app.ui.components.PhysicalStateSections
 
 @Composable
-fun PhysicalScreen(viewModel: PhysicalViewModel = hiltViewModel()) {
+fun PhysicalScreen(
+    viewModel: PhysicalViewModel = hiltViewModel(),
+    embedded: Boolean = false,
+) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
     val hcLauncher = rememberLauncherForActivityResult(
         PermissionController.createRequestPermissionResultContract(),
@@ -59,11 +68,92 @@ fun PhysicalScreen(viewModel: PhysicalViewModel = hiltViewModel()) {
             .verticalScroll(rememberScrollState())
             .padding(16.dp),
     ) {
-        PageHeader(
-            title = stringResource(R.string.tab_physical),
-            subtitle = stringResource(R.string.physical_tab_subtitle),
-        )
-        MoodCard(Modifier.padding(top = 8.dp)) {
+        if (!embedded) {
+            PageHeader(
+                title = stringResource(R.string.tab_physical),
+                subtitle = stringResource(R.string.physical_tab_subtitle),
+            )
+        } else {
+            Text(
+                stringResource(R.string.tab_physical),
+                style = MaterialTheme.typography.titleLarge,
+            )
+            Text(
+                stringResource(R.string.physical_tab_subtitle),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(top = 2.dp, bottom = 4.dp),
+            )
+        }
+
+        MoodCard(
+            modifier = Modifier.padding(top = 8.dp),
+            tint = MaterialTheme.colorScheme.primary.copy(alpha = 0.10f),
+        ) {
+            Text(
+                stringResource(R.string.physical_tracking_card_title),
+                style = MaterialTheme.typography.titleSmall,
+            )
+            Text(
+                stringResource(R.string.physical_tracking_card_hint),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(top = 4.dp, bottom = 8.dp),
+            )
+            Row(
+                Modifier.fillMaxWidth().heightIn(min = 48.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    stringResource(R.string.settings_body_measurements_enable),
+                    Modifier.weight(1f),
+                    style = MaterialTheme.typography.bodyMedium,
+                )
+                Switch(
+                    checked = state.bodyMeasurementsEnabled,
+                    onCheckedChange = viewModel::setBodyMeasurementsEnabled,
+                )
+            }
+            Row(
+                Modifier.fillMaxWidth().heightIn(min = 48.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    stringResource(R.string.settings_lab_results_enable),
+                    Modifier.weight(1f),
+                    style = MaterialTheme.typography.bodyMedium,
+                )
+                Switch(
+                    checked = state.labResultsEnabled,
+                    onCheckedChange = viewModel::setLabResultsEnabled,
+                )
+            }
+        }
+
+        if (state.labResultsEnabled) {
+            Spacer(Modifier.height(12.dp))
+            LabResultsSection(
+                entryDate = state.anchorDate,
+                history = state.labResultHistory,
+                onSaveEntry = { name, value, unit, date, clinic, id ->
+                    viewModel.saveLabEntry(name, value, unit, date, clinic, id)
+                },
+                onDeleteEntry = viewModel::deleteLabEntry,
+            )
+        }
+        if (state.bodyMeasurementsEnabled) {
+            Spacer(Modifier.height(12.dp))
+            BodyMeasurementsSection(
+                entryDate = state.anchorDate,
+                current = state.bodyMeasurementForDate,
+                history = state.bodyMeasurementHistory,
+                hcDays = state.chartHcDays,
+                onSave = viewModel::saveBodyMeasurement,
+                onSaveField = viewModel::saveBodyMeasurementField,
+            )
+        }
+
+        MoodCard(modifier = Modifier.padding(top = 12.dp)) {
             Text(
                 stringResource(R.string.physical_tab_hint),
                 style = MaterialTheme.typography.bodySmall,
@@ -162,94 +252,9 @@ fun PhysicalScreen(viewModel: PhysicalViewModel = hiltViewModel()) {
             onPrevDay = viewModel::prevPeriod,
             onNextDay = viewModel::nextPeriod,
         )
-        Spacer(Modifier.height(12.dp))
-        NutritionGoalsEditor(state, viewModel)
-        Spacer(Modifier.height(8.dp))
-        HeightEditor(state, viewModel)
     }
 }
 
-@Composable
-private fun NutritionGoalsEditor(state: PhysicalUiState, viewModel: PhysicalViewModel) {
-    var kcal by remember(state.goals) { mutableStateOf(state.goals.kcal?.toString().orEmpty()) }
-    var protein by remember(state.goals) { mutableStateOf(state.goals.proteinG?.toInt()?.toString().orEmpty()) }
-    var fat by remember(state.goals) { mutableStateOf(state.goals.fatG?.toInt()?.toString().orEmpty()) }
-    var carbs by remember(state.goals) { mutableStateOf(state.goals.carbsG?.toInt()?.toString().orEmpty()) }
-    MoodCard {
-        Text(stringResource(R.string.physical_goals_title), style = MaterialTheme.typography.titleSmall)
-        Text(
-            stringResource(R.string.physical_goals_hint),
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.padding(top = 4.dp, bottom = 8.dp),
-        )
-        OutlinedTextField(
-            value = kcal,
-            onValueChange = { kcal = it.filter { ch -> ch.isDigit() }.take(5) },
-            label = { Text(stringResource(R.string.physical_goal_kcal)) },
-            modifier = Modifier.fillMaxWidth(),
-            singleLine = true,
-        )
-        OutlinedTextField(
-            value = protein,
-            onValueChange = { protein = it.filter { ch -> ch.isDigit() }.take(4) },
-            label = { Text(stringResource(R.string.physical_goal_protein)) },
-            modifier = Modifier.fillMaxWidth().padding(top = 6.dp),
-            singleLine = true,
-        )
-        OutlinedTextField(
-            value = fat,
-            onValueChange = { fat = it.filter { ch -> ch.isDigit() }.take(4) },
-            label = { Text(stringResource(R.string.physical_goal_fat)) },
-            modifier = Modifier.fillMaxWidth().padding(top = 6.dp),
-            singleLine = true,
-        )
-        OutlinedTextField(
-            value = carbs,
-            onValueChange = { carbs = it.filter { ch -> ch.isDigit() }.take(4) },
-            label = { Text(stringResource(R.string.physical_goal_carbs)) },
-            modifier = Modifier.fillMaxWidth().padding(top = 6.dp),
-            singleLine = true,
-        )
-        FilledTonalButton(
-            onClick = {
-                viewModel.setNutritionGoals(
-                    kcal = kcal.toIntOrNull(),
-                    protein = protein.toFloatOrNull(),
-                    fat = fat.toFloatOrNull(),
-                    carbs = carbs.toFloatOrNull(),
-                )
-            },
-            modifier = Modifier.fillMaxWidth().padding(top = 10.dp),
-        ) {
-            Text(stringResource(R.string.physical_goals_save))
-        }
-    }
-}
-
-@Composable
-private fun HeightEditor(state: PhysicalUiState, viewModel: PhysicalViewModel) {
-    var height by remember(state.heightCm) {
-        mutableStateOf(state.heightCm?.toInt()?.toString().orEmpty())
-    }
-    MoodCard {
-        Text(stringResource(R.string.physical_height_edit_title), style = MaterialTheme.typography.titleSmall)
-        OutlinedTextField(
-            value = height,
-            onValueChange = { height = it.filter { ch -> ch.isDigit() }.take(3) },
-            label = { Text(stringResource(R.string.physical_height)) },
-            modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
-            singleLine = true,
-            suffix = { Text("см") },
-        )
-        FilledTonalButton(
-            onClick = { viewModel.setHeightCm(height) },
-            modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
-        ) {
-            Text(stringResource(R.string.physical_height_save))
-        }
-    }
-}
 
 @Composable
 private fun physicalMessage(code: String): String = when {

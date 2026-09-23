@@ -22,6 +22,12 @@ object ReminderScheduler {
     private const val KEY_DIARY_MINUTE = "diary_minute"
     private const val KEY_MEDS_ENABLED = "meds_enabled"
     private const val KEY_MEDS_TIMES = "meds_times" // "HH:mm,HH:mm"
+    private const val KEY_NUDGE_MEDS = "nudge_meds"
+    private const val KEY_NUDGE_CRISIS = "nudge_crisis"
+    private const val NUDGE_HOUR = 12
+    private const val NUDGE_MINUTE = 0
+    private const val CODE_NUDGE_MEDS = 3001
+    private const val CODE_NUDGE_CRISIS = 3002
 
     fun saveDiary(context: Context, enabled: Boolean, hour: Int, minute: Int) {
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit()
@@ -36,6 +42,21 @@ object ReminderScheduler {
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit()
             .putBoolean(KEY_MEDS_ENABLED, enabled)
             .putString(KEY_MEDS_TIMES, timesHhMm.joinToString(","))
+            .apply()
+        scheduleAll(context)
+    }
+
+    /** Gentle once-per-day nudge until user dismisses or completes the skipped step. */
+    fun setNudgeMeds(context: Context, enabled: Boolean) {
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit()
+            .putBoolean(KEY_NUDGE_MEDS, enabled)
+            .apply()
+        scheduleAll(context)
+    }
+
+    fun setNudgeCrisis(context: Context, enabled: Boolean) {
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit()
+            .putBoolean(KEY_NUDGE_CRISIS, enabled)
             .apply()
         scheduleAll(context)
     }
@@ -63,6 +84,7 @@ object ReminderScheduler {
     fun scheduleAll(context: Context) {
         NotificationHelper.ensureChannels(context)
         cancelAll(context)
+        val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
         val (diaryOn, hour, minute) = readDiary(context)
         if (diaryOn) {
             scheduleAt(context, NotificationHelper.TYPE_DIARY, 1001, hour, minute)
@@ -76,12 +98,16 @@ object ReminderScheduler {
                 scheduleAt(context, NotificationHelper.TYPE_MEDS, 2000 + index, h, m)
             }
         }
+        if (prefs.getBoolean(KEY_NUDGE_MEDS, false)) {
+            scheduleAt(context, NotificationHelper.TYPE_NUDGE_MEDS, CODE_NUDGE_MEDS, NUDGE_HOUR, NUDGE_MINUTE)
+        }
+        if (prefs.getBoolean(KEY_NUDGE_CRISIS, false)) {
+            scheduleAt(context, NotificationHelper.TYPE_NUDGE_CRISIS, CODE_NUDGE_CRISIS, NUDGE_HOUR, NUDGE_MINUTE)
+        }
     }
 
     fun rescheduleOne(context: Context, type: String, code: Int) {
         val am = context.getSystemService(AlarmManager::class.java) ?: return
-        // Next occurrence is already computed relative to now+1 day by scheduleAt if triggered;
-        // re-read prefs and set next day.
         when (type) {
             NotificationHelper.TYPE_DIARY -> {
                 val (on, h, m) = readDiary(context)
@@ -97,20 +123,34 @@ object ReminderScheduler {
                 val m = parts.getOrNull(1)?.toIntOrNull() ?: return
                 scheduleAt(context, type, code, h, m, forceNextDay = true)
             }
+            NotificationHelper.TYPE_NUDGE_MEDS, NotificationHelper.TYPE_NUDGE_CRISIS -> {
+                val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+                val enabled = if (type == NotificationHelper.TYPE_NUDGE_MEDS) {
+                    prefs.getBoolean(KEY_NUDGE_MEDS, false)
+                } else {
+                    prefs.getBoolean(KEY_NUDGE_CRISIS, false)
+                }
+                if (enabled) {
+                    scheduleAt(context, type, code, NUDGE_HOUR, NUDGE_MINUTE, forceNextDay = true)
+                }
+            }
         }
-        // silence unused
         am
     }
 
     private fun cancelAll(context: Context) {
         for (code in 1001..1001) cancel(context, code)
         for (code in 2000..2010) cancel(context, code)
+        cancel(context, CODE_NUDGE_MEDS)
+        cancel(context, CODE_NUDGE_CRISIS)
     }
 
     private fun cancel(context: Context, code: Int) {
         val am = context.getSystemService(AlarmManager::class.java) ?: return
         am.cancel(pending(context, NotificationHelper.TYPE_DIARY, code))
         am.cancel(pending(context, NotificationHelper.TYPE_MEDS, code))
+        am.cancel(pending(context, NotificationHelper.TYPE_NUDGE_MEDS, code))
+        am.cancel(pending(context, NotificationHelper.TYPE_NUDGE_CRISIS, code))
     }
 
     private fun scheduleAt(
