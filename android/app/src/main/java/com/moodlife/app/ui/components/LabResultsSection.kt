@@ -103,7 +103,7 @@ fun LabResultsSection(
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
             FilledTonalButton(onClick = { openNew() }, modifier = Modifier.fillMaxWidth()) {
-                Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(18.dp))
+                Icon(Icons.Default.Add, contentDescription = stringResource(R.string.physical_labs_add_result), modifier = Modifier.size(18.dp))
                 Text(
                     stringResource(R.string.physical_labs_add_result),
                     modifier = Modifier.padding(start = 6.dp),

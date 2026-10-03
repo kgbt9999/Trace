@@ -559,18 +559,19 @@ class SettingsViewModel @Inject constructor(
         val cleaned = axes.filter { it in setOf("depressed", "elevated", "anxious", "irritable") }
         settingsRepository.set(
             SettingsRepository.KEY_CHECKIN_AXES,
-            cleaned.joinToString(",").ifBlank { "depressed,elevated,anxious,irritable" },
+            cleaned.joinToString(",").ifBlank { "tension,clarity,impulse,fatigue" },
         )
     }
 
     fun saveCheckInConfig(config: com.moodlife.app.domain.CheckInConfig) = viewModelScope.launch {
+        val migrated = com.moodlife.app.domain.CheckInConfig.migrateIfLegacy(config)
         settingsRepository.set(
             SettingsRepository.KEY_CHECKIN_CONFIG,
-            com.moodlife.app.domain.CheckInConfig.toJson(config),
+            com.moodlife.app.domain.CheckInConfig.toJson(migrated),
         )
         settingsRepository.set(
             SettingsRepository.KEY_CHECKIN_AXES,
-            config.axes.joinToString(",") { it.id },
+            migrated.axes.joinToString(",") { it.id },
         )
     }
 

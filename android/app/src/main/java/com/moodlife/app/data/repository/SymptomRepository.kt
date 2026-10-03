@@ -30,6 +30,7 @@ class SymptomRepository @Inject constructor(
     suspend fun countActive(): Int = symptomDao.countActive()
 
     suspend fun seedBasicSymptoms(): Int {
+        migrateLegacySymptomScales()
         val now = System.currentTimeMillis()
         var added = 0
         var sort = symptomDao.countActive()
@@ -61,6 +62,23 @@ class SymptomRepository @Inject constructor(
         return added
     }
 
+    /** One-shot: map qual4 / 0-10 symptom scales to yesno · 0-5 · options. */
+    suspend fun migrateLegacySymptomScales() {
+        val now = System.currentTimeMillis()
+        for (s in symptomDao.listAll()) {
+            val normalized = DefaultSeedData.normalizeSymptomScale(s.scaleType)
+            if (normalized != s.scaleType || s.scaleMax != DefaultSeedData.scaleMaxFor(normalized)) {
+                symptomDao.upsert(
+                    s.copy(
+                        scaleType = normalized,
+                        scaleMax = DefaultSeedData.scaleMaxFor(normalized),
+                        updatedAt = now,
+                    ),
+                )
+            }
+        }
+    }
+
     suspend fun addSymptom(
         name: String,
         category: String,
@@ -77,8 +95,8 @@ class SymptomRepository @Inject constructor(
                 isActive = true,
                 category = category.ifBlank { existing.category },
                 color = color,
-                scaleType = scaleType,
-                scaleMax = DefaultSeedData.scaleMaxFor(scaleType),
+                scaleType = DefaultSeedData.normalizeSymptomScale(scaleType),
+                scaleMax = DefaultSeedData.scaleMaxFor(DefaultSeedData.normalizeSymptomScale(scaleType)),
                 hint = hint?.trim()?.takeIf { it.isNotEmpty() },
                 updatedAt = now,
             )
@@ -86,13 +104,14 @@ class SymptomRepository @Inject constructor(
             return restored
         }
         val sort = symptomDao.countActive()
+        val normalized = DefaultSeedData.normalizeSymptomScale(scaleType)
         val created = SymptomEntity(
             id = UUID.randomUUID().toString(),
             name = trimmed,
             category = category.ifBlank { "Общие" },
             color = color,
-            scaleType = scaleType,
-            scaleMax = DefaultSeedData.scaleMaxFor(scaleType),
+            scaleType = normalized,
+            scaleMax = DefaultSeedData.scaleMaxFor(normalized),
             hint = hint?.trim()?.takeIf { it.isNotEmpty() },
             sortOrder = sort,
             createdAt = now,
@@ -116,13 +135,14 @@ class SymptomRepository @Inject constructor(
     ) {
         val trimmed = name.trim()
         if (trimmed.isEmpty()) return
+        val normalized = DefaultSeedData.normalizeSymptomScale(scaleType)
         symptomDao.upsert(
             symptom.copy(
                 name = trimmed,
                 category = category.ifBlank { symptom.category },
                 color = color,
-                scaleType = scaleType,
-                scaleMax = DefaultSeedData.scaleMaxFor(scaleType),
+                scaleType = normalized,
+                scaleMax = DefaultSeedData.scaleMaxFor(normalized),
                 hint = hint.trim().takeIf { it.isNotEmpty() },
                 updatedAt = System.currentTimeMillis(),
             ),

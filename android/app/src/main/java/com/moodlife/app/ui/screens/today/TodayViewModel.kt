@@ -37,9 +37,11 @@ import com.moodlife.app.util.DateUtils
 import com.moodlife.app.ui.navigation.DayNavigationState
 import com.moodlife.app.util.MedsUtils
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.async
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -112,7 +114,7 @@ data class CatalogEditTarget(
     val kind: Kind,
     val id: String,
     val name: String,
-    val scaleType: String = "qual4-i",
+    val scaleType: String = "0-5",
     val category: String = "Общие",
     val color: String = "#2BBFA0",
     val direction: String = "depression",
@@ -156,7 +158,7 @@ data class TodayUiState(
     val showOnboarding: Boolean = false,
     val dayNotes: List<DayNoteUiItem> = emptyList(),
     val newNoteText: String = "",
-    val newSymptomScale: String = "qual4-i",
+    val newSymptomScale: String = "0-5",
     val catalogEdit: CatalogEditTarget? = null,
     val medEditor: MedEditorTarget? = null,
     /** Medication id pending Russian confirm before deleting that day's log. */
@@ -173,14 +175,17 @@ data class TodayUiState(
     val cycleDayLabel: String? = null,
     val moonLabel: String? = null,
     val checkInScheme: String = "morning_day_night",
-    val checkInAxes: Set<String> = setOf("depressed", "elevated", "anxious", "irritable"),
+    val checkInAxes: Set<String> = setOf("tension", "clarity", "impulse", "fatigue"),
     val checkInConfig: com.moodlife.app.domain.CheckInConfig = com.moodlife.app.domain.CheckInConfig.default(),
     val trackables: List<com.moodlife.app.domain.TodayTrackables.Item> =
         com.moodlife.app.domain.TodayTrackables.defaults(),
     val uiMode: com.moodlife.app.domain.UiMode = com.moodlife.app.domain.UiMode.BASIC,
     val launchTipId: String? = null,
     val launchTipMessageRes: Int? = null,
+    val showCrisisSupport: Boolean = false,
 )
+
+data class DayProgress(val filled: Int, val total: Int = 4)
 
 @OptIn(ExperimentalCoroutinesApi::class)
 @HiltViewModel
@@ -247,28 +252,36 @@ class TodayViewModel @Inject constructor(
             }
         }
         viewModelScope.launch {
-            settingsRepository.observe(SettingsRepository.KEY_CHECKIN_SCHEME).collect { raw ->
-                _uiState.update { it.copy(checkInScheme = raw ?: "morning_day_night") }
-            }
-        }
-        viewModelScope.launch {
             settingsRepository.observe(SettingsRepository.KEY_CHECKIN_AXES).collect { raw ->
                 val axes = raw?.split(',')?.map { it.trim() }?.filter { it.isNotEmpty() }?.toSet()
-                    ?: setOf("depressed", "elevated", "anxious", "irritable")
-                _uiState.update { it.copy(checkInAxes = axes.ifEmpty { setOf("depressed", "elevated", "anxious", "irritable") }) }
+                    ?: setOf("tension", "clarity", "impulse", "fatigue")
+                _uiState.update {
+                    it.copy(
+                        checkInAxes = axes.ifEmpty {
+                            setOf("tension", "clarity", "impulse", "fatigue")
+                        },
+                    )
+                }
             }
         }
         viewModelScope.launch {
-            settingsRepository.observe(SettingsRepository.KEY_CHECKIN_CONFIG).collect { raw ->
-                val parsed = com.moodlife.app.domain.CheckInConfig.parse(raw)
-                val scheme = _uiState.value.checkInScheme
-                val axes = _uiState.value.checkInAxes
-                _uiState.update {
-                    it.copy(
-                        checkInConfig = parsed
-                            ?: com.moodlife.app.domain.CheckInConfig.fromScheme(scheme, axes),
+            combine(
+                settingsRepository.observe(SettingsRepository.KEY_CHECKIN_SCHEME),
+                settingsRepository.observe(SettingsRepository.KEY_CHECKIN_CONFIG),
+            ) { schemeRaw, configRaw -> schemeRaw to configRaw }
+            .collect { (schemeRaw, configRaw) ->
+                val scheme = schemeRaw ?: "morning_day_night"
+                val parsed = com.moodlife.app.domain.CheckInConfig.parse(configRaw)
+                var config = parsed
+                    ?: com.moodlife.app.domain.CheckInConfig.fromScheme(scheme)
+                if (com.moodlife.app.domain.CheckInConfig.isLegacyMoodAxes(config)) {
+                    config = com.moodlife.app.domain.CheckInConfig.migrateIfLegacy(config)
+                    settingsRepository.set(
+                        SettingsRepository.KEY_CHECKIN_CONFIG,
+                        com.moodlife.app.domain.CheckInConfig.toJson(config),
                     )
                 }
+                _uiState.update { it.copy(checkInScheme = scheme, checkInConfig = config) }
             }
         }
         viewModelScope.launch {
@@ -282,7 +295,8 @@ class TodayViewModel @Inject constructor(
             }
         }
         viewModelScope.launch {
-            // Seed default symptom catalog once when empty (idempotent).
+            // Seed default symptom catalog once when empty; always migrate legacy scales.
+            symptomRepository.migrateLegacySymptomScales()
             if (symptomRepository.countActive() == 0) {
                 symptomRepository.seedBasicSymptoms()
             }
@@ -378,11 +392,8 @@ class TodayViewModel @Inject constructor(
                 settingsRepository.observe(SettingsRepository.KEY_ONBOARDING_DISMISSED),
                 symptomRepository.observeActive(),
                 medicationRepository.observeActive(),
-                periodRepository.observe(),
-            ) { dismissed, symptoms, meds, period ->
-                val hasBasics = symptoms.size >= 3 &&
-                    meds.isNotEmpty() &&
-                    !period?.lastPeriodStart.isNullOrBlank()
+            ) { dismissed, symptoms, meds ->
+                val hasBasics = symptoms.isNotEmpty() && meds.isNotEmpty()
                 dismissed != "1" && !hasBasics
             }.collect { show ->
                 _uiState.update { it.copy(showOnboarding = show) }
@@ -449,7 +460,12 @@ class TodayViewModel @Inject constructor(
     fun onSociabilityChange(v: Int) = updateAxis("sociability", v)
     fun onSleepQualityChange(v: Int) = updateAxis("sleepQuality", v)
     fun onFunctioningChange(v: Int) = updateAxis("functioning", v)
-    fun onSafetyCheckChange(v: Int) = updateAxis("safetyCheck", v)
+    fun onSafetyCheckChange(v: Int) {
+        updateAxis("safetyCheck", v)
+        if (v in 1..1) _uiState.update { it.copy(showCrisisSupport = true) }
+    }
+
+    fun dismissCrisisSupport() = _uiState.update { it.copy(showCrisisSupport = false) }
     fun onAlcoholUseChange(v: Int) = updateAxis("alcoholUse", v)
     fun onSubstanceUseChange(v: Int) = updateAxis("substanceUse", v)
     fun onRoutineScoreChange(v: Int) = updateAxis("routineScore", v)
@@ -481,6 +497,22 @@ class TodayViewModel @Inject constructor(
     fun onNewNoteTextChange(v: String) = _uiState.update { it.copy(newNoteText = v) }
     fun onNewSymptomScaleChange(v: String) = _uiState.update { it.copy(newSymptomScale = v) }
 
+    fun updateDayNote(id: String, content: String) {
+        val text = content.trim()
+        if (text.isEmpty()) return
+        viewModelScope.launch {
+            dayNoteRepository.updateNote(id, text)
+            _uiState.update { it.copy(saveMessage = "note_updated") }
+        }
+    }
+
+    fun deleteDayNote(id: String) {
+        viewModelScope.launch {
+            dayNoteRepository.deleteNote(id)
+            _uiState.update { it.copy(saveMessage = "note_deleted") }
+        }
+    }
+
     fun openSettingsSection(section: String) = dayNavigation.navigateToSettings(section)
 
     fun addFactorQuick(name: String) {
@@ -502,8 +534,8 @@ class TodayViewModel @Inject constructor(
                 saveMessage = "factor_added",
             )
         }
-        viewModelScope.launch {
-            val entity = factorRepository.addFactor(trimmed) ?: return@launch
+        val job = viewModelScope.async {
+            val entity = factorRepository.addFactor(trimmed) ?: return@async
             _uiState.update { state ->
                 state.copy(
                     factors = state.factors.map {
@@ -523,6 +555,8 @@ class TodayViewModel @Inject constructor(
                 )
             }
         }
+        synchronized(pendingAddJobs) { pendingAddJobs.add(job) }
+        viewModelScope.launch { job.await(); synchronized(pendingAddJobs) { pendingAddJobs.remove(job) } }
     }
 
     fun addSymptomQuick(name: String) {
@@ -543,13 +577,13 @@ class TodayViewModel @Inject constructor(
                 saveMessage = "symptom_added",
             )
         }
-        viewModelScope.launch {
+        val job = viewModelScope.async {
             val entity = symptomRepository.addSymptom(
                 name = trimmed,
                 category = "Общие",
                 color = "#2BBFA0",
                 scaleType = scaleType,
-            ) ?: return@launch
+            ) ?: return@async
             _uiState.update { state ->
                 state.copy(
                     symptoms = state.symptoms.map {
@@ -568,9 +602,11 @@ class TodayViewModel @Inject constructor(
                 )
             }
         }
+        synchronized(pendingAddJobs) { pendingAddJobs.add(job) }
+        viewModelScope.launch { job.await(); synchronized(pendingAddJobs) { pendingAddJobs.remove(job) } }
     }
 
-    fun addWarningQuick(name: String) {
+    fun addWarningQuick(name: String, direction: String = "depression") {
         val trimmed = name.trim()
         if (trimmed.isEmpty()) return
         val tempId = "tmp-w-${System.currentTimeMillis()}"
@@ -579,14 +615,14 @@ class TodayViewModel @Inject constructor(
                 warnings = state.warnings + WarningUiItem(
                     id = tempId,
                     name = trimmed,
-                    direction = "depression",
+                    direction = direction,
                     active = false,
                 ),
                 saveMessage = "warning_added",
             )
         }
-        viewModelScope.launch {
-            val entity = warningSignRepository.addSign(trimmed, direction = "depression") ?: return@launch
+        val job = viewModelScope.async {
+            val entity = warningSignRepository.addSign(trimmed, direction = direction) ?: return@async
             _uiState.update { state ->
                 state.copy(
                     warnings = state.warnings.map {
@@ -596,6 +632,8 @@ class TodayViewModel @Inject constructor(
                 )
             }
         }
+        synchronized(pendingAddJobs) { pendingAddJobs.add(job) }
+        viewModelScope.launch { job.await(); synchronized(pendingAddJobs) { pendingAddJobs.remove(job) } }
     }
 
     fun openAddMed() {
@@ -1044,13 +1082,50 @@ class TodayViewModel @Inject constructor(
                 com.moodlife.app.domain.TodayTrackables.serialize(next),
             )
             // Keep AxisScalePrefs max in sync for numeric axes
-            if (scaleType == "0-5" || scaleType == "0-10") {
-                val max = if (scaleType == "0-10") 10 else 5
-                val merged = _uiState.value.axisScalePrefs.toMutableMap().apply { put(key, max) }
+            val normalized = com.moodlife.app.domain.TodayTrackables.normalizeScaleType(scaleType)
+            if (normalized == "0-5") {
+                val merged = _uiState.value.axisScalePrefs.toMutableMap().apply { put(key, 5) }
                 settingsRepository.set(
                     com.moodlife.app.domain.AxisScalePrefs.KEY,
                     com.moodlife.app.domain.AxisScalePrefs.serialize(merged),
                 )
+            }
+            // Clamp current day value to new scale so UI / charts stay consistent.
+            val maxVal = when (normalized) {
+                "yesno" -> 1
+                "options" -> com.moodlife.app.domain.TodayTrackables.optionsFor(key).lastIndex
+                else -> 5
+            }
+            val current = when (key) {
+                "depressed" -> _uiState.value.depressed
+                "elevated" -> _uiState.value.elevated
+                "anxious" -> _uiState.value.anxious
+                "irritable" -> _uiState.value.irritable
+                "energy" -> _uiState.value.energy
+                "concentration" -> _uiState.value.concentration
+                "appetite" -> _uiState.value.appetite
+                "sociability" -> _uiState.value.sociability
+                "sleepQuality" -> _uiState.value.sleepQuality
+                "functioning" -> _uiState.value.functioning
+                "safetyCheck" -> _uiState.value.safetyCheck
+                "routineScore" -> _uiState.value.routineScore
+                else -> 0
+            }
+            if (current > maxVal) {
+                when (key) {
+                    "depressed" -> onDepressedChange(maxVal)
+                    "elevated" -> onElevatedChange(maxVal)
+                    "anxious" -> onAnxiousChange(maxVal)
+                    "irritable" -> onIrritableChange(maxVal)
+                    "energy" -> onEnergyChange(maxVal)
+                    "concentration" -> onConcentrationChange(maxVal)
+                    "appetite" -> onAppetiteChange(maxVal)
+                    "sociability" -> onSociabilityChange(maxVal)
+                    "sleepQuality" -> onSleepQualityChange(maxVal)
+                    "functioning" -> onFunctioningChange(maxVal)
+                    "safetyCheck" -> onSafetyCheckChange(maxVal)
+                    "routineScore" -> onRoutineScoreChange(maxVal)
+                }
             }
         }
     }
@@ -1104,6 +1179,9 @@ class TodayViewModel @Inject constructor(
     }
 
     private suspend fun flushPendingEditsSuspend(forceClearEdited: Boolean) {
+        // Wait for any in-flight optimistic-add coroutines so tmp-IDs are resolved before day switch.
+        val jobs = synchronized(pendingAddJobs) { pendingAddJobs.toList() }
+        jobs.forEach { runCatching { it.await() } }
         flushAxisEdits()
         flushSymptomWrites()
         flushProdromeEdits()
@@ -1117,6 +1195,8 @@ class TodayViewModel @Inject constructor(
             settingsRepository.set(SettingsRepository.KEY_ONBOARDING_COMPLETED, "1")
         }
     }
+
+    fun clearSaveMessage() = _uiState.update { it.copy(saveMessage = null) }
 
     fun dismissLaunchTip() {
         val tipId = _uiState.value.launchTipId ?: return
@@ -1201,6 +1281,7 @@ class TodayViewModel @Inject constructor(
     private var axisPersistJob: Job? = null
     private var symptomPersistJob: Job? = null
     private val pendingSymptomWrites = mutableMapOf<String, PendingSymptomWrite>()
+    private val pendingAddJobs = mutableListOf<Deferred<Unit>>()
 
     private data class PendingSymptomWrite(val severity: Int, val scaleMax: Int)
 
@@ -1396,8 +1477,16 @@ class TodayViewModel @Inject constructor(
             }
         }
         state.moodEntryId?.let { return it }
-        // Creating the day row also snapshots current axes (may be zeros if user only tapped side-effects).
-        val entry = moodRepository.ensureEntry(state.date, state.toFields())
+        // Only create a day row if at least one axis/sleep field is non-zero, to avoid polluting
+        // the clinical log with phantom zero-entries created by a single factor/symptom tap.
+        val f = state.toFields()
+        val hasAnyData = listOf(
+            f.depressed, f.elevated, f.anxious, f.irritable, f.energy, f.concentration,
+            f.appetite, f.sociability, f.sleepQuality, f.functioning, f.safetyCheck,
+            f.alcoholUse, f.substanceUse, f.routineScore,
+        ).any { it > 0 } || f.sleepHours != null
+        if (!hasAnyData) return null
+        val entry = moodRepository.ensureEntry(state.date, f)
         _uiState.update { it.copy(moodEntryId = entry.id) }
         return entry.id
     }
@@ -1747,9 +1836,8 @@ class TodayViewModel @Inject constructor(
         val max = when (key) {
             "functioning", "routineScore" -> 10
             "safetyCheck" -> 3
-            "energy", "concentration", "appetite", "sociability", "sleepQuality" -> 3
             "alcoholUse", "substanceUse" -> 5
-            else -> 5
+            else -> axisMax(key, 5)
         }
         val value = MoodScales.clamp(raw, max)
         _uiState.update { state ->
@@ -1845,8 +1933,9 @@ class TodayViewModel @Inject constructor(
         fun calcSleepHours(bed: String, wake: String): Float? {
             val bedMin = parseHmMinutes(bed) ?: return null
             val wakeMin = parseHmMinutes(wake) ?: return null
+            if (bedMin == wakeMin) return null
             var diff = wakeMin - bedMin
-            if (diff <= 0) diff += 24 * 60
+            if (diff < 0) diff += 24 * 60
             return diff / 60f
         }
 

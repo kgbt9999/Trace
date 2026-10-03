@@ -296,4 +296,20 @@ class DayNoteRepository @Inject constructor(
             ),
         )
     }
+
+    suspend fun updateNote(id: String, content: String) {
+        val text = content.trim()
+        if (text.isEmpty()) return
+        val existing = dayNoteDao.getById(id) ?: return
+        dayNoteDao.update(
+            existing.copy(
+                content = text,
+                updatedAt = System.currentTimeMillis(),
+            ),
+        )
+    }
+
+    suspend fun deleteNote(id: String) {
+        dayNoteDao.deleteById(id)
+    }
 }

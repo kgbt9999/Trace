@@ -1,4 +1,4 @@
-<?xml version="1.0" encoding="utf-8"?>
+﻿<?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">Trace</string>
     <string name="hc_privacy_title">Trace и Health Connect</string>
@@ -46,6 +46,13 @@
     <string name="today_save_success">Запись сохранена</string>
     <string name="today_save_error">Не удалось сохранить</string>
     <string name="today_delete">Удалить запись дня</string>
+    <string name="crisis_dialog_title">Вам сейчас тяжело</string>
+    <string name="crisis_dialog_body">Это важный сигнал — вы не одни.\n\nЕсли вам нужна поддержка прямо сейчас:\n\n📞 Телефон доверия: 8-800-2000-122\n(бесплатно, круглосуточно)\n\nПозвоните психиатру или близкому человеку, если чувствуете, что ситуация ухудшается. Безопасность — прежде всего.</string>
+    <string name="crisis_dialog_close">Понятно</string>
+    <string name="crisis_dialog_call">Позвонить 8-800-2000-122</string>
+    <string name="day_progress_label">Заполнено: %1$d из %2$d разделов</string>
+    <string name="today_delete_confirm_title">Удалить запись дня?</string>
+    <string name="today_delete_confirm_body">Все данные за этот день (настроение, симптомы, факторы) будут удалены без возможности восстановления.</string>
     <string name="today_delete_success">Запись удалена</string>
     <string name="today_prev_day">Предыдущий день</string>
     <string name="today_next_day">Следующий день</string>
@@ -79,6 +86,13 @@
     <string name="today_note_hint">Заметка</string>
     <string name="today_add_note">Добавить заметку</string>
     <string name="today_note_added">Заметка сохранена</string>
+    <string name="today_note_edit">Изменить заметку</string>
+    <string name="today_note_edit_title">Редактировать заметку</string>
+    <string name="today_note_delete">Удалить заметку</string>
+    <string name="today_note_delete_title">Удалить заметку?</string>
+    <string name="today_note_delete_confirm">Заметка будет удалена без возможности восстановления.</string>
+    <string name="today_note_updated">Заметка обновлена</string>
+    <string name="today_note_deleted">Заметка удалена</string>
     <string name="catalog_add">Добавить</string>
     <string name="catalog_add_factor">Новый триггер или фактор</string>
     <string name="catalog_add_symptom">Новый симптом</string>
@@ -279,7 +293,7 @@
     <string name="reports_kpi_med_misses">%1$d пропуск(ов)</string>
     <string name="reports_kpi_med_ok">без пропусков в журнале</string>
     <string name="reports_mood_sleep_title">Настроение и сон</string>
-    <string name="reports_mood_sleep_hint">Линия полярности (−5…+5) и столбцы часов сна (двойная ось).</string>
+    <string name="reports_mood_sleep_hint">Столбцы — часы сна (слева); линия — полярность настроения (справа). Полоса 7–9 ч — ориентир длительности, не норма терапии.</string>
     <string name="reports_mood_sleep_mood">Настроение</string>
     <string name="reports_mood_sleep_sleep">Сон (ч/2)</string>
     <string name="reports_mood_sleep_sleep_bars">Сон (часы)</string>
@@ -300,17 +314,18 @@
     <string name="reports_charts_move_up">Выше</string>
     <string name="reports_charts_move_down">Ниже</string>
     <string name="today_graph_params_section">Параметры графиков</string>
-    <string name="today_help_graph_params">Здесь включаете параметры, выбираете шкалу и сразу отмечаете значение за день. Другие шторки осей убраны, чтобы не дублировать ввод. Влияет на графики «Отчёты». Не клинический приказ.</string>
+    <string name="today_help_graph_params">Каждый параметр — шкала 0–5, да/нет или готовые варианты. Отметьте значение за день — это основа графиков в «Отчётах». Не клинический приказ.</string>
     <string name="today_chart_params">Параметры графиков</string>
     <string name="today_chart_params_title">Параметры графиков</string>
     <string name="today_chart_params_intro">Эти показатели дневника влияют на графики во вкладке «Отчёты». Образовательная иерархия, не клинический приказ.</string>
-    <string name="today_chart_params_pick">Включите параметр → выберите шкалу → отметьте значение прямо здесь. Дубли в других шторках убраны.</string>
+    <string name="today_chart_params_pick">Шкалы: 0–5 · да/нет · варианты (с подписями). Включённые параметры идут в «Отчёты».</string>
     <string name="today_chart_params_mood">Полярность (спад/подъём) — линейный график и тепловая карта</string>
     <string name="today_chart_params_symptoms">Тревога, раздражение, энергия, концентрация, аппетит — радар и доп. оси</string>
     <string name="today_chart_params_sleep">Сон (часы и качество) — график сон+настроение</string>
     <string name="today_chart_params_meds">Приём лекарств — дозы (мг) по дням и сетка приёма</string>
     <string name="today_chart_params_warnings">Отмеченные признаки — блок «Внимание к изменениям»</string>
     <string name="today_chart_params_close">Понятно</string>
+    <string name="reports_radar_axis_hint">Оси профиля (0…макс)</string>
     <string name="reports_radar_legend_today">Сегодня / среднее</string>
     <string name="reports_radar_legend_baseline">Ориентир (уровень 1)</string>
     <string name="reports_history_phase_low">Спад (дневник)</string>
@@ -461,6 +476,10 @@
     <string name="settings_scale_yesno">Нет / Да</string>
     <string name="settings_scale_0_5">Шкала 0–5</string>
     <string name="settings_scale_0_10">Шкала 0–10</string>
+    <string name="settings_scale_options">Варианты (Нет / Слабо / Умеренно / Сильно)</string>
+    <string name="settings_scale_options_short">Варианты</string>
+    <string name="today_graph_params_on_charts">На графиках</string>
+    <string name="today_graph_params_hidden">Скрытые параметры</string>
     <string name="settings_seed_all">Подставить базовый набор</string>
     <string name="settings_seed_all_hint">Симптомы, продромы и триггеры по Colom &amp; Vieta — без дублей и без затирания ваших.</string>
     <string name="settings_seed_all_ok">Базовый набор обновлён</string>
@@ -600,7 +619,7 @@
 
     <!-- Check-ins -->
     <string name="checkins_title">Чек-ины настроения</string>
-    <string name="checkins_hint">Утро / день / вечер — быстрые снимки осей. Основная запись дня ниже.</string>
+    <string name="checkins_hint">По желанию: утро/день/вечер — короткий срез «как сейчас» (напряжение, ясность…). Дневные оси настроения — в «Параметрах графиков».</string>
     <string name="checkins_save">Сохранить чек-ин</string>
     <string name="checkins_saved">Чек-ин сохранён</string>
 
@@ -765,7 +784,7 @@
     <string name="today_help_extra">Силы, внимание, аппетит, общительность — дополнительный контекст к основным осям.</string>
     <string name="today_help_clinical">Качество сна, дела дня, безопасность и регулярность режима — то, что часто меняется раньше заметных сдвигов по шкалам.</string>
     <string name="today_help_context">Погода и данные Health Connect за выбранный день. Не причинность, а ваш контекст.</string>
-    <string name="today_help_checkins">Короткие снимки утром/днём/вечером, если полный дневник тяжело заполнять сразу.</string>
+    <string name="today_help_checkins">Необязательно. Снимки утром/днём/вечером по другим осям (напряжение, усталость). Основной дневник — «Параметры графиков». Включите в настройках экрана «Сегодня», если нужно.</string>
     <string name="today_help_substance">Отдельный блок алкоголя и веществ. По умолчанию скрыт — те же шкалы есть в «Триггеры и факторы».</string>
     <string name="today_help_sleep">Во сколько легли и встали. Регулярность важнее «идеальных» часов.</string>
     <string name="today_help_meds">Отметки приёма по слотам. Постоянные препараты заранее появляются на неделю вперёд.</string>
@@ -915,7 +934,7 @@
 
     <string name="settings_nav_other">Другие настройки</string>
     <string name="checkins_full_title">Чек-ины: полная настройка</string>
-    <string name="checkins_full_desc">Слоты периодов, оси/проявления, число ступеней и подписи к каждой. Сохраняется локально.</string>
+    <string name="checkins_full_desc">Слоты периодов и параметры среза (да/нет, 0–5 или готовые варианты). Без дубля осей настроения из параметров графиков.</string>
     <string name="checkins_slots_edit">Периоды (слоты)</string>
     <string name="checkins_axes_edit">Оси и шкалы</string>
     <string name="checkins_slot_label">Название слота</string>
@@ -1010,4 +1029,25 @@
     <string name="reports_charts_settings_title">Какие графики показывать</string>
     <string name="reports_charts_settings_desc">Включите только нужные блоки на вкладке «Отчёты».</string>
     <string name="reports_charts_settings_hint">Состав графиков можно изменить в Настройки → Другие настройки.</string>
+
+    <!-- Warning sign directions (BUG-007) -->
+    <string name="warning_direction_mania">Продром мании / гипомании</string>
+    <string name="warning_direction_mixed">Смешанное состояние</string>
+    <string name="warning_direction_depression">Продром депрессии</string>
+
+    <!-- Episode phase labels (BUG-007) -->
+    <string name="phase_euthymic">Ровные отметки по шкалам</string>
+    <string name="phase_prodromal_depression">Ранние признаки спада по шкалам</string>
+    <string name="phase_prodromal_mania">Ранние признаки подъёма по шкалам</string>
+    <string name="phase_acute_depression">Выраженный спад по шкалам</string>
+    <string name="phase_acute_mania">Выраженный подъём по шкалам</string>
+    <string name="phase_mixed">Смешанные отметки по шкалам</string>
+    <string name="phase_recovery">Отметки ближе к обычным</string>
+
+    <!-- Warning add direction choice (BUG-008) -->
+    <string name="warning_add_direction_label">Направление признака</string>
+    <string name="warning_add_direction_mania">Мания / гипомания</string>
+    <string name="warning_add_direction_depression">Депрессия</string>
+    <string name="warning_add_direction_mixed">Смешанное</string>
 </resources>
+

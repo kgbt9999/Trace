@@ -243,13 +243,13 @@ private fun OptionSteps(
                     ) { ink ->
                         Text(
                             text = options[i],
-                            fontSize = 13.sp,
+                            fontSize = 12.sp,
                             fontWeight = FontWeight.Medium,
                             textAlign = TextAlign.Center,
                             color = ink,
-                            maxLines = 3,
+                            maxLines = 2,
                             overflow = TextOverflow.Ellipsis,
-                            lineHeight = 16.sp,
+                            lineHeight = 15.sp,
                         )
                     }
                 }
@@ -279,7 +279,7 @@ private fun ScaleStep(
     val ink = if (active) color.onFill() else MaterialTheme.colorScheme.onSurface
     Box(
         modifier = modifier
-            .heightIn(min = 58.dp)
+            .heightIn(min = 52.dp)
             .clip(RoundedCornerShape(10.dp))
             .background(bg)
             .border(

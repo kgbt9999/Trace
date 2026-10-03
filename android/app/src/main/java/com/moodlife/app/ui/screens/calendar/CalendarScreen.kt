@@ -739,18 +739,20 @@ private fun MedMonthDayCell(
             ) {
                 Box(
                     Modifier
-                        .size(12.dp)
+                        .size(14.dp)
                         .clip(CircleShape)
                         .background(tint),
                     contentAlignment = Alignment.Center,
                 ) {
                     Text(
                         MedAccentColors.glyphFor(line.name),
-                        fontSize = 7.sp,
+                        fontSize = 8.sp,
                         fontWeight = FontWeight.Bold,
                         color = Color.White,
                         maxLines = 1,
-                        lineHeight = 8.sp,
+                        softWrap = false,
+                        lineHeight = 9.sp,
+                        textAlign = TextAlign.Center,
                     )
                 }
                 Text(
@@ -809,6 +811,8 @@ private fun androidx.compose.foundation.layout.RowScope.CalendarDayCell(
     val moon = iso?.let { MoonPhaseCalc.moonPhase(it) }
     val glyph = entry?.let { dayGlyph(it) }
     val personalIcon = iso?.let { state.dayIcons[it] }
+    val weatherIcon = iso?.let { state.weatherByDate[it] }?.icon?.take(2)?.takeIf { it.isNotBlank() }
+    val primaryBadge = personalIcon ?: glyph?.takeIf { it != "·" }
     val baseBg = if (tint == Color.Transparent) {
         Color.Transparent
     } else {
@@ -830,15 +834,15 @@ private fun androidx.compose.foundation.layout.RowScope.CalendarDayCell(
                 },
             )
             .clickable(enabled = iso != null, onClick = onClick)
-            .padding(horizontal = 2.dp, vertical = 3.dp)
+            .padding(horizontal = 2.dp, vertical = 2.dp)
             .semantics {
                 contentDescription = buildString {
                     dayNum?.let { append("День $it") }
-                    glyph?.let { append(", $it") }
-                    personalIcon?.let { append(", значок $it") }
+                    primaryBadge?.let { append(", $it") }
                     moon?.let { append(", ${it.label}") }
                 }
             },
+        horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         Row(
             Modifier.fillMaxWidth(),
@@ -848,36 +852,61 @@ private fun androidx.compose.foundation.layout.RowScope.CalendarDayCell(
             dayNum?.let {
                 Text(
                     it,
-                    style = MaterialTheme.typography.labelMedium,
+                    style = MaterialTheme.typography.labelSmall,
                     fontWeight = if (entry != null) FontWeight.SemiBold else FontWeight.Normal,
                     color = MaterialTheme.colorScheme.onSurface,
+                    maxLines = 1,
+                    fontSize = 10.sp,
+                    lineHeight = 11.sp,
                 )
             }
-            Row(horizontalArrangement = Arrangement.spacedBy(1.dp)) {
-                if (personalIcon != null) Text(personalIcon, fontSize = 8.sp)
-                if (glyph != null) {
-                    Text(glyph, fontSize = 9.sp, fontWeight = FontWeight.Bold)
-                }
-                iso?.let { state.weatherByDate[it] }?.icon?.let { Text(it.take(2), fontSize = 7.sp) }
-                if (moon != null) Text(moon.icon, fontSize = 7.sp)
-                if (isPeriod) {
-                    Box(
-                        Modifier
-                            .size(width = 8.dp, height = 3.dp)
-                            .clip(RoundedCornerShape(50))
-                            .background(palette.cycle),
+            if (isPeriod) {
+                Box(
+                    Modifier
+                        .size(width = 7.dp, height = 3.dp)
+                        .clip(RoundedCornerShape(50))
+                        .background(palette.cycle),
+                )
+            }
+        }
+        Box(
+            Modifier
+                .weight(1f)
+                .fillMaxWidth(),
+            contentAlignment = Alignment.Center,
+        ) {
+            if (primaryBadge != null) {
+                Text(
+                    primaryBadge,
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Bold,
+                    lineHeight = 14.sp,
+                    maxLines = 1,
+                    softWrap = false,
+                    textAlign = TextAlign.Center,
+                )
+            }
+        }
+        val secondary = buildList {
+            weatherIcon?.let { add(it) }
+            moon?.icon?.let { add(it) }
+            if (personalIcon != null && glyph != null && glyph != "·") add(glyph)
+        }.take(2)
+        if (secondary.isNotEmpty()) {
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(1.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                secondary.forEach { mark ->
+                    Text(
+                        mark,
+                        fontSize = 7.sp,
+                        lineHeight = 8.sp,
+                        maxLines = 1,
+                        softWrap = false,
                     )
                 }
             }
-        }
-        if (glyph != null || personalIcon != null) {
-            Spacer(Modifier.height(4.dp))
-            Text(
-                glyph ?: personalIcon.orEmpty(),
-                fontSize = 12.sp,
-                fontWeight = FontWeight.Bold,
-                modifier = Modifier.align(Alignment.CenterHorizontally),
-            )
         }
     }
 }

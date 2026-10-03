@@ -54,6 +54,8 @@ import com.moodlife.app.data.local.entity.MedicationEntity
 import com.moodlife.app.data.local.entity.SymptomEntity
 import com.moodlife.app.ui.components.IsoDatePickerField
 import com.moodlife.app.ui.components.MedicationFormDialog
+import com.moodlife.app.ui.components.ScaleTypeChips
+import com.moodlife.app.ui.components.TRACKABLE_SCALE_OPTIONS
 import com.moodlife.app.ui.theme.AppearanceId
 import com.moodlife.app.ui.theme.BrandColors
 import com.moodlife.app.ui.theme.ThemeViewModel
@@ -63,11 +65,9 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 
 private val SYMPTOM_SCALE_TYPES = listOf(
-    "qual4-i" to R.string.settings_scale_qual4_i,
-    "qual4-lmh" to R.string.settings_scale_qual4_lmh,
     "yesno" to R.string.settings_scale_yesno,
     "0-5" to R.string.settings_scale_0_5,
-    "0-10" to R.string.settings_scale_0_10,
+    "options" to R.string.settings_scale_options_short,
 )
 
 private val SYMPTOM_CATEGORIES = listOf("Общие", "Поведение", "Когнитивные", "Эмоции", "Тело")
@@ -184,7 +184,7 @@ private fun SymptomsSettingsSection(state: SettingsUiState, viewModel: SettingsV
                     initialName = "",
                     initialCategory = "Общие",
                     initialColor = SETTINGS_COLOR_PALETTE.first(),
-                    initialScale = "qual4-i",
+                    initialScale = "0-5",
                     initialHint = "",
                     submitLabel = stringResource(R.string.settings_add),
                     onSubmit = { name, category, color, scale, hint ->
@@ -634,23 +634,64 @@ private fun MedsSettingsSection(state: SettingsUiState, viewModel: SettingsViewM
         FilledTonalButton(onClick = { showAdd = true }, modifier = Modifier.fillMaxWidth()) {
             Text(stringResource(R.string.settings_add_med))
         }
+        val medReminderContext = LocalContext.current
+        var medsReminderOn by remember { mutableStateOf(false) }
+        var medsReminderTimes by remember { mutableStateOf("08:00,21:00") }
+        LaunchedEffect(Unit) {
+            val (on, times) = com.moodlife.app.notifications.ReminderScheduler.readMeds(medReminderContext)
+            medsReminderOn = on
+            medsReminderTimes = times.joinToString(",")
+        }
         SettingsCard(
             title = stringResource(R.string.notif_meds_section_title),
             description = stringResource(R.string.notif_meds_section_desc),
         ) {
-            Text(
-                stringResource(R.string.settings_med_reminders_note),
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-            Text(
-                stringResource(R.string.notif_meds_section_hint),
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(top = 6.dp),
-            )
-            TextButton(onClick = { viewModel.dayNavigation.selectSettingsSection("other") }) {
-                Text(stringResource(R.string.notif_open_other))
+            Row(
+                Modifier.fillMaxWidth().heightIn(min = 48.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    stringResource(R.string.notif_meds_enable),
+                    Modifier.weight(1f),
+                    style = MaterialTheme.typography.bodyMedium,
+                )
+                Switch(
+                    checked = medsReminderOn,
+                    onCheckedChange = { on ->
+                        medsReminderOn = on
+                        viewModel.saveMedsReminder(
+                            medReminderContext, on,
+                            medsReminderTimes.split(',').map { it.trim() }.filter { it.isNotEmpty() },
+                        )
+                    },
+                )
+            }
+            if (medsReminderOn) {
+                OutlinedTextField(
+                    value = medsReminderTimes,
+                    onValueChange = { raw ->
+                        medsReminderTimes = raw
+                        viewModel.saveMedsReminder(
+                            medReminderContext, true,
+                            raw.split(',').map { it.trim() }.filter { it.isNotEmpty() },
+                        )
+                    },
+                    label = { Text(stringResource(R.string.notif_meds_times)) },
+                    supportingText = { Text(stringResource(R.string.notif_meds_times_hint)) },
+                    modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
+                    singleLine = true,
+                )
+            }
+            if (android.os.Build.VERSION.SDK_INT >= 33) {
+                val launcher = androidx.activity.compose.rememberLauncherForActivityResult(
+                    androidx.activity.result.contract.ActivityResultContracts.RequestPermission(),
+                ) { }
+                TextButton(
+                    onClick = { launcher.launch(android.Manifest.permission.POST_NOTIFICATIONS) },
+                    modifier = Modifier.padding(top = 2.dp),
+                ) {
+                    Text(stringResource(R.string.notif_request_permission))
+                }
             }
         }
         if (showAdd) {
@@ -1629,16 +1670,16 @@ private fun LayoutSettingsSection(viewModel: SettingsViewModel) {
     LaunchedEffect(checkInConfigRaw, checkInScheme, checkInAxesRaw) {
         if (configDirty) return@LaunchedEffect
         val parsed = com.moodlife.app.domain.CheckInConfig.parse(checkInConfigRaw)
-        if (parsed != null) {
-            config = parsed
+        var next = if (parsed != null) {
+            parsed
         } else {
-            val axes = checkInAxesRaw?.split(',')?.map { it.trim() }?.filter { it.isNotEmpty() }?.toSet()
-                ?: setOf("depressed", "elevated", "anxious", "irritable")
-            config = com.moodlife.app.domain.CheckInConfig.fromScheme(
-                checkInScheme ?: "morning_day_night",
-                axes,
-            )
+            com.moodlife.app.domain.CheckInConfig.fromScheme(checkInScheme ?: "morning_day_night")
         }
+        if (com.moodlife.app.domain.CheckInConfig.isLegacyMoodAxes(next)) {
+            next = com.moodlife.app.domain.CheckInConfig.migrateIfLegacy(next)
+            viewModel.saveCheckInConfig(next)
+        }
+        config = next
         stepLabelDrafts = config.axes.associate { it.id to it.stepLabels.joinToString(", ") }
         configHydrated = true
     }
@@ -1730,62 +1771,60 @@ private fun LayoutSettingsSection(viewModel: SettingsViewModel) {
                             enabled = config.axes.size > 1,
                         ) { Text(stringResource(R.string.checkins_remove)) }
                     }
+                    Text(
+                        stringResource(R.string.settings_symptom_scale),
+                        style = MaterialTheme.typography.bodySmall,
+                        modifier = Modifier.padding(top = 6.dp, bottom = 4.dp),
+                    )
                     Row(
-                        Modifier.fillMaxWidth().padding(top = 4.dp),
+                        Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
                     ) {
-                        OutlinedTextField(
-                            value = axis.min.toString(),
-                            onValueChange = { v ->
-                                val n = v.toIntOrNull() ?: return@OutlinedTextField
-                                updateConfig(
-                                    config.copy(
-                                        axes = config.axes.toMutableList().also {
-                                            it[index] = axis.copy(min = n.coerceIn(0, 20))
-                                        },
-                                    ),
-                                )
-                            },
-                            label = { Text("min") },
-                            modifier = Modifier.weight(1f),
-                            singleLine = true,
-                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                        )
-                        OutlinedTextField(
-                            value = axis.max.toString(),
-                            onValueChange = { v ->
-                                val n = v.toIntOrNull() ?: return@OutlinedTextField
-                                updateConfig(
-                                    config.copy(
-                                        axes = config.axes.toMutableList().also {
-                                            it[index] = axis.copy(max = n.coerceIn(axis.min + 1, 20))
-                                        },
-                                    ),
-                                )
-                            },
-                            label = { Text("max") },
-                            modifier = Modifier.weight(1f),
-                            singleLine = true,
-                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                        )
-                    }
-                    OutlinedTextField(
-                        value = stepLabelDrafts[axis.id] ?: axis.stepLabels.joinToString(", "),
-                        onValueChange = { raw ->
-                            stepLabelDrafts = stepLabelDrafts + (axis.id to raw)
-                            val labels = raw.split(',').map { it.trim() }.filter { it.isNotEmpty() }
-                            updateConfig(
-                                config.copy(
-                                    axes = config.axes.toMutableList().also {
-                                        it[index] = axis.copy(stepLabels = labels)
-                                    },
-                                ),
+                        listOf(
+                            "yesno" to R.string.settings_scale_yesno,
+                            "0-5" to R.string.settings_scale_0_5,
+                            "options" to R.string.settings_scale_options_short,
+                        ).forEach { (type, res) ->
+                            FilterChip(
+                                selected = axis.normalizedScaleType() == type,
+                                onClick = {
+                                    val updated = when (type) {
+                                        "yesno" -> axis.copy(
+                                            scaleType = "yesno",
+                                            min = 0,
+                                            max = 1,
+                                            stepLabels = listOf("Нет", "Да"),
+                                        )
+                                        "options" -> axis.copy(
+                                            scaleType = "options",
+                                            min = 0,
+                                            max = 3,
+                                            stepLabels = com.moodlife.app.domain.DefaultSeedData.OPTIONS_SEVERITY_LABELS,
+                                        )
+                                        else -> axis.copy(
+                                            scaleType = "0-5",
+                                            min = 0,
+                                            max = 5,
+                                            stepLabels = com.moodlife.app.domain.MoodScales.INTENSITY_ANCHORS_COMPACT,
+                                        )
+                                    }
+                                    updateConfig(
+                                        config.copy(
+                                            axes = config.axes.toMutableList().also { it[index] = updated },
+                                        ),
+                                    )
+                                },
+                                label = {
+                                    Text(
+                                        stringResource(res),
+                                        maxLines = 1,
+                                        overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                                    )
+                                },
+                                modifier = Modifier.weight(1f),
                             )
-                        },
-                        label = { Text(stringResource(R.string.checkins_step_labels)) },
-                        modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
-                        supportingText = { Text(stringResource(R.string.checkins_step_labels_hint)) },
-                    )
+                        }
+                    }
                 }
             }
             OutlinedButton(
@@ -1795,10 +1834,11 @@ private fun LayoutSettingsSection(viewModel: SettingsViewModel) {
                         config.copy(
                             axes = config.axes + com.moodlife.app.domain.CheckInAxisConfig(
                                 id = id,
-                                label = "Ось ${config.axes.size + 1}",
+                                label = "Параметр ${config.axes.size + 1}",
                                 min = 0,
                                 max = 5,
                                 stepLabels = com.moodlife.app.domain.MoodScales.INTENSITY_ANCHORS_COMPACT,
+                                scaleType = "0-5",
                             ),
                         ),
                     )
@@ -1826,12 +1866,7 @@ private fun LayoutSettingsSection(viewModel: SettingsViewModel) {
             ).forEach { (id, res) ->
                 TextButton(
                     onClick = {
-                        val next = com.moodlife.app.domain.CheckInConfig.fromScheme(
-                            id,
-                            config.axes.map { it.id }.toSet().ifEmpty {
-                                setOf("depressed", "elevated", "anxious", "irritable")
-                            },
-                        )
+                        val next = com.moodlife.app.domain.CheckInConfig.fromScheme(id)
                         stepLabelDrafts = next.axes.associate { it.id to it.stepLabels.joinToString(", ") }
                         updateConfig(next)
                         viewModel.setCheckInScheme(id)
@@ -1871,21 +1906,18 @@ private fun LayoutSettingsSection(viewModel: SettingsViewModel) {
                             )
                         }
                         if (item.enabled) {
-                            FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                                listOf("0-5", "0-10", "options", "yesno").forEach { scale ->
-                                    FilterChip(
-                                        selected = item.scaleType == scale,
-                                        onClick = {
-                                            trackables = com.moodlife.app.domain.TodayTrackables.setScale(
-                                                trackables,
-                                                item.key,
-                                                scale,
-                                            )
-                                        },
-                                        label = { Text(scale) },
+                            ScaleTypeChips(
+                                selected = item.scaleType,
+                                onSelect = {
+                                    trackables = com.moodlife.app.domain.TodayTrackables.setScale(
+                                        trackables,
+                                        item.key,
+                                        it,
                                     )
-                                }
-                            }
+                                },
+                                options = TRACKABLE_SCALE_OPTIONS,
+                                showTitle = false,
+                            )
                         }
                     }
                 }
@@ -2174,11 +2206,11 @@ private fun warningDirLabel(dir: String): String = when (dir) {
 }
 
 @Composable
-private fun symptomScaleLabel(symptom: SymptomEntity): String = when (symptom.scaleType) {
+private fun symptomScaleLabel(symptom: SymptomEntity): String = when (
+    com.moodlife.app.domain.DefaultSeedData.normalizeSymptomScale(symptom.scaleType)
+) {
     "yesno" -> stringResource(R.string.settings_scale_yesno)
-    "qual4-i" -> stringResource(R.string.settings_scale_qual4_i)
-    "qual4-lmh" -> stringResource(R.string.settings_scale_qual4_lmh)
+    "options" -> stringResource(R.string.settings_scale_options)
     "0-5" -> stringResource(R.string.settings_scale_0_5)
-    "0-10" -> stringResource(R.string.settings_scale_0_10)
-    else -> "0–${symptom.scaleMax}"
+    else -> stringResource(R.string.settings_scale_0_5)
 }

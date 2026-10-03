@@ -4,6 +4,7 @@ import androidx.room.Dao
 import androidx.room.Insert
 import androidx.room.OnConflictStrategy
 import androidx.room.Query
+import androidx.room.Update
 import com.moodlife.app.data.local.entity.DayNoteEntity
 import com.moodlife.app.data.local.entity.MedicationEntity
 import com.moodlife.app.data.local.entity.MedicationLogEntity
@@ -77,6 +78,9 @@ interface SymptomDao {
     @Query("SELECT * FROM symptoms ORDER BY isActive DESC, sortOrder, name")
     fun observeAll(): Flow<List<SymptomEntity>>
 
+    @Query("SELECT * FROM symptoms ORDER BY sortOrder, name")
+    suspend fun listAll(): List<SymptomEntity>
+
     @Query("SELECT * FROM symptoms WHERE name = :name LIMIT 1")
     suspend fun getByName(name: String): SymptomEntity?
 
@@ -116,6 +120,15 @@ interface DayNoteDao {
     @Query("SELECT * FROM day_notes WHERE date >= :from AND date <= :to ORDER BY date, createdAt")
     suspend fun listRange(from: String, to: String): List<DayNoteEntity>
 
+    @Query("SELECT * FROM day_notes WHERE id = :id LIMIT 1")
+    suspend fun getById(id: String): DayNoteEntity?
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insert(note: DayNoteEntity)
+
+    @Update
+    suspend fun update(note: DayNoteEntity)
+
+    @Query("DELETE FROM day_notes WHERE id = :id")
+    suspend fun deleteById(id: String)
 }

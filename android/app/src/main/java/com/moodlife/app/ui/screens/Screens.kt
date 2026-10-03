@@ -1,6 +1,5 @@
 package com.moodlife.app.ui.screens
 
-import androidx.compose.material3.FilterChip
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Checkbox
@@ -78,9 +77,19 @@ import com.moodlife.app.ui.components.OnboardingCard
 import com.moodlife.app.ui.components.ScaleGrid
 import com.moodlife.app.ui.components.ScaleGridItem
 import com.moodlife.app.ui.components.ScaleInput
+import com.moodlife.app.ui.components.ScaleTypeChips
 import com.moodlife.app.ui.components.SleepHoursField
 import com.moodlife.app.ui.components.SleepTimeField
+import com.moodlife.app.ui.components.TRACKABLE_SCALE_OPTIONS
 import com.moodlife.app.ui.components.WeatherCard
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.FilterChip
+import androidx.compose.material3.LinearProgressIndicator
+import androidx.compose.material3.Switch
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.layout.size
+import android.content.Intent
+import android.net.Uri
 import com.moodlife.app.ui.screens.today.CatalogEditTarget
 import com.moodlife.app.ui.screens.today.SymptomUiItem
 import com.moodlife.app.ui.screens.today.TodayViewModel
@@ -92,7 +101,8 @@ import java.util.Date
 import java.util.Locale
 
 private val SymptomYesNo = listOf("Нет", "Да")
-private val SymptomQual4Lmh = listOf("Нет", "Меньше обычного", "Как обычно", "Больше обычного")
+private val SymptomOptionsSeverity = listOf("Нет", "Слабо", "Умеренно", "Сильно")
+private val LAST_SAVED_FORMAT = java.text.SimpleDateFormat("HH:mm", java.util.Locale("ru"))
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -100,6 +110,16 @@ fun TodayScreen(
     viewModel: TodayViewModel = hiltViewModel(),
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
+    var showDeleteEntryDialog by remember { mutableStateOf(false) }
+
+    // BUG-002: auto-clear save message after 3 s so stale status doesn't mislead
+    LaunchedEffect(state.saveMessage) {
+        if (state.saveMessage != null) {
+            kotlinx.coroutines.delay(3_000)
+            viewModel.clearSaveMessage()
+        }
+    }
+
     val lifecycleOwner = LocalLifecycleOwner.current
     DisposableEffect(lifecycleOwner, viewModel) {
         val observer = LifecycleEventObserver { _, event ->
@@ -112,6 +132,43 @@ fun TodayScreen(
             lifecycleOwner.lifecycle.removeObserver(observer)
             viewModel.flushPendingEdits()
         }
+    }
+
+    // Crisis support dialog — shown when safetyCheck == 1
+    if (state.showCrisisSupport) {
+        val context = androidx.compose.ui.platform.LocalContext.current
+        AlertDialog(
+            onDismissRequest = viewModel::dismissCrisisSupport,
+            title = { Text(stringResource(R.string.crisis_dialog_title)) },
+            text = {
+                Text(
+                    stringResource(R.string.crisis_dialog_body),
+                    style = MaterialTheme.typography.bodyMedium,
+                )
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        runCatching {
+                            context.startActivity(
+                                Intent(Intent.ACTION_DIAL, Uri.parse("tel:88002000122"))
+                                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
+                            )
+                        }
+                    },
+                    colors = androidx.compose.material3.ButtonDefaults.buttonColors(
+                        containerColor = MaterialTheme.colorScheme.error,
+                    ),
+                ) {
+                    Text(stringResource(R.string.crisis_dialog_call))
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = viewModel::dismissCrisisSupport) {
+                    Text(stringResource(R.string.crisis_dialog_close))
+                }
+            },
+        )
     }
 
     Column(
@@ -134,8 +191,31 @@ fun TodayScreen(
             onNext = viewModel::goNextDay,
             onGoToday = viewModel::goToday,
             onPickDate = viewModel::pickDate,
-            modifier = Modifier.padding(bottom = 8.dp),
+            modifier = Modifier.padding(bottom = 4.dp),
         )
+
+        // Day progress bar — shows how many of 4 core sections have data
+        val progressMood = state.depressed > 0 || state.elevated > 0 || state.anxious > 0 || state.irritable > 0
+        val progressSleep = state.sleepHoursText.isNotEmpty()
+        val progressMeds = state.medications.any { it.slotsTaken.values.any { taken -> taken } }
+        val progressSymptoms = state.symptomCount > 0
+        val progressFilled = listOf(progressMood, progressSleep, progressMeds, progressSymptoms).count { it }
+        if (progressFilled > 0 || state.isToday) {
+            Column(modifier = Modifier.padding(bottom = 8.dp)) {
+                LinearProgressIndicator(
+                    progress = { progressFilled / 4f },
+                    modifier = Modifier.fillMaxWidth(),
+                    color = MaterialTheme.colorScheme.primary,
+                    trackColor = MaterialTheme.colorScheme.surfaceVariant,
+                )
+                Text(
+                    stringResource(R.string.day_progress_label, progressFilled, 4),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(top = 2.dp),
+                )
+            }
+        }
 
         Text(
             text = stringResource(R.string.disclaimer),
@@ -337,12 +417,19 @@ fun TodayScreen(
                                     }
                                 }
                                 med.slots.forEach { slot ->
-                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                    val slotLabel = MedsUtils.slotLabel(slot)
+                                    val taken = med.slotsTaken[slot] == true
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        modifier = Modifier.semantics(mergeDescendants = true) {
+                                            contentDescription = "${med.name} · $slotLabel · ${if (taken) "принято" else "не принято"}"
+                                        },
+                                    ) {
                                         Checkbox(
-                                            checked = med.slotsTaken[slot] == true,
+                                            checked = taken,
                                             onCheckedChange = { viewModel.toggleMedSlot(med.id, slot) },
                                         )
-                                        Text(MedsUtils.slotLabel(slot))
+                                        Text(slotLabel)
                                     }
                                 }
                                 }
@@ -376,6 +463,7 @@ fun TodayScreen(
                                     { viewModel.openSettingsSection("symptoms") }
                                 },
                                 onScaleTypeChange = viewModel::onNewSymptomScaleChange,
+                                onEditSymptom = viewModel::startEditSymptom,
                             )
                         }
                     }
@@ -465,6 +553,7 @@ fun TodayScreen(
                     }
                     }
                     TodaySections.Id.WARNINGS -> key(state.date) {
+                    var newWarningDirection by remember { mutableStateOf("depression") }
                     CollapsibleSection(
                         title,
                         initiallyExpanded = false,
@@ -490,8 +579,27 @@ fun TodayScreen(
                                 )
                             }
                         }
+                        // Direction picker so new warnings are not always tagged "depression"
+                        androidx.compose.material3.Text(
+                            stringResource(R.string.warning_add_direction_label),
+                            style = MaterialTheme.typography.labelMedium,
+                            modifier = Modifier.padding(top = 10.dp, bottom = 4.dp),
+                        )
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            listOf(
+                                "depression" to stringResource(R.string.warning_add_direction_depression),
+                                "mania" to stringResource(R.string.warning_add_direction_mania),
+                                "mixed" to stringResource(R.string.warning_add_direction_mixed),
+                            ).forEach { (dir, label) ->
+                                androidx.compose.material3.FilterChip(
+                                    selected = newWarningDirection == dir,
+                                    onClick = { newWarningDirection = dir },
+                                    label = { Text(label) },
+                                )
+                            }
+                        }
                         CatalogAddRow(
-                            onAdd = viewModel::addWarningQuick,
+                            onAdd = { name -> viewModel.addWarningQuick(name, newWarningDirection) },
                             label = stringResource(R.string.catalog_add_warning),
                             addLabel = stringResource(R.string.catalog_add),
                             onOpenSettings = { viewModel.openSettingsSection("warnings") },
@@ -500,6 +608,9 @@ fun TodayScreen(
                     }
                     }
                     TodaySections.Id.NOTES -> key(state.date) {
+                    var editingNoteId by remember(state.date) { mutableStateOf<String?>(null) }
+                    var editingNoteText by remember(state.date) { mutableStateOf("") }
+                    var pendingDeleteNoteId by remember(state.date) { mutableStateOf<String?>(null) }
                     CollapsibleSection(
                         title,
                         initiallyExpanded = false,
@@ -513,11 +624,35 @@ fun TodayScreen(
                             )
                         }
                         state.dayNotes.forEach { note ->
-                            Text(
-                                text = "${note.timeLabel} — ${note.content}",
-                                style = MaterialTheme.typography.bodyMedium,
-                                modifier = Modifier.padding(vertical = 4.dp),
-                            )
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(vertical = 4.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                Text(
+                                    text = "${note.timeLabel} — ${note.content}",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    modifier = Modifier.weight(1f),
+                                )
+                                IconButton(
+                                    onClick = {
+                                        editingNoteId = note.id
+                                        editingNoteText = note.content
+                                    },
+                                ) {
+                                    Icon(
+                                        Icons.Outlined.Edit,
+                                        contentDescription = stringResource(R.string.today_note_edit),
+                                    )
+                                }
+                                IconButton(onClick = { pendingDeleteNoteId = note.id }) {
+                                    Icon(
+                                        Icons.Outlined.Delete,
+                                        contentDescription = stringResource(R.string.today_note_delete),
+                                    )
+                                }
+                            }
                         }
                         OutlinedTextField(
                             value = state.newNoteText,
@@ -528,6 +663,59 @@ fun TodayScreen(
                         FilledTonalButton(onClick = viewModel::addDayNote, modifier = Modifier.padding(top = 4.dp)) {
                             Text(stringResource(R.string.today_add_note))
                         }
+                    }
+                    editingNoteId?.let { noteId ->
+                        AlertDialog(
+                            onDismissRequest = { editingNoteId = null },
+                            title = { Text(stringResource(R.string.today_note_edit_title)) },
+                            text = {
+                                OutlinedTextField(
+                                    value = editingNoteText,
+                                    onValueChange = { editingNoteText = it },
+                                    label = { Text(stringResource(R.string.today_note_hint)) },
+                                    modifier = Modifier.fillMaxWidth(),
+                                    minLines = 2,
+                                )
+                            },
+                            confirmButton = {
+                                TextButton(
+                                    onClick = {
+                                        viewModel.updateDayNote(noteId, editingNoteText)
+                                        editingNoteId = null
+                                    },
+                                    enabled = editingNoteText.isNotBlank(),
+                                ) {
+                                    Text(stringResource(R.string.catalog_edit_save))
+                                }
+                            },
+                            dismissButton = {
+                                TextButton(onClick = { editingNoteId = null }) {
+                                    Text(stringResource(R.string.today_pick_date_cancel))
+                                }
+                            },
+                        )
+                    }
+                    pendingDeleteNoteId?.let { noteId ->
+                        AlertDialog(
+                            onDismissRequest = { pendingDeleteNoteId = null },
+                            title = { Text(stringResource(R.string.today_note_delete_title)) },
+                            text = { Text(stringResource(R.string.today_note_delete_confirm)) },
+                            confirmButton = {
+                                TextButton(
+                                    onClick = {
+                                        viewModel.deleteDayNote(noteId)
+                                        pendingDeleteNoteId = null
+                                    },
+                                ) {
+                                    Text(stringResource(R.string.checkins_remove))
+                                }
+                            },
+                            dismissButton = {
+                                TextButton(onClick = { pendingDeleteNoteId = null }) {
+                                    Text(stringResource(R.string.today_pick_date_cancel))
+                                }
+                            },
+                        )
                     }
                     }
                 }
@@ -577,7 +765,7 @@ fun TodayScreen(
             )
         }
         state.lastSavedAt?.let { ts ->
-            val formatted = SimpleDateFormat("HH:mm", Locale("ru")).format(Date(ts))
+            val formatted = LAST_SAVED_FORMAT.format(Date(ts))
             Text(
                 text = stringResource(R.string.today_last_saved, formatted),
                 style = MaterialTheme.typography.bodySmall,
@@ -610,9 +798,21 @@ fun TodayScreen(
                 }
                 if (state.moodEntryId != null) {
                     OutlinedButton(
-                        onClick = viewModel::deleteEntry,
+                        onClick = { showDeleteEntryDialog = true },
                         modifier = Modifier.fillMaxWidth().padding(top = 6.dp).height(48.dp),
+                        colors = androidx.compose.material3.ButtonDefaults.outlinedButtonColors(
+                            contentColor = MaterialTheme.colorScheme.error,
+                        ),
+                        border = androidx.compose.foundation.BorderStroke(
+                            1.dp,
+                            MaterialTheme.colorScheme.error.copy(alpha = 0.5f),
+                        ),
                     ) {
+                        Icon(
+                            Icons.Outlined.Delete,
+                            contentDescription = null,
+                            modifier = Modifier.padding(end = 6.dp).size(18.dp),
+                        )
                         Text(stringResource(R.string.today_delete))
                     }
                 }
@@ -683,6 +883,33 @@ fun TodayScreen(
         )
     }
 
+    // BUG-004: confirm before irreversible entry deletion
+    if (showDeleteEntryDialog) {
+        AlertDialog(
+            onDismissRequest = { showDeleteEntryDialog = false },
+            title = { Text(stringResource(R.string.today_delete_confirm_title)) },
+            text = { Text(stringResource(R.string.today_delete_confirm_body)) },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        viewModel.deleteEntry()
+                        showDeleteEntryDialog = false
+                    },
+                    colors = androidx.compose.material3.ButtonDefaults.textButtonColors(
+                        contentColor = MaterialTheme.colorScheme.error,
+                    ),
+                ) {
+                    Text(stringResource(R.string.today_delete))
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showDeleteEntryDialog = false }) {
+                    Text(stringResource(R.string.today_pick_date_cancel))
+                }
+            },
+        )
+    }
+
     when (state.showAxisScaleEdit) {
         "mood" -> AxisScaleEditDialog(
             title = stringResource(R.string.axis_scale_edit_mood),
@@ -721,56 +948,95 @@ private fun GraphParamsTrackablePicker(
         "extra" to R.string.today_extra_section,
         "clinical" to R.string.today_clinical_section,
     )
-    val scaleIds = listOf("0-5", "0-10", "options", "yesno")
     val scaleColor = LocalMoodColors.current.functioning
-    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+    var expandedHidden by remember { mutableStateOf(setOf<String>()) }
+    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
         sections.forEach { (section, titleRes) ->
             val items = com.moodlife.app.domain.TodayTrackables.forSection(state.trackables, section)
             if (items.isEmpty()) return@forEach
+            val enabled = items.filter { it.enabled }
+            val hidden = items.filter { !it.enabled }
+            val showHidden = section in expandedHidden
             Text(
                 stringResource(titleRes),
                 style = MaterialTheme.typography.titleSmall,
                 color = MaterialTheme.colorScheme.primary,
             )
-            items.forEach { item ->
-                Column(Modifier.padding(vertical = 4.dp)) {
-                    Row(
-                        Modifier
-                            .fillMaxWidth()
-                            .clickable { onToggle(item.key) }
-                            .padding(vertical = 2.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        Checkbox(
-                            checked = item.enabled,
-                            onCheckedChange = { onToggle(item.key) },
-                        )
-                        Text(
-                            trackableLabel(item.key, null),
-                            style = MaterialTheme.typography.bodyMedium,
-                            modifier = Modifier.padding(start = 4.dp).weight(1f),
-                        )
-                    }
-                    if (item.enabled) {
+            if (enabled.isEmpty()) {
+                Text(
+                    stringResource(R.string.today_trackables_empty),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            enabled.forEach { item ->
+                key(item.key, item.scaleType) {
+                    Column(Modifier.fillMaxWidth()) {
                         Row(
-                            Modifier.padding(start = 40.dp),
-                            horizontalArrangement = Arrangement.spacedBy(6.dp),
+                            Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween,
                         ) {
-                            scaleIds.forEach { scale ->
-                                FilterChip(
-                                    selected = item.scaleType == scale,
-                                    onClick = { onScale(item.key, scale) },
-                                    label = { Text(scale) },
-                                )
-                            }
+                            Text(
+                                trackableLabel(item.key, null),
+                                style = MaterialTheme.typography.titleSmall,
+                                modifier = Modifier.weight(1f),
+                            )
+                            Switch(
+                                checked = true,
+                                onCheckedChange = { onToggle(item.key) },
+                            )
                         }
-                        Spacer(Modifier.height(6.dp))
+                        ScaleTypeChips(
+                            selected = item.scaleType,
+                            onSelect = { onScale(item.key, it) },
+                            options = TRACKABLE_SCALE_OPTIONS,
+                            showTitle = false,
+                            modifier = Modifier.padding(bottom = 2.dp),
+                        )
                         TrackableValueInput(
                             item = item,
                             state = state,
                             viewModel = viewModel,
                             scaleColor = scaleColor,
                         )
+                    }
+                }
+            }
+            if (hidden.isNotEmpty()) {
+                TextButton(
+                    onClick = {
+                        expandedHidden = if (showHidden) {
+                            expandedHidden - section
+                        } else {
+                            expandedHidden + section
+                        }
+                    },
+                ) {
+                    Text(
+                        stringResource(R.string.today_graph_params_hidden) +
+                            " (${hidden.size})" +
+                            if (showHidden) " ▲" else " ▼",
+                    )
+                }
+                if (showHidden) {
+                    hidden.forEach { item ->
+                        Row(
+                            Modifier
+                                .fillMaxWidth()
+                                .padding(vertical = 2.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Text(
+                                trackableLabel(item.key, null),
+                                style = MaterialTheme.typography.bodyMedium,
+                                modifier = Modifier.weight(1f),
+                            )
+                            Switch(
+                                checked = false,
+                                onCheckedChange = { onToggle(item.key) },
+                            )
+                        }
                     }
                 }
             }
@@ -792,10 +1058,10 @@ private fun TrackableValueInput(
     val color = if (item.key == "safetyCheck") LocalMoodColors.current.safety else scaleColor
     when (item.scaleType) {
         "options" -> {
-            val options = trackableOptions(item.key)
+            val options = TodayTrackables.optionsFor(item.key)
             ScaleInput(
                 label = label,
-                value = value.coerceIn(0, options.lastIndex.coerceAtLeast(0)),
+                value = value.coerceIn(0, options.lastIndex),
                 onValueChange = { applyTrackableValue(item.key, it, viewModel) },
                 color = color,
                 options = options,
@@ -815,7 +1081,8 @@ private fun TrackableValueInput(
             onOpenSources = { viewModel.openSources(sourceId) },
         )
         else -> {
-            val max = TodayTrackables.maxFor(item.scaleType, 5)
+            // 0–5 (and legacy 0–10 coerced)
+            val max = 5
             val axis = MoodScales.MOOD_AXES.find { it.key == item.key }
             val customAnchors = axisCfg?.anchors()
             ScaleInput(
@@ -824,11 +1091,7 @@ private fun TrackableValueInput(
                 onValueChange = { applyTrackableValue(item.key, it, viewModel) },
                 color = color,
                 max = max,
-                anchors = when {
-                    customAnchors != null -> customAnchors
-                    max == 5 -> axis?.anchors ?: MoodScales.INTENSITY_ANCHORS_COMPACT
-                    else -> null
-                },
+                anchors = customAnchors ?: axis?.anchors ?: MoodScales.INTENSITY_ANCHORS_COMPACT,
                 hint = axisHint(item.key),
                 citationSourceId = sourceId,
                 onOpenSources = { viewModel.openSources(sourceId) },
@@ -837,31 +1100,6 @@ private fun TrackableValueInput(
     }
 }
 
-@Composable
-private fun TrackableSection(
-    section: String,
-    state: com.moodlife.app.ui.screens.today.TodayUiState,
-    viewModel: TodayViewModel,
-) {
-    // Kept for any residual callers; primary marking is GraphParamsTrackablePicker.
-    val items = remember(state.date, state.trackables, state.checkInConfig, section) {
-        TodayTrackables.forSection(state.trackables, section).filter { it.enabled }
-    }
-    val scaleColor = LocalMoodColors.current.functioning
-    if (items.isEmpty()) {
-        EmptyStateCard(message = stringResource(R.string.today_trackables_empty))
-        return
-    }
-    items.forEach { item ->
-        TrackableValueInput(
-            item = item,
-            state = state,
-            viewModel = viewModel,
-            scaleColor = scaleColor,
-        )
-        Spacer(Modifier.height(8.dp))
-    }
-}
 
 @Composable
 private fun trackableLabel(key: String, customLabel: String?): String {
@@ -917,16 +1155,6 @@ private fun applyTrackableValue(key: String, value: Int, viewModel: TodayViewMod
     }
 }
 
-private fun trackableOptions(key: String): List<String> = when (key) {
-    "energy" -> MoodScales.EXTRA_AXES.find { it.key == "energy" }?.options.orEmpty()
-    "concentration" -> MoodScales.EXTRA_AXES.find { it.key == "concentration" }?.options.orEmpty()
-    "appetite" -> MoodScales.EXTRA_AXES.find { it.key == "appetite" }?.options.orEmpty()
-    "sociability" -> MoodScales.EXTRA_AXES.find { it.key == "sociability" }?.options.orEmpty()
-    "sleepQuality" -> MoodScales.SLEEP_QUALITY_OPTIONS
-    "safetyCheck" -> MoodScales.SAFETY_OPTIONS
-    else -> emptyList()
-}
-
 @Composable
 private fun TodaySymptomsBody(
     symptoms: List<SymptomUiItem>,
@@ -936,6 +1164,7 @@ private fun TodaySymptomsBody(
     onAddSymptom: (String) -> Unit,
     onOpenSettings: () -> Unit,
     onScaleTypeChange: (String) -> Unit,
+    onEditSymptom: (String) -> Unit = {},
 ) {
     if (symptoms.isEmpty()) {
         EmptyStateCard(message = stringResource(R.string.today_symptoms_empty))
@@ -948,7 +1177,7 @@ private fun TodaySymptomsBody(
                 SymptomRow(
                     symptom = symptom,
                     onSeverityChange = onUpdateSymptom,
-                    onEdit = onOpenSettings,
+                    onEdit = { onEditSymptom(symptom.id) },
                 )
             }
         }
@@ -971,7 +1200,9 @@ private fun SymptomRow(
     onEdit: () -> Unit,
 ) {
     var severity by remember(symptom.id) { mutableIntStateOf(symptom.severity) }
-    LaunchedEffect(symptom.severity) { severity = symptom.severity }
+    LaunchedEffect(symptom.severity, symptom.scaleType, symptom.scaleMax) {
+        severity = symptom.severity.coerceIn(0, symptom.scaleMax)
+    }
     val fallbackColor = LocalMoodColors.current.energy
     val color = remember(symptom.color) { parseCssColor(symptom.color, fallbackColor) }
     val onValueChange = remember(symptom.id, symptom.scaleMax, onSeverityChange) {
@@ -980,7 +1211,7 @@ private fun SymptomRow(
             onSeverityChange(symptom.id, value, symptom.scaleMax)
         }
     }
-    when (symptom.scaleType) {
+    when (com.moodlife.app.domain.DefaultSeedData.normalizeSymptomScale(symptom.scaleType)) {
         "yesno" -> ScaleInput(
             label = symptom.name,
             value = severity,
@@ -989,20 +1220,12 @@ private fun SymptomRow(
             options = SymptomYesNo,
             onEditLabel = onEdit,
         )
-        "qual4-i" -> ScaleInput(
+        "options" -> ScaleInput(
             label = symptom.name,
-            value = severity,
+            value = severity.coerceIn(0, SymptomOptionsSeverity.lastIndex),
             onValueChange = onValueChange,
             color = color,
-            options = MoodScales.QUAL_LABELS_I,
-            onEditLabel = onEdit,
-        )
-        "qual4-lmh" -> ScaleInput(
-            label = symptom.name,
-            value = severity,
-            onValueChange = onValueChange,
-            color = color,
-            options = SymptomQual4Lmh,
+            options = SymptomOptionsSeverity,
             onEditLabel = onEdit,
         )
         else -> ScaleInput(
@@ -1010,7 +1233,8 @@ private fun SymptomRow(
             value = severity,
             onValueChange = onValueChange,
             color = color,
-            max = symptom.scaleMax,
+            max = 5,
+            anchors = MoodScales.INTENSITY_ANCHORS_COMPACT,
             onEditLabel = onEdit,
         )
     }
@@ -1167,6 +1391,8 @@ private fun saveMessageText(msg: String): String = when (msg) {
     "deleted" -> stringResource(R.string.today_delete_success)
     "med_added" -> stringResource(R.string.today_med_added)
     "note_added" -> stringResource(R.string.today_note_added)
+    "note_updated" -> stringResource(R.string.today_note_updated)
+    "note_deleted" -> stringResource(R.string.today_note_deleted)
     "checkin_saved" -> stringResource(R.string.checkins_saved)
     "symptoms_seeded" -> stringResource(R.string.today_symptoms_seeded)
     "factors_seeded" -> stringResource(R.string.today_factors_seeded)
@@ -1178,48 +1404,24 @@ private fun saveMessageText(msg: String): String = when (msg) {
     "day_med_deleted" -> stringResource(R.string.day_med_deleted)
     "catalog_updated" -> stringResource(R.string.catalog_updated)
     "catalog_hidden" -> stringResource(R.string.catalog_hidden)
-    else -> stringResource(R.string.today_save_error)
+    else -> ""
 }
 
+@Composable
 private fun warningDirectionLabel(dir: String): String = when (dir) {
-    "mania" -> "Продром мании / гипомании"
-    "mixed" -> "Смешанное состояние"
-    else -> "Продром депрессии"
+    "mania" -> stringResource(R.string.warning_direction_mania)
+    "mixed" -> stringResource(R.string.warning_direction_mixed)
+    else -> stringResource(R.string.warning_direction_depression)
 }
 
 @Composable
-private fun moodAxisBinding(
-    key: String,
-    state: com.moodlife.app.ui.screens.today.TodayUiState,
-    vm: TodayViewModel,
-): Triple<Int, (Int) -> Unit, String> = when (key) {
-    "depressed" -> Triple(state.depressed, vm::onDepressedChange, stringResource(R.string.axis_depressed))
-    "elevated" -> Triple(state.elevated, vm::onElevatedChange, stringResource(R.string.axis_elevated))
-    "anxious" -> Triple(state.anxious, vm::onAnxiousChange, stringResource(R.string.axis_anxious))
-    "irritable" -> Triple(state.irritable, vm::onIrritableChange, stringResource(R.string.axis_irritable))
-    else -> Triple(0, {}, key)
-}
-
-@Composable
-private fun extraAxisBinding(
-    key: String,
-    state: com.moodlife.app.ui.screens.today.TodayUiState,
-    vm: TodayViewModel,
-): Triple<Int, (Int) -> Unit, String> = when (key) {
-    "energy" -> Triple(state.energy, vm::onEnergyChange, stringResource(R.string.axis_energy))
-    "concentration" -> Triple(state.concentration, vm::onConcentrationChange, stringResource(R.string.axis_concentration))
-    "appetite" -> Triple(state.appetite, vm::onAppetiteChange, stringResource(R.string.axis_appetite))
-    "sociability" -> Triple(state.sociability, vm::onSociabilityChange, stringResource(R.string.axis_sociability))
-    else -> Triple(0, {}, key)
-}
-
 private fun phaseLabel(phase: String): String = when (phase) {
-    "euthymic" -> "Ровные отметки по шкалам"
-    "prodromal_depression" -> "Ранние признаки спада по шкалам"
-    "prodromal_mania" -> "Ранние признаки подъёма по шкалам"
-    "acute_depression" -> "Выраженный спад по шкалам"
-    "acute_mania" -> "Выраженный подъём по шкалам"
-    "mixed" -> "Смешанные отметки по шкалам"
-    "recovery" -> "Отметки ближе к обычным"
+    "euthymic" -> stringResource(R.string.phase_euthymic)
+    "prodromal_depression" -> stringResource(R.string.phase_prodromal_depression)
+    "prodromal_mania" -> stringResource(R.string.phase_prodromal_mania)
+    "acute_depression" -> stringResource(R.string.phase_acute_depression)
+    "acute_mania" -> stringResource(R.string.phase_acute_mania)
+    "mixed" -> stringResource(R.string.phase_mixed)
+    "recovery" -> stringResource(R.string.phase_recovery)
     else -> phase
 }

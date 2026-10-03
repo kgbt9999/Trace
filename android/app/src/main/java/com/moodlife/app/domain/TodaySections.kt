@@ -21,7 +21,8 @@ object TodaySections {
         /** Legacy — duplicates GRAPH_PARAMS marking. */
         CLINICAL(false),
         CONTEXT(true),
-        CHECKINS(true),
+        /** Optional multi-slot «как сейчас»; off by default — day scales live in GRAPH_PARAMS. */
+        CHECKINS(false),
         SLEEP(true),
         MEDS(true),
         SYMPTOMS(true),

@@ -73,6 +73,7 @@ fun MultiLineChart(
     val axisColor = Color(0xFF1A1D23)
     val density = LocalDensity.current
     val leftPad = if (showAxisTicks) with(density) { 36.dp.toPx() } else 0f
+    val rightPad = if (showAxisTicks) with(density) { 12.dp.toPx() } else 0f
     val bottomPad = if (showAxisTicks) with(density) { 22.dp.toPx() } else 0f
     val topPad = if (yAxisLabel != null) with(density) { 4.dp.toPx() } else 0f
 
@@ -101,7 +102,7 @@ fun MultiLineChart(
                 .background(canvasBg),
         ) {
             Canvas(Modifier.fillMaxWidth().height(200.dp).padding(8.dp)) {
-                val plotW = (size.width - leftPad).coerceAtLeast(1f)
+                val plotW = (size.width - leftPad - rightPad).coerceAtLeast(1f)
                 val plotH = (size.height - bottomPad - topPad).coerceAtLeast(1f)
                 val originX = leftPad
                 val originY = topPad
@@ -141,6 +142,11 @@ fun MultiLineChart(
                     paint.textAlign = android.graphics.Paint.Align.CENTER
                     xLabels.forEachIndexed { i, label ->
                         if (i % labelStep == 0 || i == count - 1) {
+                            paint.textAlign = when (i) {
+                                0 -> android.graphics.Paint.Align.LEFT
+                                count - 1 -> android.graphics.Paint.Align.RIGHT
+                                else -> android.graphics.Paint.Align.CENTER
+                            }
                             drawContext.canvas.nativeCanvas.drawText(
                                 label,
                                 xAt(i),
@@ -193,7 +199,7 @@ fun MultiLineChart(
             Modifier.fillMaxWidth().padding(top = 6.dp),
             horizontalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            nonEmpty.forEach { s ->
+            nonEmpty.filter { it.label.isNotBlank() }.forEach { s ->
                 Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                     Box(
                         Modifier

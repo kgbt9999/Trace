@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -99,7 +100,7 @@ fun BodyMeasurementsSection(
                 },
                 modifier = Modifier.fillMaxWidth(),
             ) {
-                Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(18.dp))
+                Icon(Icons.Default.Add, contentDescription = stringResource(R.string.physical_body_add_measure), modifier = Modifier.size(18.dp))
                 Text(
                     stringResource(R.string.physical_body_add_measure),
                     modifier = Modifier.padding(start = 6.dp),
@@ -234,13 +235,26 @@ fun BodyMeasurementsSection(
                     onValueChange = { sheetDate = it },
                 )
                 BodyMeasurementCatalog.fields.chunked(3).forEach { chunk ->
-                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Row(
+                        Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    ) {
                         chunk.forEach { field ->
                             FilterChip(
                                 selected = sheetFieldId == field.id,
                                 onClick = { sheetFieldId = field.id },
-                                label = { Text(field.labelRu, maxLines = 1) },
+                                label = {
+                                    Text(
+                                        field.labelRu,
+                                        maxLines = 1,
+                                        overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                                    )
+                                },
+                                modifier = Modifier.weight(1f),
                             )
+                        }
+                        repeat(3 - chunk.size) {
+                            Spacer(Modifier.weight(1f))
                         }
                     }
                 }

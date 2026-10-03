@@ -400,7 +400,8 @@ fun ReportsScreen(viewModel: ReportsViewModel = hiltViewModel()) {
             id == ReportsCharts.Id.MED_DOSE ||
             id == ReportsCharts.Id.LEVEL2 ||
             id == ReportsCharts.Id.LEVEL3 ||
-            id == ReportsCharts.Id.SCATTER
+            id == ReportsCharts.Id.SCATTER ||
+            id == ReportsCharts.Id.RADAR
         ChartFullscreenDialog(
             title = stringResource(id.titleRes),
             onDismiss = { zoomChartId = null },
@@ -475,7 +476,7 @@ private fun ReportZoomContent(
             moodPoints = state.polaritySeries,
             zoom = zoom,
         )
-        ReportsCharts.Id.RADAR -> RadarChart(state.radarAxes)
+        ReportsCharts.Id.RADAR -> RadarChart(state.radarAxes, zoom = zoom)
         ReportsCharts.Id.HEATMAP -> MoodHeatmapChart(cells = state.heatCells)
         ReportsCharts.Id.MOOD_SLEEP -> MoodSleepPolarityChart(
             moodPoints = state.polaritySeries,
@@ -504,7 +505,7 @@ private fun ReportZoomContent(
             )
         }
         ReportsCharts.Id.MED_ADHERENCE -> MedAdherenceGrid(dayFractions = state.adherenceDays)
-        ReportsCharts.Id.SCATTER -> SleepMoodScatterChart(points = state.sleepMoodPoints)
+        ReportsCharts.Id.SCATTER -> SleepMoodScatterChart(points = state.sleepMoodPoints, zoom = zoom)
         ReportsCharts.Id.LEVEL2 -> {
             GroupedBarChart(
                 seriesA = state.anxiousSeries,
