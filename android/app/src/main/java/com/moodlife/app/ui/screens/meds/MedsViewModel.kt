@@ -65,19 +65,13 @@ class MedsViewModel @Inject constructor(
             var scheduled = 0
             meds.forEach { med ->
                 val log = dayLogs.find { it.medicationId == med.id }
-                val slots = MedsUtils.parseIntakeTimes(
+                val day = MedsUtils.daySlots(
                     medicationRepository.effectiveIntakeTimes(med, log),
+                    log?.taken == true,
+                    log?.slotsTaken,
                 )
-                val timed = slots.filter { it != "by-scheme" }
-                if (timed.isEmpty()) {
-                    scheduled += 1
-                    if (log?.taken == true) taken += 1
-                } else {
-                    scheduled += timed.size
-                    taken += timed.count { slot ->
-                        MedsUtils.isSlotTaken(log?.taken == true, log?.slotsTaken, slot, timed)
-                    }
-                }
+                scheduled += day.scheduledCount
+                taken += day.takenCount
             }
             MedDayMark(date, taken, scheduled)
         }
@@ -91,20 +85,17 @@ class MedsViewModel @Inject constructor(
             weekMarks = weekMarks,
             todayRows = meds.map { med ->
                 val log = todayLogs.find { it.medicationId == med.id }
-                val slots = MedsUtils.parseIntakeTimes(
+                val day = MedsUtils.daySlots(
                     medicationRepository.effectiveIntakeTimes(med, log),
+                    log?.taken == true,
+                    log?.slotsTaken,
                 )
-                val timed = slots.filter { it != "by-scheme" }.ifEmpty { listOf("day") }
-                val takenCount = timed.count { slot ->
-                    if (slot == "day") log?.taken == true
-                    else MedsUtils.isSlotTaken(log?.taken == true, log?.slotsTaken, slot, slots)
-                }
                 TodayMedRow(
                     id = med.id,
                     name = medicationRepository.effectiveName(med, log),
                     dosage = medicationRepository.effectiveDosage(med, log),
-                    slotsTaken = takenCount,
-                    slotsTotal = timed.size,
+                    slotsTaken = day.takenCount,
+                    slotsTotal = day.scheduledCount,
                     isRegular = med.isRegular,
                 )
             },

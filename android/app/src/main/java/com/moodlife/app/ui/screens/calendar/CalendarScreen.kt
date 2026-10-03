@@ -5,6 +5,8 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.IntrinsicSize
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
@@ -614,14 +616,18 @@ private fun CalendarMedsMonthSection(
             )
         } else {
             weeks.forEach { week ->
+                // Row height = tallest day in the week, so every med line fits and cells align.
                 Row(
-                    Modifier.fillMaxWidth().padding(vertical = 2.dp),
+                    Modifier
+                        .fillMaxWidth()
+                        .height(IntrinsicSize.Min)
+                        .padding(vertical = 2.dp),
                     horizontalArrangement = Arrangement.spacedBy(2.dp),
                 ) {
                     week.forEach { cell ->
                         MedMonthDayCell(
                             cell = cell,
-                            modifier = Modifier.weight(1f),
+                            modifier = Modifier.weight(1f).fillMaxHeight(),
                             onClick = { cell.date?.let(onDayClick) },
                         )
                     }
@@ -680,6 +686,8 @@ private fun MedCalendarLegend(
     }
 }
 
+private const val MAX_MED_LINES_PER_CELL = 5
+
 @Composable
 private fun MedMonthDayCell(
     cell: MedMonthCell,
@@ -696,7 +704,8 @@ private fun MedMonthDayCell(
     }
     Column(
         modifier
-            .aspectRatio(0.62f)
+            // Content-sized (was a fixed 0.62 aspect ratio that clipped the 2nd–3rd med line).
+            .heightIn(min = 44.dp)
             .clip(RoundedCornerShape(6.dp))
             .border(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.55f), RoundedCornerShape(6.dp))
             .background(MaterialTheme.colorScheme.surface)
@@ -726,8 +735,8 @@ private fun MedMonthDayCell(
                 )
             }
         }
-        // Priority: stable per-med glyph + dosage (names omitted to keep cells readable).
-        visible.take(3).forEach { line ->
+        // Stable per-med glyph + dosage (names live in the legend below the grid).
+        visible.take(MAX_MED_LINES_PER_CELL).forEach { line ->
             val dose = line.dosage?.trim()?.takeIf { it.isNotEmpty() } ?: "—"
             val tint = MedAccentColors.accentForName(line.name)
             Row(
@@ -739,14 +748,14 @@ private fun MedMonthDayCell(
             ) {
                 Box(
                     Modifier
-                        .size(14.dp)
+                        .size(12.dp)
                         .clip(CircleShape)
                         .background(tint),
                     contentAlignment = Alignment.Center,
                 ) {
                     Text(
                         MedAccentColors.glyphFor(line.name),
-                        fontSize = 8.sp,
+                        fontSize = 7.sp,
                         fontWeight = FontWeight.Bold,
                         color = Color.White,
                         maxLines = 1,
@@ -767,9 +776,9 @@ private fun MedMonthDayCell(
                 )
             }
         }
-        if (visible.size > 3) {
+        if (visible.size > MAX_MED_LINES_PER_CELL) {
             Text(
-                "+${visible.size - 3}",
+                "+${visible.size - MAX_MED_LINES_PER_CELL}",
                 fontSize = 7.sp,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )

@@ -28,6 +28,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.moodlife.app.R
 import com.moodlife.app.ui.theme.LocalMoodColors
+import com.moodlife.app.ui.components.ChartAxis.drawXLabels
 import kotlin.math.roundToInt
 
 /** Month adherence cells: taken / missed / no data (neutral KPI, not therapy advice). */
@@ -59,7 +60,7 @@ fun MedAdherenceGrid(
                         contentAlignment = Alignment.Center,
                     ) {
                         Text(
-                            label,
+                            if (ChartAxis.isIso(label)) label.substring(8).trimStart('0') else label,
                             style = MaterialTheme.typography.labelSmall,
                             color = if (frac == null) Color(0xFF5A6070) else Color.White,
                             maxLines = 1,
@@ -336,8 +337,7 @@ fun MoodPolarityZoneChart(
         )
         Box(
             Modifier
-                .fillMaxWidth()
-                .aspectRatio(1.45f)
+                .chartArea(1.45f)
                 .clip(RoundedCornerShape(12.dp))
                 .background(Color.White),
         ) {
@@ -380,27 +380,7 @@ fun MoodPolarityZoneChart(
                 drawLine(Color(0xFF1A1D23).copy(alpha = 0.85f), Offset(leftPad, 0f), Offset(leftPad, h), 2f)
                 drawLine(Color(0xFF1A1D23).copy(alpha = 0.85f), Offset(leftPad, h), Offset(leftPad + w, h), 2f)
 
-                paint.textAlign = android.graphics.Paint.Align.CENTER
-                val step = when {
-                    n <= 8 -> 1
-                    n <= 16 -> 2
-                    else -> 3
-                }
-                labels.forEachIndexed { i, lab ->
-                    if (i % step == 0 || i == n - 1) {
-                        paint.textAlign = when (i) {
-                            0 -> android.graphics.Paint.Align.LEFT
-                            n - 1 -> android.graphics.Paint.Align.RIGHT
-                            else -> android.graphics.Paint.Align.CENTER
-                        }
-                        drawContext.canvas.nativeCanvas.drawText(
-                            lab,
-                            xAt(i),
-                            size.height - 2f,
-                            paint,
-                        )
-                    }
-                }
+                drawXLabels(labels, ::xAt, size.height - 2f, paint)
                 paint.textAlign = android.graphics.Paint.Align.CENTER
 
                 val pts = window.mapIndexed { i, p -> Offset(xAt(i), yAt(p.second)) to p.second }
@@ -462,7 +442,7 @@ fun MoodSleepPolarityChart(
     val axisInk = Color(0xFF1A1D23)
     val density = LocalDensity.current
     val allLabels = (moodPoints.map { it.first } + sleepPoints.map { it.first }).distinct()
-        .sortedWith(compareBy({ it.toIntOrNull() ?: Int.MAX_VALUE }, { it }))
+        .sortedWith(ChartAxis.keyOrder)
     val total = allLabels.size
     val scale = zoom.scale.coerceAtLeast(1f)
     val visibleCount = (total / scale).roundToInt().coerceIn(2, total.coerceAtLeast(2))
@@ -492,8 +472,7 @@ fun MoodSleepPolarityChart(
         }
         Box(
             Modifier
-                .fillMaxWidth()
-                .aspectRatio(1.55f)
+                .chartArea(1.55f)
                 .clip(RoundedCornerShape(12.dp))
                 .background(Color.White),
         ) {
@@ -607,22 +586,7 @@ fun MoodSleepPolarityChart(
                     drawCircle(moodColor.copy(alpha = 0.35f), radius = 5.5.dp.toPx(), center = pt, style = androidx.compose.ui.graphics.drawscope.Stroke(width = 1.5f))
                 }
 
-                paint.textAlign = android.graphics.Paint.Align.CENTER
-                val step = when {
-                    n <= 8 -> 1
-                    n <= 16 -> 2
-                    else -> 3
-                }
-                labels.forEachIndexed { i, lab ->
-                    if (i % step == 0 || i == n - 1) {
-                        paint.textAlign = when (i) {
-                            0 -> android.graphics.Paint.Align.LEFT
-                            n - 1 -> android.graphics.Paint.Align.RIGHT
-                            else -> android.graphics.Paint.Align.CENTER
-                        }
-                        drawContext.canvas.nativeCanvas.drawText(lab, xAt(i), size.height - 2f, paint)
-                    }
-                }
+                drawXLabels(labels, ::xAt, size.height - 2f, paint)
             }
         }
         Text(
@@ -845,7 +809,7 @@ fun GroupedBarChart(
     modifier: Modifier = Modifier,
 ) {
     val allLabels = (seriesA.map { it.first } + seriesB.map { it.first }).distinct()
-        .sortedWith(compareBy({ it.toIntOrNull() ?: Int.MAX_VALUE }, { it }))
+        .sortedWith(ChartAxis.keyOrder)
     if (allLabels.isEmpty()) return
     val total = allLabels.size
     val scale = zoom.scale.coerceAtLeast(1f)
@@ -869,8 +833,7 @@ fun GroupedBarChart(
         }
         Box(
             Modifier
-                .fillMaxWidth()
-                .aspectRatio(1.6f)
+                .chartArea(1.6f)
                 .clip(RoundedCornerShape(12.dp))
                 .background(Color.White),
         ) {
@@ -919,22 +882,7 @@ fun GroupedBarChart(
                         size = androidx.compose.ui.geometry.Size(barW, hb),
                     )
                 }
-                paint.textAlign = android.graphics.Paint.Align.CENTER
-                val step = when {
-                    scale >= 2f || n <= 10 -> 1
-                    n <= 20 -> 2
-                    else -> 3
-                }
-                labels.forEachIndexed { i, lab ->
-                    if (i % step == 0 || i == n - 1) {
-                        drawContext.canvas.nativeCanvas.drawText(
-                            lab,
-                            leftPad + i * groupW + groupW / 2f,
-                            size.height - 2f,
-                            paint,
-                        )
-                    }
-                }
+                drawXLabels(labels, { i -> leftPad + i * groupW + groupW / 2f }, size.height - 2f, paint)
             }
         }
         if (xAxisLabel != null) {
@@ -1001,8 +949,7 @@ fun SleepMoodScatterChart(
         )
         Box(
             Modifier
-                .fillMaxWidth()
-                .aspectRatio(1.35f)
+                .chartArea(1.35f)
                 .clip(RoundedCornerShape(12.dp))
                 .background(Color.White),
         ) {

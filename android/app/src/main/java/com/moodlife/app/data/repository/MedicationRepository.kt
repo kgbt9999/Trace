@@ -113,6 +113,8 @@ class MedicationRepository @Inject constructor(
         val med = medicationDao.getById(medicationId) ?: return
         val existing = medicationLogDao.getByMedAndDate(medicationId, date)
         val scheduled = MedsUtils.parseIntakeTimes(effectiveIntakeTimes(med, existing))
+            .filter { it != "by-scheme" }
+            .ifEmpty { listOf("by-scheme") }
         val now = System.currentTimeMillis()
         val slots = existing?.let { MedsUtils.parseSlotsTaken(it.slotsTaken).toMutableMap() }
             ?: mutableMapOf()

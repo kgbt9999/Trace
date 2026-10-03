@@ -146,16 +146,16 @@ fun LabResultsSection(
                             .sortedBy { it.date }
                             .mapNotNull { r ->
                                 val v = r.valueNumeric ?: return@mapNotNull null
-                                labDayLabel(r.date) to v
+                                r.date to v
                             }
                         if (points.isEmpty()) return@forEach
+                        val title = if (unit.isNotEmpty()) "$label ($unit)" else label
                         Text(
-                            if (unit.isNotEmpty()) "$label ($unit)" else label,
+                            title,
                             style = MaterialTheme.typography.labelMedium,
                             modifier = Modifier.padding(top = 8.dp),
                         )
-                        val maxY = (points.maxOf { it.second } * 1.15f).coerceAtLeast(0.1f)
-                        SimpleLineChart(series = points, maxY = maxY)
+                        ZoomableMeasurementChart(title = title, series = points, yAxisLabel = unit.ifEmpty { label })
                     }
             }
         }
@@ -303,5 +303,3 @@ private fun LabEntryRow(row: LabResultEntity, onClick: () -> Unit) {
     }
 }
 
-private fun labDayLabel(iso: String): String =
-    iso.takeLast(2).trimStart('0').ifEmpty { iso.takeLast(2) }

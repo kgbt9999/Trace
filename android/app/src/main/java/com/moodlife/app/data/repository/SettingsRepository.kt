@@ -94,6 +94,8 @@ class SettingsRepository @Inject constructor(private val settingDao: SettingDao)
         const val KEY_REPORTS_CHART_ORDER = "reports_charts_order"
         /** One-time flag: "1" after merging newly introduced default chart keys. */
         const val KEY_REPORTS_CHARTS_MIGRATED_V2 = "reports_charts_migrated_v2"
+        /** One-time flag: "1" after Today sections were re-sorted into the v3 recommended order. */
+        const val KEY_TODAY_LAYOUT_V3 = "today_layout_v3_applied"
         const val KEY_NOTIF_DIARY_ENABLED = "notif_diary_enabled"
         const val KEY_NOTIF_DIARY_TIME = "notif_diary_time"
         const val KEY_NOTIF_MEDS_ENABLED = "notif_meds_enabled"

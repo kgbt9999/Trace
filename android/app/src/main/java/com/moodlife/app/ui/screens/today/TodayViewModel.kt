@@ -223,6 +223,19 @@ class TodayViewModel @Inject constructor(
             weatherRepository.ensureTodayWeather()
         }
         viewModelScope.launch {
+            // One-time move to the v3 order (visibility untouched); later reorders by the user win.
+            if (settingsRepository.get(SettingsRepository.KEY_TODAY_LAYOUT_V3) != "1") {
+                val raw = settingsRepository.get(TodaySections.KEY)
+                if (!raw.isNullOrBlank()) {
+                    settingsRepository.set(
+                        TodaySections.KEY,
+                        TodaySections.serialize(TodaySections.withRecommendedOrder(TodaySections.parse(raw))),
+                    )
+                }
+                settingsRepository.set(SettingsRepository.KEY_TODAY_LAYOUT_V3, "1")
+            }
+        }
+        viewModelScope.launch {
             settingsRepository.observe(TodaySections.KEY).collect { raw ->
                 _uiState.update { it.copy(sectionPrefs = TodaySections.parse(raw)) }
             }
@@ -754,8 +767,13 @@ class TodayViewModel @Inject constructor(
                 },
             )
         }
+        pendingMedDeletes += medId
         viewModelScope.launch {
-            medicationRepository.deleteDayLog(medId, date)
+            try {
+                medicationRepository.deleteDayLog(medId, date)
+            } finally {
+                pendingMedDeletes -= medId
+            }
         }
     }
 
@@ -998,9 +1016,16 @@ class TodayViewModel @Inject constructor(
                 },
             )
         }
+        val date = _uiState.value.date
+        val key = medId to slot
+        pendingMedSlots += key
         viewModelScope.launch {
-            val entryId = ensureEntryForSideEffects()
-            medicationRepository.toggleSlot(medId, _uiState.value.date, slot, entryId)
+            try {
+                val entryId = ensureEntryForSideEffects()
+                medicationRepository.toggleSlot(medId, date, slot, entryId)
+            } finally {
+                pendingMedSlots -= key
+            }
         }
     }
 
@@ -1283,6 +1308,14 @@ class TodayViewModel @Inject constructor(
     private val pendingSymptomWrites = mutableMapOf<String, PendingSymptomWrite>()
     private val pendingAddJobs = mutableListOf<Deferred<Unit>>()
 
+    /** (medId, slot) toggles written to Room but possibly not yet echoed by the snapshot flow. */
+    private val pendingMedSlots: MutableSet<Pair<String, String>> =
+        java.util.concurrent.ConcurrentHashMap.newKeySet()
+
+    /** Day-log deletes in flight, same purpose as [pendingMedSlots]. */
+    private val pendingMedDeletes: MutableSet<String> =
+        java.util.concurrent.ConcurrentHashMap.newKeySet()
+
     private data class PendingSymptomWrite(val severity: Int, val scaleMax: Int)
 
     private fun scheduleSymptomPersist() {
@@ -1496,23 +1529,17 @@ class TodayViewModel @Inject constructor(
         val todayIso = DateUtils.todayIso()
         val medItems = snap.meds.map { med ->
             val log = snap.medLogs.find { it.medicationId == med.id }
-            val slots = MedsUtils.parseIntakeTimes(
+            val day = MedsUtils.daySlots(
                 medicationRepository.effectiveIntakeTimes(med, log),
+                log?.taken == true,
+                log?.slotsTaken,
             )
-            val takenMap = slots.associateWith { slot ->
-                MedsUtils.isSlotTaken(
-                    taken = log?.taken == true,
-                    slotsTakenJson = log?.slotsTaken,
-                    slotId = slot,
-                    scheduled = slots,
-                )
-            }
             MedUiItem(
                 med.id,
                 medicationRepository.effectiveName(med, log),
                 medicationRepository.effectiveDosage(med, log),
-                slots,
-                takenMap,
+                day.slots,
+                day.taken,
                 med.isRegular,
                 hasDayLog = log != null,
             )
@@ -1597,7 +1624,11 @@ class TodayViewModel @Inject constructor(
         }
     }
 
-    /** Prefer optimistic slot toggles until Room catches up; keep dosage/name from DB. */
+    /**
+     * Room is the source of truth; only slots/deletes still in flight keep their optimistic
+     * UI value. (Previously any mismatch kept the UI value for the whole day, so a scheme edit
+     * or a write from another screen could leave stale or missing ticks on Today.)
+     */
     private fun mergeMedItems(
         current: List<MedUiItem>,
         fromDb: List<MedUiItem>,
@@ -1607,38 +1638,21 @@ class TodayViewModel @Inject constructor(
         val curById = current.associateBy { it.id }
         return fromDb.map { db ->
             val ui = curById[db.id] ?: return@map db
-            if (ui.slotsTaken == db.slotsTaken &&
-                ui.name == db.name &&
-                ui.dosage == db.dosage &&
-                ui.slots == db.slots &&
-                ui.hasDayLog == db.hasDayLog
-            ) {
-                ui
-            } else if (ui.slotsTaken != db.slotsTaken || ui.hasDayLog != db.hasDayLog) {
-                // Keep optimistic checks / delete until DB echo catches up.
-                db.copy(
-                    name = db.name,
-                    dosage = db.dosage,
-                    slots = db.slots,
-                    slotsTaken = if (ui.hasDayLog && !db.hasDayLog) {
-                        // Delete in flight or applied: trust cleared UI until Room matches.
-                        ui.slotsTaken
-                    } else if (ui.slotsTaken != db.slotsTaken) {
-                        ui.slotsTaken
-                    } else {
-                        db.slotsTaken
-                    },
-                    isRegular = db.isRegular,
-                    hasDayLog = if (!ui.hasDayLog && db.hasDayLog) {
-                        // Stale Room echo still has the row we just deleted.
-                        false
-                    } else {
-                        db.hasDayLog
-                    },
+            val merged = when {
+                db.id in pendingMedDeletes -> db.copy(
+                    hasDayLog = false,
+                    slotsTaken = db.slots.associateWith { false },
                 )
-            } else {
-                db
+                else -> {
+                    val pending = db.slots.filter { (db.id to it) in pendingMedSlots }
+                    if (pending.isEmpty()) {
+                        db
+                    } else {
+                        db.copy(slotsTaken = db.slotsTaken + pending.associateWith { ui.slotsTaken[it] == true })
+                    }
+                }
             }
+            if (merged == ui) ui else merged
         }
     }
 

@@ -103,14 +103,9 @@ class DoctorExportGenerator @Inject constructor(
             val med = medById[log.medicationId] ?: continue
             val name = medicationRepository.effectiveName(med, log)
             val cur = medAdherence.getOrPut(name) { 0 to 0 }
-            val raw = medicationRepository.effectiveIntakeTimes(med, log)
-            val slots = MedsUtils.parseIntakeTimes(raw).filter { it != "by-scheme" }
-            val scheduled = if (slots.isEmpty()) 1 else slots.size
-            val taken = if (slots.isEmpty()) {
-                if (log.taken) 1 else 0
-            } else {
-                slots.count { MedsUtils.isSlotTaken(log.taken, log.slotsTaken, it, slots) }
-            }
+            val day = MedsUtils.daySlots(medicationRepository.effectiveIntakeTimes(med, log), log.taken, log.slotsTaken)
+            val scheduled = day.scheduledCount
+            val taken = day.takenCount
             medAdherence[name] = cur.first + scheduled to cur.second + taken
         }
 
@@ -354,14 +349,9 @@ class DoctorExportGenerator @Inject constructor(
         var taken = 0
         for (log in medLogs) {
             val med = medById[log.medicationId] ?: continue
-            val raw = medicationRepository.effectiveIntakeTimes(med, log)
-            val slots = MedsUtils.parseIntakeTimes(raw).filter { it != "by-scheme" }
-            val s = if (slots.isEmpty()) 1 else slots.size
-            val t = if (slots.isEmpty()) {
-                if (log.taken) 1 else 0
-            } else {
-                slots.count { MedsUtils.isSlotTaken(log.taken, log.slotsTaken, it, slots) }
-            }
+            val day = MedsUtils.daySlots(medicationRepository.effectiveIntakeTimes(med, log), log.taken, log.slotsTaken)
+            val s = day.scheduledCount
+            val t = day.takenCount
             scheduled += s
             taken += t
         }
@@ -521,14 +511,9 @@ class DoctorExportGenerator @Inject constructor(
             val med = medById[log.medicationId] ?: continue
             val name = medicationRepository.effectiveName(med, log)
             val cur = medAdherence.getOrPut(name) { 0 to 0 }
-            val raw = medicationRepository.effectiveIntakeTimes(med, log)
-            val slots = MedsUtils.parseIntakeTimes(raw).filter { it != "by-scheme" }
-            val scheduled = if (slots.isEmpty()) 1 else slots.size
-            val taken = if (slots.isEmpty()) {
-                if (log.taken) 1 else 0
-            } else {
-                slots.count { MedsUtils.isSlotTaken(log.taken, log.slotsTaken, it, slots) }
-            }
+            val day = MedsUtils.daySlots(medicationRepository.effectiveIntakeTimes(med, log), log.taken, log.slotsTaken)
+            val scheduled = day.scheduledCount
+            val taken = day.takenCount
             medAdherence[name] = cur.first + scheduled to cur.second + taken
         }
         return medAdherence.map { (name, pair) ->
@@ -617,17 +602,13 @@ class DoctorExportGenerator @Inject constructor(
             val lines = allMeds.mapNotNull { med ->
                 val log = dayLogs.find { it.medicationId == med.id }
                 if (log == null && !med.isActive) return@mapNotNull null
-                val raw = medicationRepository.effectiveIntakeTimes(med, log)
-                val slots = MedsUtils.parseIntakeTimes(raw)
-                val timed = slots.filter { it != "by-scheme" }
-                val scheduled = if (timed.isEmpty()) 1 else timed.size
-                val taken = if (timed.isEmpty()) {
-                    if (log?.taken == true) 1 else 0
-                } else {
-                    timed.count { slot ->
-                        MedsUtils.isSlotTaken(log?.taken == true, log?.slotsTaken, slot, timed)
-                    }
-                }
+                val day = MedsUtils.daySlots(
+                    medicationRepository.effectiveIntakeTimes(med, log),
+                    log?.taken == true,
+                    log?.slotsTaken,
+                )
+                val scheduled = day.scheduledCount
+                val taken = day.takenCount
                 if (!includeUntaken && taken <= 0) return@mapNotNull null
                 if (log == null && taken <= 0 && !includeUntaken) return@mapNotNull null
                 // Show day only if there is a log or med is active regular (planned)
@@ -635,13 +616,11 @@ class DoctorExportGenerator @Inject constructor(
                 if (log == null && includeUntaken && !med.isRegular) return@mapNotNull null
                 val dose = medicationRepository.effectiveDosage(med, log)?.takeIf { it.isNotBlank() }
                 val name = medicationRepository.effectiveName(med, log)
-                val slotChecks = if (timed.isEmpty()) {
-                    val ok = log?.taken == true
-                    listOf("день: ${if (ok) "✓" else "○"}")
+                val slotChecks = if (day.untimed) {
+                    listOf("день: ${if (day.takenCount > 0) "✓" else "○"}")
                 } else {
-                    timed.map { slot ->
-                        val ok = MedsUtils.isSlotTaken(log?.taken == true, log?.slotsTaken, slot, timed)
-                        "${MedsUtils.slotLabel(slot)}: ${if (ok) "✓" else "○"}"
+                    day.slots.map { slot ->
+                        "${MedsUtils.slotLabel(slot)}: ${if (day.taken[slot] == true) "✓" else "○"}"
                     }
                 }
                 buildString {

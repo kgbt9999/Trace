@@ -7,6 +7,10 @@ object ForecastEngine {
 
     const val MIN_SAMPLE = 8
     private const val HORIZON = 2
+    private const val RECENT_WINDOW_DAYS = 14
+
+    /** Recent days count double: current state predicts the next week better than old history. */
+    private const val RECENT_WEIGHT = 2.0
 
     data class ForecastProb(
         val elevation: Double?,
@@ -95,18 +99,28 @@ object ForecastEngine {
 
         val recentMania = recent.any { it.warningMania || it.elevated >= 2 || (it.sleepHours != null && it.sleepHours < 6f) }
         val recentDep = recent.any { it.warningDep || it.depressed >= 2 }
+        val lastWeeks = recentDays(hist, RECENT_WINDOW_DAYS)
 
+        // Personal base rate (whole history) + recent rate are always available once the user
+        // has MIN_SAMPLE days. Before, only prodrome-lag and cycle-phase parts existed; without
+        // logged warning signs or cycle data every part was empty and the forecast stayed blank.
         val elev = blend(
+            baseRate(hist, elevOut),
+            baseRate(lastWeeks, elevOut).weighted(RECENT_WEIGHT),
             lagProb(hist, { it.warningMania }, elevOut),
             phaseRate(hist, phase, elevOut),
-            if (recentMania) lagProb(hist, { d -> d.warningMania || (d.sleepHours != null && d.sleepHours < 6f) }, elevOut).copy(n = MIN_SAMPLE) else ProbPart(null, 0),
+            if (recentMania) lagProb(hist, { d -> d.warningMania || (d.sleepHours != null && d.sleepHours < 6f) }, elevOut) else ProbPart(null, 0),
         )
         val dep = blend(
+            baseRate(hist, depOut),
+            baseRate(lastWeeks, depOut).weighted(RECENT_WEIGHT),
             lagProb(hist, { it.warningDep }, depOut),
             phaseRate(hist, phase, depOut),
-            if (recentDep) lagProb(hist, { it.warningDep }, depOut).copy(n = MIN_SAMPLE) else ProbPart(null, 0),
+            if (recentDep) lagProb(hist, { it.warningDep || it.depressed >= 2 }, depOut) else ProbPart(null, 0),
         )
         val mixed = blend(
+            baseRate(hist, mixedOut),
+            baseRate(lastWeeks, mixedOut).weighted(RECENT_WEIGHT),
             lagProb(hist, { it.warningMania && it.warningDep }, mixedOut),
             phaseRate(hist, phase, mixedOut),
         )
@@ -118,9 +132,9 @@ object ForecastEngine {
             mixed = if (n < MIN_SAMPLE) null else mixed.p,
             sample = n,
             note = if (n < MIN_SAMPLE) {
-                "Мало данных: нужно больше ваших дней. Это не прогноз эпизода."
+                "Мало данных: нужно минимум $MIN_SAMPLE дней с записями (сейчас $n). Это не прогноз эпизода."
             } else {
-                "По вашим $n дням. Похожие продромы и фаза цикла; не общее правило."
+                "По вашим $n дням: частота состояний, последние $RECENT_WINDOW_DAYS дней, ранние признаки и фаза цикла. Не общее правило."
             },
         )
     }
@@ -199,17 +213,38 @@ object ForecastEngine {
         )
     }
 
-    private data class ProbPart(val p: Double?, val n: Int)
+    private data class ProbPart(val p: Double?, val n: Int, val weight: Double = 1.0) {
+        fun weighted(w: Double) = copy(weight = w)
+    }
 
     private fun rate(nHit: Int, n: Int): Double? = if (n < MIN_SAMPLE) null else nHit.toDouble() / n
 
+    private fun baseRate(days: List<HistDay>, outcome: (HistDay) -> Boolean): ProbPart =
+        ProbPart(rate(days.count(outcome), days.size), days.size)
+
+    /** Days within [windowDays] calendar days of the latest entry. */
+    private fun recentDays(hist: List<HistDay>, windowDays: Int): List<HistDay> {
+        val last = hist.maxOfOrNull { it.date } ?: return emptyList()
+        val from = DateUtils.addDays(last, -(windowDays - 1).toLong())
+        return hist.filter { it.date >= from }
+    }
+
+    /**
+     * P(outcome within the next [HORIZON] calendar days | predicate today).
+     * Uses dates, not list neighbours: with gaps in the diary the "next two entries" could be
+     * weeks later and would inflate the hit rate.
+     */
     private fun lagProb(hist: List<HistDay>, pred: (HistDay) -> Boolean, outcome: (HistDay) -> Boolean): ProbPart {
+        val byDate = hist.associateBy { it.date }
         var n = 0
         var hits = 0
-        for (i in hist.indices) {
-            if (!pred(hist[i])) continue
+        for (day in hist) {
+            if (!pred(day)) continue
             n++
-            if (hist.drop(i + 1).take(HORIZON).any(outcome)) hits++
+            val hit = (1..HORIZON).any { offset ->
+                byDate[DateUtils.addDays(day.date, offset.toLong())]?.let(outcome) == true
+            }
+            if (hit) hits++
         }
         return ProbPart(rate(hits, n), n)
     }
@@ -223,8 +258,8 @@ object ForecastEngine {
     private fun blend(vararg parts: ProbPart): ProbPart {
         val usable = parts.filter { it.p != null && it.n >= MIN_SAMPLE }
         if (usable.isEmpty()) return ProbPart(null, parts.sumOf { it.n })
-        val n = usable.sumOf { it.n }
-        val p = usable.sumOf { (it.p ?: 0.0) * it.n } / n
-        return ProbPart(p, n)
+        val totalWeight = usable.sumOf { it.n * it.weight }
+        val p = usable.sumOf { (it.p ?: 0.0) * it.n * it.weight } / totalWeight
+        return ProbPart(p, usable.sumOf { it.n })
     }
 }

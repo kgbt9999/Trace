@@ -192,18 +192,19 @@ fun BodyMeasurementsSection(
             )
 
             BodyMeasurementCatalog.cmFields().forEach { field ->
+                // ISO keys: points from different months must not collide on the X axis.
                 val points = history.mapNotNull { row ->
                     val v = field.read(row) ?: return@mapNotNull null
-                    dayLabel(row.date) to v
-                }
+                    row.date to v
+                }.sortedBy { it.first }
                 if (points.isNotEmpty()) {
+                    val title = "${field.labelRu} (${field.unit})"
                     Text(
-                        "${field.labelRu} (${field.unit})",
+                        title,
                         style = MaterialTheme.typography.labelMedium,
                         modifier = Modifier.padding(top = 8.dp),
                     )
-                    val maxY = (points.maxOf { it.second } * 1.15f).coerceAtLeast(1f)
-                    SimpleLineChart(series = points, maxY = maxY)
+                    ZoomableMeasurementChart(title = title, series = points, yAxisLabel = field.unit)
                 }
             }
 
@@ -214,8 +215,11 @@ fun BodyMeasurementsSection(
                     style = MaterialTheme.typography.labelMedium,
                     modifier = Modifier.padding(top = 8.dp),
                 )
-                val maxY = (weightPoints.maxOf { it.second } * 1.15f).coerceAtLeast(1f)
-                SimpleLineChart(series = weightPoints, maxY = maxY)
+                ZoomableMeasurementChart(
+                    title = stringResource(R.string.physical_body_measures_weight_chart),
+                    series = weightPoints,
+                    yAxisLabel = "кг",
+                )
             }
         }
     }
@@ -301,10 +305,8 @@ private fun mergedWeightSeries(
     }
     return byDate.entries
         .sortedBy { it.key }
-        .map { dayLabel(it.key) to it.value }
+        .map { it.key to it.value }
 }
-
-private fun dayLabel(iso: String): String = iso.takeLast(2).trimStart('0').ifEmpty { iso.takeLast(2) }
 
 private fun formatDraft(v: Float): String =
     if (v == v.toLong().toFloat()) v.toLong().toString()

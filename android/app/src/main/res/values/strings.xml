@@ -30,6 +30,15 @@
     <string name="calendar_next_month">Следующий месяц</string>
     <string name="forecast_empty">Недостаточно истории для прогноза. Ведите дневник несколько дней.</string>
     <string name="reports_prev_month">Предыдущий месяц</string>
+    <string name="reports_period_title">Период</string>
+    <string name="reports_period_7">7 дней</string>
+    <string name="reports_period_30">30 дней</string>
+    <string name="reports_period_90">3 месяца</string>
+    <string name="reports_period_month">Месяц</string>
+    <string name="reports_period_custom">Свой</string>
+    <string name="reports_period_from">С</string>
+    <string name="reports_period_to">По</string>
+    <string name="reports_export_month_note">Экспорт формируется за календарный месяц: %1$s</string>
     <string name="reports_next_month">Следующий месяц</string>
 
     <!-- Today screen -->
@@ -308,12 +317,25 @@
     <string name="reports_chart_zoom_hint">Щипок — масштаб делений · перетаскивание — сдвиг окна</string>
     <string name="reports_chart_zoom_action">Увеличить</string>
     <string name="reports_chart_close">Закрыть</string>
+    <string name="reports_chart_rotate">Повернуть график на 90°</string>
     <string name="reports_chart_tap_zoom">Нажмите график, чтобы увеличить</string>
     <string name="reports_charts_order_title">Порядок графиков</string>
     <string name="reports_charts_order_hint">Вверх/вниз меняет порядок на вкладке «Отчёты».</string>
     <string name="reports_charts_move_up">Выше</string>
     <string name="reports_charts_move_down">Ниже</string>
-    <string name="today_graph_params_section">Параметры графиков</string>
+    <string name="today_graph_params_section">Состояние за день</string>
+    <string name="today_scales_configure">Настроить шкалы</string>
+    <string name="today_scales_configure_done">Готово</string>
+    <string name="today_more_day_details">Подробнее о дне · %1$d из %2$d</string>
+    <string name="today_summary_mood">Состояние</string>
+    <string name="today_summary_sleep">Сон</string>
+    <string name="today_summary_meds">Лекарства %1$d/%2$d</string>
+    <string name="today_summary_symptoms">Симптомы</string>
+    <string name="today_summary_count">Отмечено: %1$d</string>
+    <string name="today_summary_meds_taken">Принято %1$d из %2$d</string>
+    <string name="today_summary_sleep_hours">%1$s ч</string>
+    <string name="today_autosave_hint">Изменения сохраняются автоматически</string>
+    <string name="today_med_more">Действия: %1$s</string>
     <string name="today_help_graph_params">Каждый параметр — шкала 0–5, да/нет или готовые варианты. Отметьте значение за день — это основа графиков в «Отчётах». Не клинический приказ.</string>
     <string name="today_chart_params">Параметры графиков</string>
     <string name="today_chart_params_title">Параметры графиков</string>
@@ -363,7 +385,7 @@
     <string name="reports_med_adherence_title">Приём по дням</string>
     <string name="reports_med_adherence_hint">Зелёный — все слоты отмечены, красный — есть пропуски, серый — нет журнала.</string>
     <string name="reports_level2_title">Тревога и активность</string>
-    <string name="reports_level2_hint">Тревога и силы; ниже — раздражение.</string>
+    <string name="reports_level2_hint">Тревога (0–5) и силы, приведённые к той же шкале 0–5; ниже — раздражение.</string>
     <string name="reports_level3_title">Дополнительные оси</string>
     <string name="reports_level3_hint">Уровень 3: внимание, общение, аппетит — удобно смотреть раз в неделю.</string>
     <string name="reports_med_legend_taken">Принял</string>

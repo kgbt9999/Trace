@@ -42,13 +42,20 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.moodlife.app.R
+import com.moodlife.app.util.DateUtils
+import com.moodlife.app.ui.components.IsoDatePickerField
+import com.moodlife.app.domain.ReportPeriod
+import com.moodlife.app.domain.MoodScales
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.material3.FilterChip
+import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import com.moodlife.app.data.export.ExportFormat
 import com.moodlife.app.domain.MedAccentColors
 import com.moodlife.app.domain.ReportsCharts
 import com.moodlife.app.ui.components.ChartFullscreenDialog
 import com.moodlife.app.ui.components.ChartSeries
 import com.moodlife.app.ui.components.ChartZoomState
-import com.moodlife.app.ui.components.GroupedBarChart
 import com.moodlife.app.ui.components.MedAdherenceGrid
 import com.moodlife.app.ui.components.MoodCard
 import com.moodlife.app.ui.components.MoodHeatmapChart
@@ -91,15 +98,13 @@ fun ReportsScreen(viewModel: ReportsViewModel = hiltViewModel()) {
             modifier = Modifier.padding(top = 4.dp),
         )
         MoodCard(Modifier.padding(top = 8.dp), contentPadding = false) {
-            Row(Modifier.fillMaxWidth().padding(horizontal = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-                IconButton(onClick = viewModel::prevMonth) {
-                    Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(R.string.reports_prev_month))
-                }
-                Text(state.monthLabel, Modifier.weight(1f), style = MaterialTheme.typography.titleMedium, maxLines = 1)
-                IconButton(onClick = viewModel::nextMonth) {
-                    Icon(Icons.AutoMirrored.Filled.ArrowForward, contentDescription = stringResource(R.string.reports_next_month))
-                }
-            }
+            ReportPeriodSelector(
+                state = state,
+                onKind = viewModel::selectPeriodKind,
+                onPrevMonth = viewModel::prevMonth,
+                onNextMonth = viewModel::nextMonth,
+                onCustomRange = viewModel::setCustomRange,
+            )
             Text(
                 stringResource(R.string.reports_export_title),
                 style = MaterialTheme.typography.titleSmall,
@@ -111,6 +116,17 @@ fun ReportsScreen(viewModel: ReportsViewModel = hiltViewModel()) {
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 4.dp),
             )
+            if (state.period.kind != ReportPeriod.Kind.MONTH) {
+                Text(
+                    stringResource(
+                        R.string.reports_export_month_note,
+                        "${DateUtils.MONTH_NAMES_RU[state.month]} ${state.year}",
+                    ),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 4.dp),
+                )
+            }
             Column(
                 Modifier.padding(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 16.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp),
@@ -337,17 +353,7 @@ fun ReportsScreen(viewModel: ReportsViewModel = hiltViewModel()) {
                             hint = stringResource(R.string.reports_level2_hint),
                             onZoom = { zoomChartId = it },
                         ) {
-                            GroupedBarChart(
-                                seriesA = state.anxiousSeries,
-                                seriesB = state.energySeries,
-                                labelA = stringResource(R.string.axis_anxious),
-                                labelB = stringResource(R.string.axis_energy),
-                                colorA = Color(0xFFE8A838),
-                                colorB = Color(0xFF66BB6A),
-                                maxY = 10f,
-                                yAxisLabel = stringResource(R.string.reports_axis_score),
-                                xAxisLabel = stringResource(R.string.reports_axis_days),
-                            )
+                            AnxietyEnergyChart(state)
                             if (state.irritableSeries.isNotEmpty()) {
                                 Text(
                                     stringResource(R.string.axis_irritable),
@@ -382,7 +388,7 @@ fun ReportsScreen(viewModel: ReportsViewModel = hiltViewModel()) {
                                     ChartSeries(stringResource(R.string.axis_sociability), Color(0xFFBA68C8), state.sociabilitySeries),
                                     ChartSeries(stringResource(R.string.axis_appetite), Color(0xFFFFB74D), state.appetiteSeries),
                                 ),
-                                maxY = 5f,
+                                maxY = 3f,
                                 yAxisLabel = stringResource(R.string.reports_axis_score),
                                 xAxisLabel = stringResource(R.string.reports_axis_days),
                             )
@@ -507,18 +513,7 @@ private fun ReportZoomContent(
         ReportsCharts.Id.MED_ADHERENCE -> MedAdherenceGrid(dayFractions = state.adherenceDays)
         ReportsCharts.Id.SCATTER -> SleepMoodScatterChart(points = state.sleepMoodPoints, zoom = zoom)
         ReportsCharts.Id.LEVEL2 -> {
-            GroupedBarChart(
-                seriesA = state.anxiousSeries,
-                seriesB = state.energySeries,
-                labelA = stringResource(R.string.axis_anxious),
-                labelB = stringResource(R.string.axis_energy),
-                colorA = Color(0xFFE8A838),
-                colorB = Color(0xFF66BB6A),
-                maxY = 10f,
-                yAxisLabel = stringResource(R.string.reports_axis_score),
-                xAxisLabel = stringResource(R.string.reports_axis_days),
-                zoom = zoom,
-            )
+            AnxietyEnergyChart(state, zoom)
             if (state.irritableSeries.isNotEmpty()) {
                 MultiLineChart(
                     series = listOf(
@@ -538,11 +533,109 @@ private fun ReportZoomContent(
                 ChartSeries(stringResource(R.string.axis_sociability), Color(0xFFBA68C8), state.sociabilitySeries),
                 ChartSeries(stringResource(R.string.axis_appetite), Color(0xFFFFB74D), state.appetiteSeries),
             ),
-            maxY = 5f,
+            // Option scales (energy/concentration/appetite/sociability) are 0–3, not 0–5.
+            maxY = 3f,
             yAxisLabel = stringResource(R.string.reports_axis_score),
             xAxisLabel = stringResource(R.string.reports_axis_days),
             showAxisTicks = true,
             zoom = zoom,
         )
+    }
+}
+
+/**
+ * Anxiety (0–5) and energy on one 0–5 axis. Energy is stored as a 0–3 option index, so it is
+ * rescaled; the old grouped bars used a 0–10 axis, which squashed both series into the bottom
+ * half and turned a month of paired bars into an unreadable comb.
+ */
+@Composable
+private fun AnxietyEnergyChart(state: ReportsUiState, zoom: ChartZoomState = ChartZoomState()) {
+    val energyMax = MoodScales.EXTRA_AXES.first { it.key == "energy" }.max.toFloat()
+    MultiLineChart(
+        series = listOf(
+            ChartSeries(stringResource(R.string.axis_anxious), Color(0xFFE8A838), state.anxiousSeries),
+            ChartSeries(
+                stringResource(R.string.axis_energy),
+                Color(0xFF2E9D57),
+                state.energySeries.map { (day, v) -> day to v * 5f / energyMax },
+            ),
+        ),
+        maxY = 5f,
+        yAxisLabel = stringResource(R.string.reports_axis_score),
+        xAxisLabel = stringResource(R.string.reports_axis_days),
+        showAxisTicks = true,
+        zoom = zoom,
+    )
+}
+
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun ReportPeriodSelector(
+    state: ReportsUiState,
+    onKind: (ReportPeriod.Kind) -> Unit,
+    onPrevMonth: () -> Unit,
+    onNextMonth: () -> Unit,
+    onCustomRange: (String?, String?) -> Unit,
+) {
+    val period = state.period
+    Column(Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, top = 12.dp)) {
+        Text(stringResource(R.string.reports_period_title), style = MaterialTheme.typography.titleSmall)
+        FlowRow(
+            Modifier.fillMaxWidth().padding(top = 6.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            listOf(
+                ReportPeriod.Kind.DAYS_7 to R.string.reports_period_7,
+                ReportPeriod.Kind.DAYS_30 to R.string.reports_period_30,
+                ReportPeriod.Kind.DAYS_90 to R.string.reports_period_90,
+                ReportPeriod.Kind.MONTH to R.string.reports_period_month,
+                ReportPeriod.Kind.CUSTOM to R.string.reports_period_custom,
+            ).forEach { (kind, label) ->
+                FilterChip(
+                    selected = period.kind == kind,
+                    onClick = { onKind(kind) },
+                    label = { Text(stringResource(label)) },
+                )
+            }
+        }
+        when (period.kind) {
+            ReportPeriod.Kind.MONTH -> Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                IconButton(onClick = onPrevMonth) {
+                    Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(R.string.reports_prev_month))
+                }
+                Text(
+                    state.monthLabel,
+                    Modifier.weight(1f),
+                    style = MaterialTheme.typography.titleMedium,
+                    textAlign = TextAlign.Center,
+                    maxLines = 1,
+                )
+                IconButton(onClick = onNextMonth) {
+                    Icon(Icons.AutoMirrored.Filled.ArrowForward, contentDescription = stringResource(R.string.reports_next_month))
+                }
+            }
+            ReportPeriod.Kind.CUSTOM -> Row(
+                Modifier.fillMaxWidth().padding(top = 8.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                IsoDatePickerField(
+                    label = stringResource(R.string.reports_period_from),
+                    value = period.customFrom.orEmpty(),
+                    onValueChange = { onCustomRange(it, null) },
+                    modifier = Modifier.weight(1f),
+                )
+                IsoDatePickerField(
+                    label = stringResource(R.string.reports_period_to),
+                    value = period.customTo.orEmpty(),
+                    onValueChange = { onCustomRange(null, it) },
+                    modifier = Modifier.weight(1f),
+                )
+            }
+            else -> Text(
+                state.monthLabel,
+                style = MaterialTheme.typography.titleMedium,
+                modifier = Modifier.padding(vertical = 10.dp),
+            )
+        }
     }
 }

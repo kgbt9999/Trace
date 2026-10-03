@@ -11,15 +11,17 @@ import com.moodlife.app.data.repository.ReportsRepository
 import com.moodlife.app.data.repository.SettingsRepository
 import com.moodlife.app.data.repository.WarningSignStat
 import com.moodlife.app.domain.MonthBurden
+import com.moodlife.app.domain.ReportPeriod
 import com.moodlife.app.domain.ReportsCharts
 import com.moodlife.app.ui.components.RadarAxis
-import com.moodlife.app.util.DateUtils
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
@@ -31,6 +33,9 @@ data class ReportsUiState(
     val year: Int = LocalDate.now().year,
     val month: Int = LocalDate.now().monthValue - 1,
     val monthLabel: String = "",
+    val period: ReportPeriod = ReportPeriod.currentMonth(LocalDate.now()),
+    /** Days in the selected period — charts with daily bars switch to lines beyond ~45. */
+    val periodDays: Int = 0,
     val depressedSeries: List<Pair<String, Float>> = emptyList(),
     val elevatedSeries: List<Pair<String, Float>> = emptyList(),
     val anxiousSeries: List<Pair<String, Float>> = emptyList(),
@@ -79,19 +84,22 @@ class ReportsViewModel @Inject constructor(
     private val settingsRepository: SettingsRepository,
 ) : ViewModel() {
 
-    private val _yearMonth = MutableStateFlow(LocalDate.now().year to (LocalDate.now().monthValue - 1))
+    private val _period = MutableStateFlow(ReportPeriod.currentMonth(LocalDate.now()))
+    private val _range = _period.map { it.range(LocalDate.now()) }.distinctUntilChanged()
     private val _exportMessage = MutableStateFlow<String?>(null)
     private val _visibleCharts = MutableStateFlow(ReportsCharts.defaultVisible)
     private val _chartOrder = MutableStateFlow(ReportsCharts.defaultOrder)
 
     val uiState: StateFlow<ReportsUiState> = combine(
-        _yearMonth,
+        _period,
         _exportMessage,
         _visibleCharts,
         _chartOrder,
-        _yearMonth.flatMapLatest { (y, m) -> reportsRepository.observeMonthEntries(y, m) },
-    ) { ym, exportMsg, charts, order, entries ->
-        val (year, month) = ym
+        _range.flatMapLatest { (from, to) -> reportsRepository.observeEntries(from, to) },
+    ) { period, exportMsg, charts, order, entries ->
+        val today = LocalDate.now()
+        val (year, month) = period.exportMonth(today)
+        val (rangeFrom, rangeTo) = period.range(today)
         val avg: (selector: (com.moodlife.app.data.local.entity.MoodEntryEntity) -> Int) -> Float = { selector ->
             if (entries.isEmpty()) 0f else entries.map(selector).average().toFloat()
         }
@@ -118,22 +126,24 @@ class ReportsViewModel @Inject constructor(
             RadarAxis("Активность↑", avg { it.elevated }, 5f),
         )
         val burden = MonthBurden.counts(entries.map { it.depressed to it.elevated })
-        val heatCells = buildGithubHeatCells(year, month, entries)
+        val heatCells = buildGithubHeatCells(rangeFrom, rangeTo, entries)
         val polaritySeries = entries.map {
-            it.date.substring(8) to (it.elevated - it.depressed).toFloat().coerceIn(-5f, 5f)
+            it.date to (it.elevated - it.depressed).toFloat().coerceIn(-5f, 5f)
         }
         val avgPol = polaritySeries.map { it.second }.average().takeIf { entries.isNotEmpty() }?.toFloat()
         ReportsUiState(
             year = year,
             month = month,
-            monthLabel = "${DateUtils.MONTH_NAMES_RU[month]} $year",
-            depressedSeries = entries.map { it.date.substring(8) to it.depressed.toFloat() },
-            elevatedSeries = entries.map { it.date.substring(8) to it.elevated.toFloat() },
-            anxiousSeries = entries.map { it.date.substring(8) to it.anxious.toFloat() },
-            irritableSeries = entries.map { it.date.substring(8) to it.irritable.toFloat() },
-            concentrationSeries = entries.map { it.date.substring(8) to it.concentration.toFloat() },
-            sociabilitySeries = entries.map { it.date.substring(8) to it.sociability.toFloat() },
-            appetiteSeries = entries.map { it.date.substring(8) to it.appetite.toFloat() },
+            monthLabel = period.label(today),
+            period = period,
+            periodDays = period.dayCount(today).toInt(),
+            depressedSeries = entries.map { it.date to it.depressed.toFloat() },
+            elevatedSeries = entries.map { it.date to it.elevated.toFloat() },
+            anxiousSeries = entries.map { it.date to it.anxious.toFloat() },
+            irritableSeries = entries.map { it.date to it.irritable.toFloat() },
+            concentrationSeries = entries.map { it.date to it.concentration.toFloat() },
+            sociabilitySeries = entries.map { it.date to it.sociability.toFloat() },
+            appetiteSeries = entries.map { it.date to it.appetite.toFloat() },
             polaritySeries = polaritySeries,
             radarAxes = radarAxes,
             entryCount = entries.size,
@@ -146,12 +156,12 @@ class ReportsViewModel @Inject constructor(
             daysElevated = burden.elevated,
             daysMixed = burden.mixed,
             daysOther = burden.other,
-            sleepSeries = entries.mapNotNull { e -> e.sleepHours?.let { e.date.substring(8) to it } },
-            energySeries = entries.map { it.date.substring(8) to it.energy.toFloat() },
-            functioningSeries = entries.map { it.date.substring(8) to it.functioning.toFloat() },
-            alcoholSeries = entries.map { it.date.substring(8) to it.alcoholUse.toFloat() },
-            routineSeries = entries.map { it.date.substring(8) to it.routineScore.toFloat() },
-            safetySeries = entries.map { it.date.substring(8) to it.safetyCheck.toFloat() },
+            sleepSeries = entries.mapNotNull { e -> e.sleepHours?.let { e.date to it } },
+            energySeries = entries.map { it.date to it.energy.toFloat() },
+            functioningSeries = entries.map { it.date to it.functioning.toFloat() },
+            alcoholSeries = entries.map { it.date to it.alcoholUse.toFloat() },
+            routineSeries = entries.map { it.date to it.routineScore.toFloat() },
+            safetySeries = entries.map { it.date to it.safetyCheck.toFloat() },
             heatCells = heatCells,
             sleepMoodPoints = entries.mapNotNull { e ->
                 val hours = e.sleepHours ?: return@mapNotNull null
@@ -164,26 +174,26 @@ class ReportsViewModel @Inject constructor(
             bedtimeSpreadMin = MonthBurden.bedtimeSpreadMinutes(entries.mapNotNull { it.sleepTime }),
         )
     }.combine(
-        _yearMonth.flatMapLatest { (y, m) -> reportsRepository.observeMonthAdherence(y, m) },
+        _range.flatMapLatest { (from, to) -> reportsRepository.observeAdherence(from, to) },
     ) { state, adherence ->
         state.copy(
             adherencePercent = adherence.percent,
             missedMedSlots = (adherence.scheduled - adherence.taken).coerceAtLeast(0).takeIf { adherence.scheduled > 0 },
         )
     }.combine(
-        _yearMonth.flatMapLatest { (y, m) -> reportsRepository.observeMonthMedDoseSeries(y, m) },
+        _range.flatMapLatest { (from, to) -> reportsRepository.observeMedDoseSeries(from, to) },
     ) { state, series ->
         state.copy(medDoseSeries = series)
     }.combine(
-        _yearMonth.flatMapLatest { (y, m) -> reportsRepository.observeMonthMedTakenLines(y, m) },
+        _range.flatMapLatest { (from, to) -> reportsRepository.observeMedTakenLines(from, to) },
     ) { state, lines ->
         state.copy(medTakenLines = lines)
     }.combine(
-        _yearMonth.flatMapLatest { (y, m) -> reportsRepository.observeMonthAdherenceDays(y, m) },
+        _range.flatMapLatest { (from, to) -> reportsRepository.observeAdherenceDays(from, to) },
     ) { state, days ->
         state.copy(adherenceDays = days)
     }.combine(
-        _yearMonth.flatMapLatest { (y, m) -> reportsRepository.observeMonthWarningStats(y, m) },
+        _range.flatMapLatest { (from, to) -> reportsRepository.observeWarningStats(from, to) },
     ) { state, stats ->
         state.copy(warningStats = stats)
     }.combine(
@@ -222,11 +232,25 @@ class ReportsViewModel @Inject constructor(
         }
     }
 
-    fun prevMonth() = _yearMonth.update { (y, m) -> if (m == 0) (y - 1) to 11 else y to (m - 1) }
-    fun nextMonth() = _yearMonth.update { (y, m) -> if (m == 11) (y + 1) to 0 else y to (m + 1) }
+    fun prevMonth() = _period.update { if (it.kind == ReportPeriod.Kind.MONTH) it.prevMonth() else it }
+    fun nextMonth() = _period.update { if (it.kind == ReportPeriod.Kind.MONTH) it.nextMonth() else it }
+
+    fun selectPeriodKind(kind: ReportPeriod.Kind) = _period.update { current ->
+        when (kind) {
+            ReportPeriod.Kind.CUSTOM -> {
+                val (from, to) = current.range(LocalDate.now())
+                current.copy(kind = kind, customFrom = current.customFrom ?: from, customTo = current.customTo ?: to)
+            }
+            else -> current.copy(kind = kind)
+        }
+    }
+
+    fun setCustomRange(from: String?, to: String?) = _period.update {
+        it.copy(kind = ReportPeriod.Kind.CUSTOM, customFrom = from ?: it.customFrom, customTo = to ?: it.customTo)
+    }
 
     fun exportMonth(format: ExportFormat, onReady: (Intent) -> Unit) {
-        val ym = _yearMonth.value
+        val ym = _period.value.exportMonth(LocalDate.now())
         viewModelScope.launch {
             try {
                 val file = exportManager.exportMonth(ym.first, ym.second, format)
@@ -240,19 +264,18 @@ class ReportsViewModel @Inject constructor(
 }
 
 private fun buildGithubHeatCells(
-    year: Int,
-    month: Int,
+    from: String,
+    to: String,
     entries: List<com.moodlife.app.data.local.entity.MoodEntryEntity>,
 ): List<com.moodlife.app.ui.components.HeatCell> {
     val byDate = entries.associateBy { it.date }
-    val (from, to) = DateUtils.monthRange(year, month)
     val start = LocalDate.parse(from)
     val end = LocalDate.parse(to)
     val firstWeekday = (start.dayOfWeek.value - 1).coerceIn(0, 6)
     val cells = mutableListOf<com.moodlife.app.ui.components.HeatCell>()
     var d = start
     while (!d.isAfter(end)) {
-        val dayIndex = d.dayOfMonth - 1
+        val dayIndex = java.time.temporal.ChronoUnit.DAYS.between(start, d).toInt()
         val weekIndex = (firstWeekday + dayIndex) / 7
         val weekday = (d.dayOfWeek.value - 1).coerceIn(0, 6)
         val e = byDate[d.toString()]

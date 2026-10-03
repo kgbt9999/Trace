@@ -54,6 +54,16 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.moodlife.app.R
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.FilterChipDefaults
+import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.outlined.MoreVert
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.runtime.saveable.rememberSaveable
 import com.moodlife.app.domain.CitationTopics
 import com.moodlife.app.domain.ClinicalAlerts
 import com.moodlife.app.domain.MoodScales
@@ -194,35 +204,7 @@ fun TodayScreen(
             modifier = Modifier.padding(bottom = 4.dp),
         )
 
-        // Day progress bar — shows how many of 4 core sections have data
-        val progressMood = state.depressed > 0 || state.elevated > 0 || state.anxious > 0 || state.irritable > 0
-        val progressSleep = state.sleepHoursText.isNotEmpty()
-        val progressMeds = state.medications.any { it.slotsTaken.values.any { taken -> taken } }
-        val progressSymptoms = state.symptomCount > 0
-        val progressFilled = listOf(progressMood, progressSleep, progressMeds, progressSymptoms).count { it }
-        if (progressFilled > 0 || state.isToday) {
-            Column(modifier = Modifier.padding(bottom = 8.dp)) {
-                LinearProgressIndicator(
-                    progress = { progressFilled / 4f },
-                    modifier = Modifier.fillMaxWidth(),
-                    color = MaterialTheme.colorScheme.primary,
-                    trackColor = MaterialTheme.colorScheme.surfaceVariant,
-                )
-                Text(
-                    stringResource(R.string.day_progress_label, progressFilled, 4),
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(top = 2.dp),
-                )
-            }
-        }
-
-        Text(
-            text = stringResource(R.string.disclaimer),
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.padding(bottom = 8.dp),
-        )
+        DaySummaryRow(state, modifier = Modifier.padding(bottom = 8.dp))
 
         TodayClinicalBanners(state)
 
@@ -274,24 +256,38 @@ fun TodayScreen(
                     TodaySections.Id.EXTRA,
                     TodaySections.Id.CLINICAL -> Unit
                     TodaySections.Id.GRAPH_PARAMS -> {
+                        var configuring by rememberSaveable { mutableStateOf(false) }
                         CollapsibleSection(
                             title,
                             initiallyExpanded = true,
                             helpText = help,
-                            onEdit = { viewModel.openSettingsSection("layout") },
+                            onEdit = { configuring = !configuring },
                         ) {
-                            Text(
-                                stringResource(R.string.today_chart_params_pick),
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            )
-                            Spacer(Modifier.height(8.dp))
+                            if (configuring) {
+                                Text(
+                                    stringResource(R.string.today_chart_params_pick),
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                                Spacer(Modifier.height(8.dp))
+                            }
                             GraphParamsTrackablePicker(
                                 state = state,
                                 viewModel = viewModel,
                                 onToggle = viewModel::toggleTrackable,
                                 onScale = viewModel::setTrackableScale,
+                                configuring = configuring,
                             )
+                            TextButton(
+                                onClick = { configuring = !configuring },
+                                modifier = Modifier.heightIn(min = 48.dp),
+                            ) {
+                                Text(
+                                    stringResource(
+                                        if (configuring) R.string.today_scales_configure_done else R.string.today_scales_configure,
+                                    ),
+                                )
+                            }
                         }
                     }
                     TodaySections.Id.CONTEXT -> key(state.date) {
@@ -350,6 +346,7 @@ fun TodayScreen(
                         CollapsibleSection(
                             title,
                             initiallyExpanded = false,
+                            subtitle = sleepSummary(state),
                             helpText = help,
                             onEdit = { viewModel.openSettingsSection("layout") },
                         ) {
@@ -359,7 +356,8 @@ fun TodayScreen(
                     TodaySections.Id.MEDS -> key(state.date) {
                     CollapsibleSection(
                         title,
-                        initiallyExpanded = false,
+                        initiallyExpanded = state.medications.isNotEmpty(),
+                        subtitle = medsSummary(state),
                         helpText = help,
                         onEdit = { viewModel.openSettingsSection("meds") },
                     ) {
@@ -374,64 +372,12 @@ fun TodayScreen(
                         } else {
                             state.medications.forEach { med ->
                                 key(med.id) {
-                                Row(
-                                    Modifier.fillMaxWidth().padding(top = 8.dp),
-                                    verticalAlignment = Alignment.CenterVertically,
-                                ) {
-                                    Column(
-                                        Modifier
-                                            .weight(1f)
-                                            .clickable { viewModel.startEditMed(med.id) },
-                                    ) {
-                                        Text(
-                                            text = med.name,
-                                            style = MaterialTheme.typography.titleSmall,
-                                        )
-                                        val subtitle = buildString {
-                                            if (med.isRegular) {
-                                                append(stringResource(R.string.settings_med_mode_regular))
-                                            } else {
-                                                append(stringResource(R.string.settings_med_mode_scheme))
-                                            }
-                                            med.dosage?.takeIf { it.isNotBlank() }?.let {
-                                                append(" · ")
-                                                append(it)
-                                            }
-                                        }
-                                        Text(
-                                            text = subtitle,
-                                            style = MaterialTheme.typography.bodySmall,
-                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                        )
-                                    }
-                                    if (med.hasDayLog) {
-                                        IconButton(onClick = { viewModel.requestDeleteDayMedLog(med.id) }) {
-                                            Icon(
-                                                Icons.Outlined.Delete,
-                                                contentDescription = stringResource(R.string.day_med_delete),
-                                            )
-                                        }
-                                    }
-                                    IconButton(onClick = { viewModel.startEditMed(med.id) }) {
-                                        Icon(Icons.Outlined.Edit, contentDescription = stringResource(R.string.catalog_edit_action))
-                                    }
-                                }
-                                med.slots.forEach { slot ->
-                                    val slotLabel = MedsUtils.slotLabel(slot)
-                                    val taken = med.slotsTaken[slot] == true
-                                    Row(
-                                        verticalAlignment = Alignment.CenterVertically,
-                                        modifier = Modifier.semantics(mergeDescendants = true) {
-                                            contentDescription = "${med.name} · $slotLabel · ${if (taken) "принято" else "не принято"}"
-                                        },
-                                    ) {
-                                        Checkbox(
-                                            checked = taken,
-                                            onCheckedChange = { viewModel.toggleMedSlot(med.id, slot) },
-                                        )
-                                        Text(slotLabel)
-                                    }
-                                }
+                                    TodayMedRow(
+                                        med = med,
+                                        onToggle = { slot -> viewModel.toggleMedSlot(med.id, slot) },
+                                        onEdit = { viewModel.startEditMed(med.id) },
+                                        onDeleteDayLog = { viewModel.requestDeleteDayMedLog(med.id) },
+                                    )
                                 }
                             }
                             FilledTonalButton(
@@ -450,6 +396,7 @@ fun TodayScreen(
                         CollapsibleSection(
                             title,
                             initiallyExpanded = false,
+                            subtitle = countSummary(state.symptoms.count { it.severity > 0 }),
                             helpText = help,
                             onEdit = { viewModel.openSettingsSection("symptoms") },
                         ) {
@@ -471,6 +418,7 @@ fun TodayScreen(
                     CollapsibleSection(
                         title,
                         initiallyExpanded = false,
+                        subtitle = countSummary(state.factors.count { it.active }),
                         helpText = help,
                         onEdit = { viewModel.openSettingsSection("factors") },
                     ) {
@@ -614,6 +562,7 @@ fun TodayScreen(
                     CollapsibleSection(
                         title,
                         initiallyExpanded = false,
+                        subtitle = countSummary(state.dayNotes.size),
                         helpText = help,
                         onEdit = { viewModel.openSettingsSection("layout") },
                     ) {
@@ -764,60 +713,21 @@ fun TodayScreen(
                 style = MaterialTheme.typography.bodyMedium,
             )
         }
-        state.lastSavedAt?.let { ts ->
-            val formatted = LAST_SAVED_FORMAT.format(Date(ts))
-            Text(
-                text = stringResource(R.string.today_last_saved, formatted),
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
-            )
-        }
+        Text(
+            text = stringResource(R.string.disclaimer),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(top = 16.dp),
+        )
         Spacer(modifier = Modifier.height(16.dp))
         }
 
         HorizontalDivider()
-        Surface(
-            color = MaterialTheme.colorScheme.surface,
-            tonalElevation = 0.dp,
-            shadowElevation = 0.dp,
-        ) {
-            Column(Modifier.padding(horizontal = 16.dp, vertical = 10.dp)) {
-                state.saveMessage?.let { msg ->
-                    Text(
-                        text = saveMessageText(msg),
-                        style = MaterialTheme.typography.bodySmall,
-                        modifier = Modifier.padding(bottom = 6.dp),
-                    )
-                }
-                Button(
-                    onClick = viewModel::save,
-                    enabled = !state.isSaving,
-                    modifier = Modifier.fillMaxWidth().height(48.dp),
-                ) {
-                    Text(if (state.isSaving) stringResource(R.string.today_saving) else stringResource(R.string.today_save))
-                }
-                if (state.moodEntryId != null) {
-                    OutlinedButton(
-                        onClick = { showDeleteEntryDialog = true },
-                        modifier = Modifier.fillMaxWidth().padding(top = 6.dp).height(48.dp),
-                        colors = androidx.compose.material3.ButtonDefaults.outlinedButtonColors(
-                            contentColor = MaterialTheme.colorScheme.error,
-                        ),
-                        border = androidx.compose.foundation.BorderStroke(
-                            1.dp,
-                            MaterialTheme.colorScheme.error.copy(alpha = 0.5f),
-                        ),
-                    ) {
-                        Icon(
-                            Icons.Outlined.Delete,
-                            contentDescription = null,
-                            modifier = Modifier.padding(end = 6.dp).size(18.dp),
-                        )
-                        Text(stringResource(R.string.today_delete))
-                    }
-                }
-            }
-        }
+        TodaySaveBar(
+            state = state,
+            onSave = viewModel::save,
+            onDelete = { showDeleteEntryDialog = true },
+        )
     }
 
     state.medEditor?.let { editor ->
@@ -942,13 +852,56 @@ private fun GraphParamsTrackablePicker(
     viewModel: TodayViewModel,
     onToggle: (String) -> Unit,
     onScale: (String, String) -> Unit,
+    configuring: Boolean,
 ) {
+    val scaleColor = LocalMoodColors.current.functioning
+    if (!configuring) {
+        // Daily entry: only value inputs. The four mood axes and the safety question are the
+        // core check-in; the rest is one tap away so the card stays short.
+        val enabled = state.trackables.filter { it.enabled }
+        val primary = enabled.filter { it.section == "mood" || it.key == "safetyCheck" }
+        val secondary = enabled - primary.toSet()
+        var showMore by rememberSaveable { mutableStateOf(false) }
+        Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            if (enabled.isEmpty()) {
+                Text(
+                    stringResource(R.string.today_trackables_empty),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            primary.forEach { item ->
+                key(item.key, item.scaleType) {
+                    TrackableValueInput(item = item, state = state, viewModel = viewModel, scaleColor = scaleColor)
+                }
+            }
+            if (secondary.isNotEmpty()) {
+                val filled = secondary.count { trackableValue(it.key, state) > 0 }
+                TextButton(
+                    onClick = { showMore = !showMore },
+                    modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp),
+                ) {
+                    Text(
+                        stringResource(R.string.today_more_day_details, filled, secondary.size) +
+                            if (showMore) " ▲" else " ▼",
+                    )
+                }
+                if (showMore) {
+                    secondary.forEach { item ->
+                        key(item.key, item.scaleType) {
+                            TrackableValueInput(item = item, state = state, viewModel = viewModel, scaleColor = scaleColor)
+                        }
+                    }
+                }
+            }
+        }
+        return
+    }
     val sections = listOf(
         "mood" to R.string.today_mood_section,
         "extra" to R.string.today_extra_section,
         "clinical" to R.string.today_clinical_section,
     )
-    val scaleColor = LocalMoodColors.current.functioning
     var expandedHidden by remember { mutableStateOf(setOf<String>()) }
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
         sections.forEach { (section, titleRes) ->
@@ -993,12 +946,6 @@ private fun GraphParamsTrackablePicker(
                             options = TRACKABLE_SCALE_OPTIONS,
                             showTitle = false,
                             modifier = Modifier.padding(bottom = 2.dp),
-                        )
-                        TrackableValueInput(
-                            item = item,
-                            state = state,
-                            viewModel = viewModel,
-                            scaleColor = scaleColor,
                         )
                     }
                 }
@@ -1424,4 +1371,189 @@ private fun phaseLabel(phase: String): String = when (phase) {
     "mixed" -> stringResource(R.string.phase_mixed)
     "recovery" -> stringResource(R.string.phase_recovery)
     else -> phase
+}
+
+/** One line "what is filled today" instead of a progress bar + caption. */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun DaySummaryRow(
+    state: com.moodlife.app.ui.screens.today.TodayUiState,
+    modifier: Modifier = Modifier,
+) {
+    val moodDone = state.depressed > 0 || state.elevated > 0 || state.anxious > 0 || state.irritable > 0
+    val sleepDone = state.sleepHoursText.isNotEmpty()
+    val slotsTotal = state.medications.sumOf { it.slots.size }
+    val slotsTaken = state.medications.sumOf { med -> med.slots.count { med.slotsTaken[it] == true } }
+    val symptomsDone = state.symptoms.any { it.severity > 0 }
+    val items = buildList {
+        add(stringResource(R.string.today_summary_mood) to moodDone)
+        add(stringResource(R.string.today_summary_sleep) to sleepDone)
+        if (slotsTotal > 0) {
+            add(stringResource(R.string.today_summary_meds, slotsTaken, slotsTotal) to (slotsTaken == slotsTotal))
+        }
+        add(stringResource(R.string.today_summary_symptoms) to symptomsDone)
+    }
+    FlowRow(
+        modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
+        verticalArrangement = Arrangement.spacedBy(4.dp),
+    ) {
+        items.forEach { (label, done) ->
+            // Status, not a control: icon + text so state is not conveyed by colour alone.
+            Surface(
+                shape = RoundedCornerShape(50),
+                color = if (done) MaterialTheme.colorScheme.secondaryContainer else MaterialTheme.colorScheme.surfaceVariant,
+            ) {
+                Row(
+                    Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(
+                        (if (done) "✓ " else "○ ") + label,
+                        style = MaterialTheme.typography.labelMedium,
+                        color = if (done) MaterialTheme.colorScheme.onSecondaryContainer else MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun sleepSummary(state: com.moodlife.app.ui.screens.today.TodayUiState): String? {
+    val hours = state.sleepHoursText.takeIf { it.isNotBlank() } ?: return null
+    val times = if (state.sleepTime.isNotBlank() && state.wakeTime.isNotBlank()) " · ${state.sleepTime}–${state.wakeTime}" else ""
+    return stringResource(R.string.today_summary_sleep_hours, hours) + times
+}
+
+@Composable
+private fun medsSummary(state: com.moodlife.app.ui.screens.today.TodayUiState): String? {
+    val total = state.medications.sumOf { it.slots.size }
+    if (total == 0) return null
+    val taken = state.medications.sumOf { med -> med.slots.count { med.slotsTaken[it] == true } }
+    return stringResource(R.string.today_summary_meds_taken, taken, total)
+}
+
+@Composable
+private fun countSummary(count: Int): String? =
+    if (count > 0) stringResource(R.string.today_summary_count, count) else null
+
+/** Medication: name/dose line with an overflow menu, intake slots as one row of chips. */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun TodayMedRow(
+    med: com.moodlife.app.ui.screens.today.MedUiItem,
+    onToggle: (String) -> Unit,
+    onEdit: () -> Unit,
+    onDeleteDayLog: () -> Unit,
+) {
+    var menuOpen by remember { mutableStateOf(false) }
+    Column(Modifier.fillMaxWidth().padding(top = 8.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Column(Modifier.weight(1f).clickable(onClick = onEdit)) {
+                Text(med.name, style = MaterialTheme.typography.titleSmall)
+                val subtitle = buildString {
+                    append(
+                        stringResource(
+                            if (med.isRegular) R.string.settings_med_mode_regular else R.string.settings_med_mode_scheme,
+                        ),
+                    )
+                    med.dosage?.takeIf { it.isNotBlank() }?.let { append(" · ").append(it) }
+                }
+                Text(
+                    subtitle,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            Box {
+                IconButton(onClick = { menuOpen = true }) {
+                    Icon(
+                        Icons.Outlined.MoreVert,
+                        contentDescription = stringResource(R.string.today_med_more, med.name),
+                    )
+                }
+                DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
+                    DropdownMenuItem(
+                        text = { Text(stringResource(R.string.catalog_edit_action)) },
+                        leadingIcon = { Icon(Icons.Outlined.Edit, contentDescription = null) },
+                        onClick = { menuOpen = false; onEdit() },
+                    )
+                    if (med.hasDayLog) {
+                        DropdownMenuItem(
+                            text = { Text(stringResource(R.string.day_med_delete)) },
+                            leadingIcon = { Icon(Icons.Outlined.Delete, contentDescription = null) },
+                            onClick = { menuOpen = false; onDeleteDayLog() },
+                        )
+                    }
+                }
+            }
+        }
+        FlowRow(
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalArrangement = Arrangement.spacedBy(4.dp),
+        ) {
+            med.slots.forEach { slot ->
+                val slotLabel = MedsUtils.slotLabel(slot)
+                val taken = med.slotsTaken[slot] == true
+                FilterChip(
+                    selected = taken,
+                    onClick = { onToggle(slot) },
+                    label = { Text(slotLabel) },
+                    leadingIcon = if (taken) {
+                        { Icon(Icons.Filled.Check, contentDescription = null, modifier = Modifier.size(FilterChipDefaults.IconSize)) }
+                    } else {
+                        null
+                    },
+                    modifier = Modifier.semantics {
+                        contentDescription = "${med.name} · $slotLabel · ${if (taken) "принято" else "не принято"}"
+                    },
+                )
+            }
+        }
+    }
+}
+
+/**
+ * Values autosave ~200 ms after each change, so this is a status line with a secondary manual
+ * save (kept for reassurance) instead of two permanent full-width buttons.
+ */
+@Composable
+private fun TodaySaveBar(
+    state: com.moodlife.app.ui.screens.today.TodayUiState,
+    onSave: () -> Unit,
+    onDelete: () -> Unit,
+) {
+    Surface(color = MaterialTheme.colorScheme.surface) {
+        Row(
+            Modifier
+                .fillMaxWidth()
+                .padding(start = 16.dp, end = 4.dp)
+                .heightIn(min = 48.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            val status = state.saveMessage?.let { saveMessageText(it) }
+                ?: state.lastSavedAt?.let { stringResource(R.string.today_last_saved, LAST_SAVED_FORMAT.format(Date(it))) }
+                ?: stringResource(R.string.today_autosave_hint)
+            Text(
+                status,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.weight(1f),
+                maxLines = 2,
+            )
+            TextButton(onClick = onSave, enabled = !state.isSaving) {
+                Text(stringResource(if (state.isSaving) R.string.today_saving else R.string.today_save))
+            }
+            if (state.moodEntryId != null) {
+                IconButton(onClick = onDelete) {
+                    Icon(
+                        Icons.Outlined.Delete,
+                        contentDescription = stringResource(R.string.today_delete),
+                        tint = MaterialTheme.colorScheme.error,
+                    )
+                }
+            }
+        }
+    }
 }

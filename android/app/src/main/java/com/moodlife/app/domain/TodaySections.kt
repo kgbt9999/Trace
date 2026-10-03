@@ -38,7 +38,32 @@ object TodaySections {
         val order: Int,
     )
 
-    fun defaults(): List<Pref> = Id.entries.mapIndexed { i, id -> Pref(id, id.defaultVisible, i) }
+    /**
+     * Daily-entry first (state → meds → sleep → symptoms), reference info (weather/context)
+     * last. Previously weather sat second and pushed meds below the fold.
+     */
+    val RECOMMENDED_ORDER: List<Id> = listOf(
+        Id.GRAPH_PARAMS,
+        Id.MEDS,
+        Id.SLEEP,
+        Id.SYMPTOMS,
+        Id.FACTORS,
+        Id.WARNINGS,
+        Id.NOTES,
+        Id.CHECKINS,
+        Id.CONTEXT,
+        Id.MOOD,
+        Id.EXTRA,
+        Id.CLINICAL,
+    )
+
+    fun defaults(): List<Pref> = RECOMMENDED_ORDER.mapIndexed { i, id -> Pref(id, id.defaultVisible, i) }
+
+    /** Re-sorts into [RECOMMENDED_ORDER] but keeps the user's visibility choices. */
+    fun withRecommendedOrder(prefs: List<Pref>): List<Pref> {
+        val visible = prefs.associate { it.id to it.visible }
+        return RECOMMENDED_ORDER.mapIndexed { i, id -> Pref(id, visible[id] ?: id.defaultVisible, i) }
+    }
 
     fun titleRes(id: Id): Int = when (id) {
         Id.MOOD -> R.string.today_mood_section
@@ -92,20 +117,7 @@ object TodaySections {
     }
 
     /** Stable insert order for newly added section ids (e.g. GRAPH_PARAMS after MOOD). */
-    private fun defaultOrderIndex(id: Id): Int = when (id) {
-        Id.MOOD -> 0
-        Id.GRAPH_PARAMS -> 1
-        Id.EXTRA -> 2
-        Id.CLINICAL -> 3
-        Id.CONTEXT -> 4
-        Id.CHECKINS -> 5
-        Id.SLEEP -> 6
-        Id.MEDS -> 7
-        Id.SYMPTOMS -> 8
-        Id.FACTORS -> 9
-        Id.WARNINGS -> 10
-        Id.NOTES -> 11
-    }
+    private fun defaultOrderIndex(id: Id): Int = RECOMMENDED_ORDER.indexOf(id)
 
     fun serialize(prefs: List<Pref>): String {
         val arr = JSONArray()

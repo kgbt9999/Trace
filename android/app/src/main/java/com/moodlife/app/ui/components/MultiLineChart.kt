@@ -4,6 +4,8 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -24,6 +26,7 @@ import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.moodlife.app.ui.components.ChartAxis.drawXLabels
 import kotlin.math.roundToInt
 
 data class ChartSeries(
@@ -32,6 +35,7 @@ data class ChartSeries(
     val points: List<Pair<String, Float>>,
 )
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun MultiLineChart(
     series: List<ChartSeries>,
@@ -44,18 +48,15 @@ fun MultiLineChart(
     /** Semantic zoom: denser ticks + narrower X window. */
     zoom: ChartZoomState = ChartZoomState(),
     modifier: Modifier = Modifier,
+    /** Fit Y to the visible points (ignores [minY]/[maxY]); for unbounded values like weight. */
+    autoScaleY: Boolean = false,
 ) {
     val nonEmpty = series.filter { it.points.isNotEmpty() }
     if (nonEmpty.isEmpty()) return
     val allLabels = nonEmpty
         .flatMap { s -> s.points.map { it.first } }
         .distinct()
-        .sortedWith(
-            compareBy(
-                { it.toIntOrNull() ?: Int.MAX_VALUE },
-                { it },
-            ),
-        )
+        .sortedWith(ChartAxis.keyOrder)
     val total = allLabels.size
     val scale = zoom.scale.coerceAtLeast(1f)
     val visibleCount = (total / scale).roundToInt().coerceIn(2, total.coerceAtLeast(2))
@@ -77,12 +78,21 @@ fun MultiLineChart(
     val bottomPad = if (showAxisTicks) with(density) { 22.dp.toPx() } else 0f
     val topPad = if (yAxisLabel != null) with(density) { 4.dp.toPx() } else 0f
 
-    // More Y divisions when zoomed; denser X labels for the visible window.
-    val yTicks = (5 * scale).roundToInt().coerceIn(5, 16)
-    val labelStep = when {
-        scale >= 3f || count <= 12 -> 1
-        count <= 20 -> 2
-        else -> 3
+    val visibleKeys = xLabels.toSet()
+    val yRange = if (autoScaleY) {
+        ChartAxis.niceRange(
+            nonEmpty.flatMap { s -> s.points.filter { it.first in visibleKeys }.map { it.second } },
+        )
+    } else {
+        null
+    }
+    val lowY = yRange?.min ?: minY
+    val highY = yRange?.max ?: maxY
+    // More Y divisions when zoomed.
+    val yTicks = if (yRange != null) {
+        ((highY - lowY) / yRange.step).roundToInt().coerceIn(1, 16)
+    } else {
+        (5 * scale).roundToInt().coerceIn(5, 16)
     }
 
     Column(modifier) {
@@ -101,15 +111,15 @@ fun MultiLineChart(
                 .clip(RoundedCornerShape(12.dp))
                 .background(canvasBg),
         ) {
-            Canvas(Modifier.fillMaxWidth().height(200.dp).padding(8.dp)) {
+            Canvas(Modifier.fillMaxWidth().height(LocalChartPlotHeight.current ?: 200.dp).padding(8.dp)) {
                 val plotW = (size.width - leftPad - rightPad).coerceAtLeast(1f)
                 val plotH = (size.height - bottomPad - topPad).coerceAtLeast(1f)
                 val originX = leftPad
                 val originY = topPad
                 val stepX = plotW / (count - 1).coerceAtLeast(1)
-                val range = (maxY - minY).coerceAtLeast(0.001f)
+                val range = (highY - lowY).coerceAtLeast(0.001f)
                 fun xAt(i: Int) = originX + i * stepX
-                fun yAt(v: Float) = originY + plotH - ((v.coerceIn(minY, maxY) - minY) / range) * plotH
+                fun yAt(v: Float) = originY + plotH - ((v.coerceIn(lowY, highY) - lowY) / range) * plotH
 
                 if (showAxisTicks) {
                     val paint = android.graphics.Paint().apply {
@@ -124,13 +134,13 @@ fun MultiLineChart(
                         textAlign = android.graphics.Paint.Align.RIGHT
                     }
                     for (t in 0..yTicks) {
-                        val v = minY + (range * t / yTicks)
+                        val v = lowY + (range * t / yTicks)
                         val y = yAt(v)
                         drawLine(grid, Offset(originX, y), Offset(originX + plotW, y), strokeWidth = 1f)
-                        val label = if (range <= 10f && scale >= 2f) {
-                            "%.1f".format(v)
-                        } else {
-                            "%.0f".format(v)
+                        val label = when {
+                            yRange != null -> ChartAxis.formatTick(v, yRange.step)
+                            range <= 10f && scale >= 2f -> "%.1f".format(v)
+                            else -> "%.0f".format(v)
                         }
                         drawContext.canvas.nativeCanvas.drawText(
                             label,
@@ -139,27 +149,12 @@ fun MultiLineChart(
                             paint,
                         )
                     }
-                    paint.textAlign = android.graphics.Paint.Align.CENTER
-                    xLabels.forEachIndexed { i, label ->
-                        if (i % labelStep == 0 || i == count - 1) {
-                            paint.textAlign = when (i) {
-                                0 -> android.graphics.Paint.Align.LEFT
-                                count - 1 -> android.graphics.Paint.Align.RIGHT
-                                else -> android.graphics.Paint.Align.CENTER
-                            }
-                            drawContext.canvas.nativeCanvas.drawText(
-                                label,
-                                xAt(i),
-                                size.height - 2f,
-                                paint,
-                            )
-                        }
-                    }
+                    drawXLabels(xLabels, ::xAt, size.height - 2f, paint)
                     drawLine(axisColor.copy(alpha = 0.85f), Offset(originX, originY), Offset(originX, originY + plotH), 2f)
                     drawLine(axisColor.copy(alpha = 0.85f), Offset(originX, originY + plotH), Offset(originX + plotW, originY + plotH), 2f)
                 } else {
                     for (t in 0..yTicks) {
-                        val v = minY + (range * t / yTicks)
+                        val v = lowY + (range * t / yTicks)
                         drawLine(grid, Offset(originX, yAt(v)), Offset(originX + plotW, yAt(v)), strokeWidth = 1f)
                     }
                     drawLine(axisColor.copy(alpha = 0.7f), Offset(originX, originY), Offset(originX, originY + plotH), 1.5f)
@@ -195,19 +190,30 @@ fun MultiLineChart(
                     .padding(top = 4.dp),
             )
         }
-        Row(
+        // FlowRow: many medications wrap instead of running off-screen; explicit colour because
+        // the legend sits outside the white canvas and must follow the theme.
+        FlowRow(
             Modifier.fillMaxWidth().padding(top = 6.dp),
             horizontalArrangement = Arrangement.spacedBy(12.dp),
+            verticalArrangement = Arrangement.spacedBy(4.dp),
         ) {
             nonEmpty.filter { it.label.isNotBlank() }.forEach { s ->
-                Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(4.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
                     Box(
                         Modifier
-                            .size(8.dp)
+                            .size(10.dp)
                             .clip(CircleShape)
                             .background(s.color),
                     )
-                    Text(s.label, style = MaterialTheme.typography.labelSmall, maxLines = 1)
+                    Text(
+                        s.label,
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.onSurface,
+                        maxLines = 1,
+                    )
                 }
             }
         }

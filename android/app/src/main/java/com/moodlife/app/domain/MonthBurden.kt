@@ -68,17 +68,9 @@ object MonthBurden {
         logs.forEach { log ->
             val med = byId[log.medicationId] ?: return@forEach
             val rawTimes = log.intakeTimesSnapshot?.takeIf { it.isNotBlank() } ?: med.intakeTimes
-            val slots = MedsUtils.parseIntakeTimes(rawTimes)
-            val timed = slots.filter { it != "by-scheme" }
-            if (timed.isEmpty()) {
-                scheduled += 1
-                if (log.taken) taken += 1
-            } else {
-                scheduled += timed.size
-                taken += timed.count { slot ->
-                    MedsUtils.isSlotTaken(log.taken, log.slotsTaken, slot, timed)
-                }
-            }
+            val day = MedsUtils.daySlots(rawTimes, log.taken, log.slotsTaken)
+            scheduled += day.scheduledCount
+            taken += day.takenCount
         }
         return Adherence(taken, scheduled)
     }
