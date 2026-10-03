@@ -57,7 +57,9 @@ fun ScaleInput(
 ) {
     val isNumeric = options == null
     val count = if (isNumeric) max + 1 else options.size
+    // value < 0 = not marked for this day: no step is highlighted.
     val readout = when {
+        value < 0 -> "—"
         !isNumeric -> options.getOrNull(value) ?: "—"
         anchors?.getOrNull(value) != null -> "$value · ${anchors[value]}"
         else -> "$value/$max"

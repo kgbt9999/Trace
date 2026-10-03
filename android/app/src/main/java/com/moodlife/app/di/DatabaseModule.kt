@@ -11,6 +11,7 @@ import com.moodlife.app.data.local.MoodLifeDatabase.Companion.MIGRATION_3_4
 import com.moodlife.app.data.local.MoodLifeDatabase.Companion.MIGRATION_4_5
 import com.moodlife.app.data.local.MoodLifeDatabase.Companion.MIGRATION_5_6
 import com.moodlife.app.data.local.MoodLifeDatabase.Companion.MIGRATION_6_7
+import com.moodlife.app.data.local.MoodLifeDatabase.Companion.MIGRATION_7_8
 import com.moodlife.app.data.local.dao.BodyMeasurementDao
 import com.moodlife.app.data.local.dao.DayNoteDao
 import com.moodlife.app.data.local.dao.ExternalHealthDayDao
@@ -118,7 +119,7 @@ object DatabaseModule {
             context,
             MoodLifeDatabase::class.java,
             DatabaseEncryptionMigrator.DB_NAME,
-        ).addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7)
+        ).addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8)
     }
 
     @Provides fun provideMoodEntryDao(db: MoodLifeDatabase): MoodEntryDao = db.moodEntryDao()

@@ -11,6 +11,8 @@ import com.moodlife.app.domain.ForecastEngine
 import com.moodlife.app.domain.InsightsEngine
 import com.moodlife.app.domain.MedAccentColors
 import com.moodlife.app.domain.MonthBurden
+import com.moodlife.app.domain.markedPolarity
+import com.moodlife.app.domain.markedValue
 import com.moodlife.app.util.DateUtils
 import com.moodlife.app.util.MedsUtils
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -245,11 +247,8 @@ class ReportsRepository @Inject constructor(
                 val m = ym.monthValue - 1
                 val (mFrom, mTo) = DateUtils.monthRange(y, m)
                 val monthEntries = entries.filter { it.date in mFrom..mTo }
-                val avgPol = monthEntries
-                    .map { (it.elevated - it.depressed).toFloat() }
-                    .average()
-                    .takeIf { monthEntries.isNotEmpty() }
-                    ?.toFloat()
+                val polarities = monthEntries.mapNotNull { it.markedPolarity()?.toFloat() }
+                val avgPol = polarities.average().takeIf { polarities.isNotEmpty() }?.toFloat()
                 val avgSleep = monthEntries.mapNotNull { it.sleepHours?.toFloat() }
                     .average()
                     .takeIf { !it.isNaN() }
@@ -316,11 +315,16 @@ class ForecastRepository @Inject constructor(
                         .groupBy { it.moodEntryId }
                 }
                 val hist = ForecastEngine.buildHistory(
-                    entries.map {
+                    entries.filter { it.markedPolarity() != null }.map {
                         val directions = triggersByEntry[it.id].orEmpty().mapNotNull { t -> directionById[t.warningSignId] }
                         ForecastEngine.HistDayInput(
-                            it.date, it.depressed, it.elevated, it.anxious, it.irritable,
-                            it.sleepQuality, it.sleepHours,
+                            it.date,
+                            it.markedValue("depressed") ?: 0,
+                            it.markedValue("elevated") ?: 0,
+                            it.markedValue("anxious") ?: 0,
+                            it.markedValue("irritable") ?: 0,
+                            it.markedValue("sleepQuality") ?: 0,
+                            it.sleepHours,
                             warningMania = directions.any { d -> d == "mania" || d == "mixed" },
                             warningDep = directions.any { d -> d == "depression" || d == "mixed" },
                         )

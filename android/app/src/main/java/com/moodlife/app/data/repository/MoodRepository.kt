@@ -6,6 +6,7 @@ import com.moodlife.app.data.local.entity.MoodEntryEntity
 import com.moodlife.app.util.EpisodeClassifier
 import kotlinx.coroutines.flow.Flow
 import java.util.UUID
+import com.moodlife.app.domain.MarkedAxes
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -47,6 +48,7 @@ class MoodRepository @Inject constructor(
             alcoholUse = fields.alcoholUse,
             substanceUse = fields.substanceUse,
             routineScore = fields.routineScore,
+            markedAxes = MarkedAxes.serialize(fields.marked),
             createdAt = now,
             updatedAt = now,
         )
@@ -100,6 +102,7 @@ class MoodRepository @Inject constructor(
             alcoholUse = fields.alcoholUse,
             substanceUse = fields.substanceUse,
             routineScore = fields.routineScore,
+            markedAxes = MarkedAxes.serialize(fields.marked),
             createdAt = existing?.createdAt ?: now,
             updatedAt = now,
         )
@@ -130,6 +133,8 @@ class MoodRepository @Inject constructor(
         val alcoholUse: Int = 0,
         val substanceUse: Int = 0,
         val routineScore: Int = 0,
+        /** Scales the user marked; values for other keys are stored as 0 but ignored. */
+        val marked: Set<String> = emptySet(),
     ) {
         companion object {
             fun fromEntity(e: MoodEntryEntity) = MoodFields(
@@ -150,6 +155,7 @@ class MoodRepository @Inject constructor(
                 alcoholUse = e.alcoholUse,
                 substanceUse = e.substanceUse,
                 routineScore = e.routineScore,
+                marked = MarkedAxes.of(e),
             )
         }
     }

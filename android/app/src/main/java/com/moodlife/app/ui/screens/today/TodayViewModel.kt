@@ -146,6 +146,8 @@ data class TodayUiState(
     val alcoholUse: Int = 0,
     val substanceUse: Int = 0,
     val routineScore: Int = 0,
+    /** Scales explicitly marked for this day; unmarked ones show no selection. */
+    val markedAxes: Set<String> = emptySet(),
     val episodePhase: String? = null,
     val lastSavedAt: Long? = null,
     val moodEntryId: String? = null,
@@ -482,6 +484,12 @@ class TodayViewModel @Inject constructor(
     fun onAlcoholUseChange(v: Int) = updateAxis("alcoholUse", v)
     fun onSubstanceUseChange(v: Int) = updateAxis("substanceUse", v)
     fun onRoutineScoreChange(v: Int) = updateAxis("routineScore", v)
+
+    /** Un-mark a scale (tap on the selected value again): stored as 0 but excluded from charts. */
+    fun clearAxis(key: String) {
+        updateAxis(key, 0)
+        _uiState.update { it.copy(markedAxes = it.markedAxes - key) }
+    }
     fun onSleepHoursChange(v: String) {
         markUserEdited()
         _uiState.update { it.copy(sleepHoursText = v, sleepHoursManual = true) }
@@ -998,6 +1006,7 @@ class TodayViewModel @Inject constructor(
                     sleepQuality = 0, functioning = 0, safetyCheck = 0,
                     alcoholUse = 0, substanceUse = 0, routineScore = 0,
                     episodePhase = null, lastSavedAt = null, moodEntryId = null,
+                    markedAxes = emptySet(),
                     saveMessage = "deleted",
                 )
             }
@@ -1424,6 +1433,7 @@ class TodayViewModel @Inject constructor(
                 checkIns = emptyList(),
                 weather = null,
                 healthDays = emptyList(),
+                markedAxes = emptySet(),
             )
         }
     }
@@ -1595,6 +1605,7 @@ class TodayViewModel @Inject constructor(
                     substanceUse = snap.entry.substanceUse,
                     routineScore = snap.entry.routineScore,
                     episodePhase = snap.entry.episodePhase,
+                    markedAxes = com.moodlife.app.domain.MarkedAxes.of(snap.entry),
                     lastSavedAt = snap.entry.updatedAt,
                     moodEntryId = snap.entry.id,
                 )
@@ -1607,6 +1618,7 @@ class TodayViewModel @Inject constructor(
                     sleepQuality = 0, functioning = 0, safetyCheck = 0,
                     alcoholUse = 0, substanceUse = 0, routineScore = 0,
                     episodePhase = null, lastSavedAt = null, moodEntryId = null,
+                    markedAxes = emptySet(),
                 )
             } else {
                 current
@@ -1846,6 +1858,7 @@ class TodayViewModel @Inject constructor(
     }
 
     private fun updateAxis(key: String, raw: Int) {
+        _uiState.update { it.copy(markedAxes = it.markedAxes + key) }
         markUserEdited()
         val max = when (key) {
             "functioning", "routineScore" -> 10
@@ -1916,6 +1929,7 @@ class TodayViewModel @Inject constructor(
         alcoholUse = alcoholUse,
         substanceUse = substanceUse,
         routineScore = routineScore,
+        marked = markedAxes,
     )
 
     private data class DaySideData(

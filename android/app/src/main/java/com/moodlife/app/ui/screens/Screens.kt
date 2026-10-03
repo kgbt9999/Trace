@@ -876,7 +876,7 @@ private fun GraphParamsTrackablePicker(
                 }
             }
             if (secondary.isNotEmpty()) {
-                val filled = secondary.count { trackableValue(it.key, state) > 0 }
+                val filled = secondary.count { it.key in state.markedAxes }
                 TextButton(
                     onClick = { showMore = !showMore },
                     modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp),
@@ -999,6 +999,11 @@ private fun TrackableValueInput(
     scaleColor: androidx.compose.ui.graphics.Color,
 ) {
     val value = trackableValue(item.key, state)
+    val marked = item.key in state.markedAxes
+    // Tap on the already selected value un-marks the scale for the day.
+    val onChange: (Int) -> Unit = { v ->
+        if (marked && v == value) viewModel.clearAxis(item.key) else applyTrackableValue(item.key, v, viewModel)
+    }
     val sourceId = CitationTopics.sourceIdForAxis(item.key)
     val axisCfg = state.checkInConfig.axes.find { it.id == item.key }
     val label = trackableLabel(item.key, axisCfg?.label)
@@ -1008,8 +1013,8 @@ private fun TrackableValueInput(
             val options = TodayTrackables.optionsFor(item.key)
             ScaleInput(
                 label = label,
-                value = value.coerceIn(0, options.lastIndex),
-                onValueChange = { applyTrackableValue(item.key, it, viewModel) },
+                value = if (marked) value.coerceIn(0, options.lastIndex) else -1,
+                onValueChange = onChange,
                 color = color,
                 options = options,
                 hint = axisHint(item.key),
@@ -1019,8 +1024,8 @@ private fun TrackableValueInput(
         }
         "yesno" -> ScaleInput(
             label = label,
-            value = value.coerceIn(0, 1),
-            onValueChange = { applyTrackableValue(item.key, it, viewModel) },
+            value = if (marked) value.coerceIn(0, 1) else -1,
+            onValueChange = onChange,
             color = color,
             options = listOf("Нет", "Да"),
             hint = axisHint(item.key),
@@ -1034,8 +1039,8 @@ private fun TrackableValueInput(
             val customAnchors = axisCfg?.anchors()
             ScaleInput(
                 label = label,
-                value = value.coerceIn(0, max),
-                onValueChange = { applyTrackableValue(item.key, it, viewModel) },
+                value = if (marked) value.coerceIn(0, max) else -1,
+                onValueChange = onChange,
                 color = color,
                 max = max,
                 anchors = customAnchors ?: axis?.anchors ?: MoodScales.INTENSITY_ANCHORS_COMPACT,
@@ -1380,7 +1385,7 @@ private fun DaySummaryRow(
     state: com.moodlife.app.ui.screens.today.TodayUiState,
     modifier: Modifier = Modifier,
 ) {
-    val moodDone = state.depressed > 0 || state.elevated > 0 || state.anxious > 0 || state.irritable > 0
+    val moodDone = state.markedAxes.any { it in com.moodlife.app.domain.MarkedAxes.MOOD }
     val sleepDone = state.sleepHoursText.isNotEmpty()
     val slotsTotal = state.medications.sumOf { it.slots.size }
     val slotsTaken = state.medications.sumOf { med -> med.slots.count { med.slotsTaken[it] == true } }

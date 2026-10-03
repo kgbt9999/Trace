@@ -1,5 +1,6 @@
 package com.moodlife.app.data.local.entity
 
+import androidx.room.ColumnInfo
 import androidx.room.Entity
 import androidx.room.Index
 import androidx.room.PrimaryKey
@@ -30,6 +31,9 @@ data class MoodEntryEntity(
     val episodePhase: String = "euthymic",
     val routineScore: Int = 0,
     val note: String? = null,
+    /** Scales the user actually marked — see [com.moodlife.app.domain.MarkedAxes]. "" = pre-v2 row. */
+    @ColumnInfo(defaultValue = "")
+    val markedAxes: String = "",
     val createdAt: Long,
     val updatedAt: Long,
 )

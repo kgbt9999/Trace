@@ -40,7 +40,7 @@ object BackupSchema {
             "energy", "concentration", "appetite", "sociability",
             "sleepHours", "sleepQuality", "sleepTime", "wakeTime",
             "functioning", "safetyCheck", "alcoholUse", "substanceUse",
-            "episodePhase", "routineScore", "note", "createdAt", "updatedAt",
+            "episodePhase", "routineScore", "note", "markedAxes", "createdAt", "updatedAt",
         ),
         "mood_check_ins" to setOf(
             "id", "date", "timeOfDay", "depressed", "elevated", "anxious", "irritable",

@@ -12,6 +12,8 @@ import com.moodlife.app.data.repository.SettingsRepository
 import com.moodlife.app.data.repository.WarningSignStat
 import com.moodlife.app.domain.MonthBurden
 import com.moodlife.app.domain.ReportPeriod
+import com.moodlife.app.domain.markedPolarity
+import com.moodlife.app.domain.markedValue
 import com.moodlife.app.domain.ReportsCharts
 import com.moodlife.app.ui.components.RadarAxis
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -103,10 +105,17 @@ class ReportsViewModel @Inject constructor(
         val avg: (selector: (com.moodlife.app.data.local.entity.MoodEntryEntity) -> Int) -> Float = { selector ->
             if (entries.isEmpty()) 0f else entries.map(selector).average().toFloat()
         }
+        // Unmarked scales are skipped, not counted as 0.
+        fun avgMarked(key: String, transform: (Int) -> Int = { it }): Float {
+            val vals = entries.mapNotNull { e -> e.markedValue(key)?.let(transform) }
+            return if (vals.isEmpty()) 0f else vals.average().toFloat()
+        }
+        fun series(key: String) = entries.mapNotNull { e -> e.markedValue(key)?.let { e.date to it.toFloat() } }
+        fun avgOrNull(key: String) = entries.mapNotNull { it.markedValue(key) }.takeIf { it.isNotEmpty() }?.average()?.toFloat()
         val radarAxes = listOf(
-            RadarAxis("Тревога", avg { it.anxious }, 5f),
-            RadarAxis("Раздражит-ть", avg { it.irritable }, 5f),
-            RadarAxis("Энергия", avg { ((it.energy * 5) / 3).coerceIn(0, 5) }, 5f),
+            RadarAxis("Тревога", avgMarked("anxious"), 5f),
+            RadarAxis("Раздражит-ть", avgMarked("irritable"), 5f),
+            RadarAxis("Энергия", avgMarked("energy") { ((it * 5) / 3).coerceIn(0, 5) }, 5f),
             RadarAxis(
                 "Сон (наруш.)",
                 avg { e ->
@@ -120,52 +129,53 @@ class ReportsViewModel @Inject constructor(
                 },
                 5f,
             ),
-            RadarAxis("Концентрация↓", avg { ((it.concentration * 5) / 3).coerceIn(0, 5) }, 5f),
-            RadarAxis("Аппетит (наруш.)", avg { ((it.appetite * 5) / 3).coerceIn(0, 5) }, 5f),
-            RadarAxis("Подавленность", avg { it.depressed }, 5f),
-            RadarAxis("Активность↑", avg { it.elevated }, 5f),
+            RadarAxis("Концентрация↓", avgMarked("concentration") { ((it * 5) / 3).coerceIn(0, 5) }, 5f),
+            RadarAxis("Аппетит (наруш.)", avgMarked("appetite") { ((it * 5) / 3).coerceIn(0, 5) }, 5f),
+            RadarAxis("Подавленность", avgMarked("depressed"), 5f),
+            RadarAxis("Активность↑", avgMarked("elevated"), 5f),
         )
-        val burden = MonthBurden.counts(entries.map { it.depressed to it.elevated })
+        val moodDays = entries.filter { it.markedPolarity() != null }
+        val burden = MonthBurden.counts(moodDays.map { (it.markedValue("depressed") ?: 0) to (it.markedValue("elevated") ?: 0) })
         val heatCells = buildGithubHeatCells(rangeFrom, rangeTo, entries)
-        val polaritySeries = entries.map {
-            it.date to (it.elevated - it.depressed).toFloat().coerceIn(-5f, 5f)
+        val polaritySeries = entries.mapNotNull { e ->
+            e.markedPolarity()?.let { e.date to it.toFloat().coerceIn(-5f, 5f) }
         }
-        val avgPol = polaritySeries.map { it.second }.average().takeIf { entries.isNotEmpty() }?.toFloat()
+        val avgPol = polaritySeries.map { it.second }.average().takeIf { polaritySeries.isNotEmpty() }?.toFloat()
         ReportsUiState(
             year = year,
             month = month,
             monthLabel = period.label(today),
             period = period,
             periodDays = period.dayCount(today).toInt(),
-            depressedSeries = entries.map { it.date to it.depressed.toFloat() },
-            elevatedSeries = entries.map { it.date to it.elevated.toFloat() },
-            anxiousSeries = entries.map { it.date to it.anxious.toFloat() },
-            irritableSeries = entries.map { it.date to it.irritable.toFloat() },
-            concentrationSeries = entries.map { it.date to it.concentration.toFloat() },
-            sociabilitySeries = entries.map { it.date to it.sociability.toFloat() },
-            appetiteSeries = entries.map { it.date to it.appetite.toFloat() },
+            depressedSeries = series("depressed"),
+            elevatedSeries = series("elevated"),
+            anxiousSeries = series("anxious"),
+            irritableSeries = series("irritable"),
+            concentrationSeries = series("concentration"),
+            sociabilitySeries = series("sociability"),
+            appetiteSeries = series("appetite"),
             polaritySeries = polaritySeries,
             radarAxes = radarAxes,
             entryCount = entries.size,
             avgSleepHours = entries.mapNotNull { it.sleepHours?.toFloat() }.average().takeIf { !it.isNaN() }?.toFloat(),
-            avgFunctioning = entries.map { it.functioning }.average().takeIf { entries.isNotEmpty() }?.toFloat(),
-            avgDepressed = entries.map { it.depressed }.average().takeIf { entries.isNotEmpty() }?.toFloat(),
-            avgElevated = entries.map { it.elevated }.average().takeIf { entries.isNotEmpty() }?.toFloat(),
+            avgFunctioning = avgOrNull("functioning"),
+            avgDepressed = avgOrNull("depressed"),
+            avgElevated = avgOrNull("elevated"),
             avgPolarity = avgPol,
             daysDepressed = burden.depressed,
             daysElevated = burden.elevated,
             daysMixed = burden.mixed,
             daysOther = burden.other,
             sleepSeries = entries.mapNotNull { e -> e.sleepHours?.let { e.date to it } },
-            energySeries = entries.map { it.date to it.energy.toFloat() },
-            functioningSeries = entries.map { it.date to it.functioning.toFloat() },
-            alcoholSeries = entries.map { it.date to it.alcoholUse.toFloat() },
-            routineSeries = entries.map { it.date to it.routineScore.toFloat() },
-            safetySeries = entries.map { it.date to it.safetyCheck.toFloat() },
+            energySeries = series("energy"),
+            functioningSeries = series("functioning"),
+            alcoholSeries = series("alcoholUse"),
+            routineSeries = series("routineScore"),
+            safetySeries = series("safetyCheck"),
             heatCells = heatCells,
             sleepMoodPoints = entries.mapNotNull { e ->
                 val hours = e.sleepHours ?: return@mapNotNull null
-                val polarity = (e.elevated - e.depressed).toFloat().coerceIn(-5f, 5f)
+                val polarity = (e.markedPolarity() ?: return@mapNotNull null).toFloat().coerceIn(-5f, 5f)
                 com.moodlife.app.ui.components.SleepMoodPoint(hours, polarity)
             },
             exportMessage = exportMsg,
@@ -278,10 +288,10 @@ private fun buildGithubHeatCells(
         val dayIndex = java.time.temporal.ChronoUnit.DAYS.between(start, d).toInt()
         val weekIndex = (firstWeekday + dayIndex) / 7
         val weekday = (d.dayOfWeek.value - 1).coerceIn(0, 6)
-        val e = byDate[d.toString()]
+        val e = byDate[d.toString()]?.takeIf { it.markedPolarity() != null }
         if (e != null) {
-            val dep = e.depressed
-            val elev = e.elevated
+            val dep = e.markedValue("depressed") ?: 0
+            val elev = e.markedValue("elevated") ?: 0
             val polarity = (elev - dep).toFloat().coerceIn(-5f, 5f)
             cells += com.moodlife.app.ui.components.HeatCell(
                 weekIndex = weekIndex,
