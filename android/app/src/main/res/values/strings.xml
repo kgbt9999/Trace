@@ -954,8 +954,7 @@
     <string name="settings_hc_diagnostics">Диагностика последней синхронизации</string>
     <string name="physical_body_previous">Было %1$s %2$s · %3$s</string>
     <string name="physical_body_saved">Сохранено</string>
-    <string name="today_trackables_settings_desc">Какие шкалы показывать на «Сегодня» и какой шкалой оценивать (0–5, да/нет, варианты). Основные шкалы видны сразу, остальные — под «Подробнее о дне».</string>
-    <string name="today_trackables_save">Сохранить оси</string>
+    <string name="today_trackables_settings_desc">Какие шкалы показывать на «Сегодня» и какой шкалой оценивать (0–5, да/нет, варианты). Изменения применяются сразу.</string>
 
     <string name="settings_nav_other">Другие настройки</string>
     <string name="checkins_full_title">Чек-ины: полная настройка</string>

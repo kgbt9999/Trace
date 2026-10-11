@@ -72,12 +72,8 @@ private val SYMPTOM_SCALE_TYPES = listOf(
 
 private val SYMPTOM_CATEGORIES = listOf("Общие", "Поведение", "Когнитивные", "Эмоции", "Тело")
 private val FACTOR_CATEGORIES = listOf("Триггеры", "Напитки", "Активность", "Стрессоры", "Позитив", "Погода")
-private val FACTOR_SCALE_TYPES = listOf(
-    "0-5" to R.string.settings_scale_0_5,
-    "0-10" to R.string.settings_scale_0_10,
-    "qual4-i" to R.string.settings_scale_qual4_i,
-    "yesno" to R.string.settings_scale_yesno,
-)
+/** Same set Today can render (0-10 / qual4-i used to be offered and silently shown as 0–5). */
+private val FACTOR_SCALE_TYPES = SYMPTOM_SCALE_TYPES
 
 private val WEATHER_CITIES = listOf(
     Triple("Москва", "55.75", "37.62"),
@@ -423,7 +419,9 @@ private fun FactorsSettingsSection(state: SettingsUiState, viewModel: SettingsVi
         var name by remember(factor.id) { mutableStateOf(factor.name) }
         var cat by remember(factor.id) { mutableStateOf(factor.category) }
         var color by remember(factor.id) { mutableStateOf(factor.color) }
-        var scale by remember(factor.id) { mutableStateOf(factor.scaleType) }
+        var scale by remember(factor.id) {
+            mutableStateOf(com.moodlife.app.domain.DefaultSeedData.normalizeSymptomScale(factor.scaleType))
+        }
         AlertDialog(
             onDismissRequest = { editing = null },
             title = { Text(stringResource(R.string.settings_edit)) },
@@ -1686,6 +1684,7 @@ private fun LayoutSettingsSection(viewModel: SettingsViewModel) {
                                 checked = item.enabled,
                                 onCheckedChange = {
                                     trackables = com.moodlife.app.domain.TodayTrackables.toggle(trackables, item.key)
+                                    viewModel.saveTrackables(trackables)
                                 },
                             )
                         }
@@ -1698,6 +1697,7 @@ private fun LayoutSettingsSection(viewModel: SettingsViewModel) {
                                         item.key,
                                         it,
                                     )
+                                    viewModel.saveTrackables(trackables)
                                 },
                                 options = TRACKABLE_SCALE_OPTIONS,
                                 showTitle = false,
@@ -1705,12 +1705,6 @@ private fun LayoutSettingsSection(viewModel: SettingsViewModel) {
                         }
                     }
                 }
-            }
-            Button(
-                onClick = { viewModel.saveTrackables(trackables) },
-                modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
-            ) {
-                Text(stringResource(R.string.today_trackables_save))
             }
         }
         SettingsCard(

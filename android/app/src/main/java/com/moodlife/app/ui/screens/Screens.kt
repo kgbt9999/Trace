@@ -424,7 +424,7 @@ fun TodayScreen(
                                             stringResource(R.string.hint_pav_scale)
                                         else -> stringResource(R.string.today_factor_intensity_hint)
                                     }
-                                    when (factor.scaleType) {
+                                    when (com.moodlife.app.domain.DefaultSeedData.normalizeSymptomScale(factor.scaleType)) {
                                         "yesno" -> ScaleInput(
                                             label = stringResource(R.string.today_factor_intensity, factor.name),
                                             value = if (factor.intensity > 0) 1 else 0,
@@ -434,12 +434,12 @@ fun TodayScreen(
                                             hint = factorHint,
                                             compact = true,
                                         )
-                                        "qual4-i" -> ScaleInput(
+                                        "options" -> ScaleInput(
                                             label = stringResource(R.string.today_factor_intensity, factor.name),
                                             value = factor.intensity.coerceIn(0, 3),
                                             onValueChange = { viewModel.setFactorIntensity(factor.id, it) },
                                             color = parseCssColor(factor.color),
-                                            options = MoodScales.QUAL_LABELS_I,
+                                            options = com.moodlife.app.domain.DefaultSeedData.OPTIONS_SEVERITY_LABELS,
                                             hint = factorHint,
                                             compact = true,
                                         )
