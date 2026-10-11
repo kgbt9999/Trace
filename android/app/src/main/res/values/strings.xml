@@ -326,9 +326,9 @@
     <string name="today_graph_params_section">Состояние за день</string>
     <string name="today_more_day_details">Подробнее о дне · %1$d из %2$d</string>
     <string name="today_summary_mood">Состояние</string>
-    <string name="today_symptoms_group_depression">Похоже на спад</string>
-    <string name="today_symptoms_group_mania">Похоже на подъём</string>
-    <string name="today_symptoms_group_other">Другое</string>
+    <string name="today_symptoms_group_depression">Спад — тянет вниз: апатия, усталость, тоска, «нет сил»</string>
+    <string name="today_symptoms_group_mania">Подъём — разгоняет: мало сна, ускорение, импульсивность</string>
+    <string name="today_symptoms_group_other">Другие симптомы</string>
     <string name="today_summary_sleep">Сон</string>
     <string name="today_summary_meds">Лекарства %1$d/%2$d</string>
     <string name="today_summary_symptoms">Симптомы</string>
@@ -337,7 +337,7 @@
     <string name="today_summary_sleep_hours">%1$s ч</string>
     <string name="today_autosave_hint">Изменения сохраняются автоматически</string>
     <string name="today_med_more">Действия: %1$s</string>
-    <string name="today_help_graph_params">Каждый параметр — шкала 0–5, да/нет или готовые варианты. Отметьте значение за день — это основа графиков в «Отчётах». Не клинический приказ.</string>
+    <string name="today_help_graph_params">Ответьте на вопросы про сегодняшний день — это основа графиков и прогноза. Спад — депрессивная сторона: подавленность, нет сил и интереса. Подъём — маниакальная/гипоманиакальная: ускорение, мало сна, много планов, импульсивность. Повторный тап по ответу снимает отметку. Какие вопросы показывать — в Настройках → «Шкалы дня».</string>
     <string name="today_chart_params">Параметры графиков</string>
     <string name="today_chart_params_title">Параметры графиков</string>
     <string name="today_chart_params_intro">Эти показатели дневника влияют на графики во вкладке «Отчёты». Образовательная иерархия, не клинический приказ.</string>
@@ -481,8 +481,8 @@
     <string name="reports_insights_need_data">Нужно минимум 14 дней записей для паттернов.</string>
     <string name="forecast_disclaimer">Вероятности по вашей истории. Подъём ≠ хороший день. Не заменяет врача.</string>
     <string name="forecast_score">Оценка дня: %1$.1f / 10</string>
-    <string name="forecast_prob_elev">P(подъём): ~%1$d%%</string>
-    <string name="forecast_prob_dep">P(спад): ~%1$d%%</string>
+    <string name="forecast_prob_elev">Вероятность подъёма (подъём «заметно» и выше): ~%1$d%%</string>
+    <string name="forecast_prob_dep">Вероятность спада (подавленность «заметно» и выше): ~%1$d%%</string>
     <string name="settings_symptoms">Симптомы</string>
     <string name="settings_symptoms_desc">Дополнительные признаки — не вместо подавленности и подъёма. У каждого своя шкала.</string>
     <string name="settings_symptoms_empty">Симптомов пока нет. Подставьте базовый набор или добавьте свои.</string>
@@ -596,7 +596,7 @@
     <string name="reports_export_title">Экспорт за месяц</string>
     <string name="reports_subtitle">Сводка месяца · данные JSON/CSV · читаемый отчёт (пациент / врач).</string>
     <string name="reports_burden_title">Дни месяца</string>
-    <string name="reports_burden_hint">Спад обычно занимает больше дней, чем подъём.</string>
+    <string name="reports_burden_hint">Спад — дни, когда подавленность была «заметно» и выше; подъём — то же по шкале подъёма; смешанные — оба сразу. Спад обычно занимает больше дней, чем подъём.</string>
     <string name="reports_days_depressed">Спад: %1$d</string>
     <string name="reports_days_elevated">Подъём: %1$d</string>
     <string name="reports_days_mixed">Смешанные: %1$d</string>
@@ -613,7 +613,7 @@
     <string name="forecast_phase_empty">Фаза цикла: не настроена</string>
     <string name="forecast_prob_elev_empty">P(подъём): —</string>
     <string name="forecast_prob_dep_empty">P(спад): —</string>
-    <string name="forecast_prob_mixed">P(смешанное): ~%1$d%%</string>
+    <string name="forecast_prob_mixed">Вероятность смешанного (оба «заметно» и выше): ~%1$d%%</string>
     <string name="forecast_prob_mixed_empty">P(смешанное): —</string>
     <string name="forecast_sample">Дней в выборке: %1$d</string>
     <string name="forecast_risks_empty">Погодные риски: нет данных</string>
@@ -704,6 +704,7 @@
     <string name="settings_backup_import">Импорт JSON или CSV</string>
     <string name="settings_backup_import_ok">Данные импортированы</string>
     <string name="settings_backup_import_fail">Ошибка импорта</string>
+    <string name="settings_import_fail_reason">Не удалось импортировать: %1$s</string>
     <string name="settings_clear_data">Удалить все данные</string>
     <string name="settings_clear_confirm">Удалить все записи и настройки? Это нельзя отменить.</string>
     <string name="settings_clear_ok">Данные удалены</string>
@@ -711,8 +712,8 @@
     <string name="settings_yandex_key">Ключ Yandex Weather (запасной)</string>
     <string name="settings_yandex_key_hint">Если Open-Meteo недоступен — опционально</string>
     <string name="settings_flo">Синхронизация с Flo</string>
-    <string name="settings_flo_hint">Импорт JSON-экспорта Flo. Дополняет дни, ручные записи цикла не стирает.</string>
-    <string name="settings_flo_import">Выбрать JSON-файл Flo</string>
+    <string name="settings_flo_hint">Импорт выгрузки Flo: ZIP-архив из письма Flo или JSON-файл из него. Дополняет дни, ручные записи цикла не стирает.</string>
+    <string name="settings_flo_import">Выбрать файл Flo (ZIP или JSON)</string>
     <string name="settings_flo_count">Импортировано дней: %1$d</string>
     <string name="settings_flo_ok">Импортировано записей Flo: %1$s</string>
     <string name="settings_flo_empty">В файле не найдено записей Flo</string>
@@ -802,7 +803,7 @@
     <string name="checkins_update">Обновить чек-ин</string>
     <string name="today_factors_chips_hint">Отметьте факторы дня. Долгое нажатие — переименовать. Алкоголь и вещества также со шкалами выше.</string>
 
-    <string name="today_help_mood">Основные оси настроения за день: спад, подъём, тревога, раздражение. Это ядро дневника.</string>
+    <string name="today_help_mood">Спад — депрессивная сторона: подавленность, нет сил и интереса, всё в тягость. Подъём — маниакальная/гипоманиакальная сторона: ускорение, мало сна, много планов, импульсивность, раздражение. Смешанное — оба одновременно. Тревога и раздражение отмечаются отдельно.</string>
     <string name="today_help_extra">Силы, внимание, аппетит, общительность — дополнительный контекст к основным осям.</string>
     <string name="today_help_clinical">Качество сна, дела дня, безопасность и регулярность режима — то, что часто меняется раньше заметных сдвигов по шкалам.</string>
     <string name="today_help_context">Погода и данные Health Connect за выбранный день. Не причинность, а ваш контекст.</string>

@@ -3,6 +3,7 @@ package com.moodlife.app.ui.screens.settings
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
+import android.util.Log
 import androidx.core.content.FileProvider
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -703,18 +704,32 @@ class SettingsViewModel @Inject constructor(
 
     fun importFlo(uri: Uri) = viewModelScope.launch {
         try {
-            val text = context.contentResolver.openInputStream(uri)?.bufferedReader()?.use { it.readText() }
-            if (text == null) {
-                _message.value = "flo_fail"
+            val files = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                context.contentResolver.openInputStream(uri)?.use {
+                    com.moodlife.app.data.backup.ImportFileReader.read(it)
+                }
+            }
+            if (files == null) {
+                _message.value = "flo_fail:файл не открывается"
                 return@launch
             }
-            val result = floRepository.importJson(text)
-            _message.value = when {
-                result.detected == 0 -> "flo_empty"
-                else -> "flo_ok:${result.imported}"
+            // Flo's export is a ZIP with several JSON files; import every one that has entries.
+            var imported = 0
+            var detected = 0
+            for (file in files.filter { it.text.startsWith("{") || it.text.startsWith("[") }) {
+                val result = floRepository.importJson(file.text)
+                imported += result.imported
+                detected += result.detected
             }
-        } catch (_: Exception) {
-            _message.value = "flo_fail"
+            Log.i(IMPORT_TAG, "Flo import: files=${files.size} detected=$detected imported=$imported")
+            _message.value = when {
+                files.isEmpty() -> "flo_fail:в архиве нет JSON-файлов"
+                detected == 0 -> "flo_empty"
+                else -> "flo_ok:$imported"
+            }
+        } catch (e: Exception) {
+            Log.w(IMPORT_TAG, "Flo import failed: ${e.javaClass.simpleName}")
+            _message.value = "flo_fail:${importReason(e)}"
         }
     }
 
@@ -752,10 +767,12 @@ class SettingsViewModel @Inject constructor(
             }
             stream.use {
                 val result = jsonBackupImporter.importFromStream(it)
+                Log.i(IMPORT_TAG, "Backup import: success=${result.success} message=${result.message}")
                 _message.value = if (result.success) "import_ok" else "import_fail:${result.message}"
             }
-        } catch (_: Exception) {
-            _message.value = "import_fail"
+        } catch (e: Exception) {
+            Log.w(IMPORT_TAG, "Backup import failed: ${e.javaClass.simpleName}")
+            _message.value = "import_fail:${importReason(e)}"
         }
     }
 
@@ -812,4 +829,15 @@ class SettingsViewModel @Inject constructor(
     companion object {
         private const val MASKED_API_KEY = "••••••••"
     }
+}
+
+private const val IMPORT_TAG = "TraceImport"
+
+/** User-facing reason. Parser messages quote file content, so they are never shown or logged. */
+private fun importReason(e: Exception): String = when (e) {
+    is org.json.JSONException, is com.google.gson.JsonParseException -> "файл не читается как JSON"
+    is IllegalArgumentException -> e.message ?: "неверный файл"
+    is SecurityException -> "нет доступа к файлу"
+    is java.io.IOException -> "файл не удалось прочитать"
+    else -> e.javaClass.simpleName
 }

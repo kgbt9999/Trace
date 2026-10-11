@@ -19,12 +19,20 @@ class JsonBackupImporter @Inject constructor(
     private val tables = BackupSchema.TABLES
 
     suspend fun importFromStream(stream: InputStream): ImportResult = withContext(Dispatchers.IO) {
-        val text = stream.bufferedReader().readText().trim().removePrefix("\uFEFF")
+        val files = ImportFileReader.read(stream)
+        if (files.isEmpty()) return@withContext ImportResult(false, "В архиве нет файлов JSON или CSV")
+        // In a ZIP prefer our own backup file; otherwise the first readable one.
+        val file = files.firstOrNull { it.text.startsWith("{") && it.text.contains("\"mood_entries\"") } ?: files.first()
+        val text = file.text
         if (text.isEmpty()) return@withContext ImportResult(false, "Файл пустой")
-        if (text.startsWith("{") || text.startsWith("[")) {
-            importJson(text)
-        } else {
-            importCsv(text)
+        try {
+            if (text.startsWith("{") || text.startsWith("[")) {
+                importJson(text)
+            } else {
+                importCsv(text)
+            }
+        } catch (e: org.json.JSONException) {
+            ImportResult(false, "файл не похож на резервную копию Trace (JSON не читается)")
         }
     }
 
