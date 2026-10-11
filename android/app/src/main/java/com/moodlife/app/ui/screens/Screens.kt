@@ -874,8 +874,9 @@ private fun TrackableValueInput(
         if (marked && v == value) viewModel.clearAxis(item.key) else applyTrackableValue(item.key, v, viewModel)
     }
     val question = com.moodlife.app.domain.DayQuestions.of(item.key)
-    val axisCfg = state.checkInConfig.axes.find { it.id == item.key }
-    val label = axisCfg?.label?.takeIf { it.isNotBlank() } ?: question?.text ?: trackableLabel(item.key, null)
+    // Old check-in configs carried short labels («Спад», «нет…срыв») that hid the explained
+    // question; check-ins are gone, so the questionnaire wording always wins.
+    val label = question?.text ?: trackableLabel(item.key, null)
     // One accent for the questionnaire; the safety question keeps its own colour.
     val color = if (item.key == "safetyCheck") LocalMoodColors.current.safety else scaleColor
     when (item.scaleType) {
@@ -907,7 +908,7 @@ private fun TrackableValueInput(
                 onValueChange = onChange,
                 color = color,
                 max = max,
-                anchors = axisCfg?.anchors() ?: com.moodlife.app.domain.DayQuestions.intensity(item.key),
+                anchors = com.moodlife.app.domain.DayQuestions.intensity(item.key),
                 compact = true,
             )
         }

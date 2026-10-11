@@ -57,6 +57,8 @@ object FloParse {
         }
         if (body.isJsonArray) {
             walkArray(body.asJsonArray, into)
+        } else if (body.isJsonObject && FloNativeExport.matches(body.asJsonObject)) {
+            FloNativeExport.parse(body.asJsonObject, into)
         } else if (body.isJsonObject) {
             val rec = body.asJsonObject
             val buckets = listOf(
@@ -153,6 +155,7 @@ object FloParse {
     private fun cycleLengthFrom(body: JsonElement): Int? {
         if (!body.isJsonObject) return null
         val rec = body.asJsonObject
+        if (FloNativeExport.matches(rec)) return FloNativeExport.cycleLength(rec)
         val raw = rec.get("cycle_length") ?: rec.get("avg_cycle_length") ?: return null
         if (!raw.isJsonPrimitive || !raw.asJsonPrimitive.isNumber) return null
         val n = raw.asInt
