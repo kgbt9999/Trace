@@ -703,6 +703,7 @@ class SettingsViewModel @Inject constructor(
     }
 
     fun importFlo(uri: Uri) = viewModelScope.launch {
+        _message.value = "flo_running"
         try {
             val files = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
                 context.contentResolver.openInputStream(uri)?.use {
@@ -760,6 +761,7 @@ class SettingsViewModel @Inject constructor(
     }
 
     fun importBackup(uri: Uri) = viewModelScope.launch {
+        _message.value = "import_running"
         try {
             val stream = context.contentResolver.openInputStream(uri) ?: run {
                 _message.value = "import_fail"

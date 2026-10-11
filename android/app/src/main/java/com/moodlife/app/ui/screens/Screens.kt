@@ -265,6 +265,8 @@ fun TodayScreen(
                             helpText = help,
                             onEdit = { viewModel.openSettingsSection("layout") },
                         ) {
+                            // Always on screen (not behind "?"): the terms are used everywhere in the app.
+                            SpadPodyomLegend(Modifier.padding(bottom = 8.dp))
                             DayScalesInput(state = state, viewModel = viewModel)
                         }
                     }
@@ -993,7 +995,7 @@ private fun TodaySymptomsBody(
         ).forEach { (dir, titleRes) ->
             val items = groups[dir].orEmpty()
             if (items.isEmpty()) return@forEach
-            if (groups.size > 1) {
+            run {
                 Text(
                     stringResource(titleRes),
                     style = MaterialTheme.typography.labelLarge,
@@ -1440,6 +1442,21 @@ private fun TodaySaveBar(
                     )
                 }
             }
+        }
+    }
+}
+
+/** What «спад» and «подъём» mean — shown above the day questions. */
+@Composable
+private fun SpadPodyomLegend(modifier: Modifier = Modifier) {
+    Surface(
+        modifier = modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(4.dp),
+        color = MaterialTheme.colorScheme.surfaceVariant,
+    ) {
+        Column(Modifier.padding(horizontal = 12.dp, vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            Text(stringResource(R.string.legend_spad), style = MaterialTheme.typography.bodySmall)
+            Text(stringResource(R.string.legend_podyom), style = MaterialTheme.typography.bodySmall)
         }
     }
 }

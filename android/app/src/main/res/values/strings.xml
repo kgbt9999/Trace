@@ -329,6 +329,8 @@
     <string name="today_symptoms_group_depression">Спад — тянет вниз: апатия, усталость, тоска, «нет сил»</string>
     <string name="today_symptoms_group_mania">Подъём — разгоняет: мало сна, ускорение, импульсивность</string>
     <string name="today_symptoms_group_other">Другие симптомы</string>
+    <string name="legend_spad"><b>Спад</b> — депрессивная сторона: подавленность, тоска, нет сил и интереса, всё в тягость.</string>
+    <string name="legend_podyom"><b>Подъём</b> — маниакальная сторона: ускорение, мало сна, много планов, импульсивность, раздражение.</string>
     <string name="today_summary_sleep">Сон</string>
     <string name="today_summary_meds">Лекарства %1$d/%2$d</string>
     <string name="today_summary_symptoms">Симптомы</string>
@@ -705,6 +707,7 @@
     <string name="settings_backup_import_ok">Данные импортированы</string>
     <string name="settings_backup_import_fail">Ошибка импорта</string>
     <string name="settings_import_fail_reason">Не удалось импортировать: %1$s</string>
+    <string name="settings_import_running">Читаю файл…</string>
     <string name="settings_clear_data">Удалить все данные</string>
     <string name="settings_clear_confirm">Удалить все записи и настройки? Это нельзя отменить.</string>
     <string name="settings_clear_ok">Данные удалены</string>

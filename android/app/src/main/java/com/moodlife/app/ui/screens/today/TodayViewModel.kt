@@ -321,7 +321,11 @@ class TodayViewModel @Inject constructor(
             delay(400)
             medicationRepository.ensureAllRegularWeekAhead()
             try {
-                if (healthConnectManager.isAvailable() && healthConnectManager.hasPermissions()) {
+                // Opening Today re-synced on every launch; Health Connect rate-limits reads and
+                // then rejects everything (RemoteException). At most once per 30 minutes here.
+                val last = settingsRepository.get(SettingsRepository.KEY_HC_LAST_SYNC)?.toLongOrNull() ?: 0L
+                val fresh = System.currentTimeMillis() - last < 30 * 60 * 1000L
+                if (!fresh && healthConnectManager.isAvailable() && healthConnectManager.hasPermissions()) {
                     healthConnectManager.syncRecentDays(7)
                 }
             } catch (_: Exception) {

@@ -226,6 +226,9 @@ class HealthConnectManager @Inject constructor(
 
             // Per-type diagnostics: record count or error, saved for the Settings screen.
             val diagnostics = linkedMapOf<String, String>()
+            // After a RemoteException (service died / rate limit) further reads fail the same way;
+            // stop asking instead of firing a dozen more requests at it.
+            var serviceRejected = false
 
             /**
              * Reads every page of one record type. A failure is recorded and yields no records
@@ -234,6 +237,10 @@ class HealthConnectManager @Inject constructor(
              */
             suspend fun <T : androidx.health.connect.client.records.Record> readAll(type: KClass<T>): PagedRecords<T> {
                 val name = type.simpleName ?: "?"
+                if (serviceRejected) {
+                    diagnostics[name] = "пропущено: Health Connect отклонил запросы"
+                    return PagedRecords(emptyList())
+                }
                 return try {
                     val all = mutableListOf<T>()
                     var token: String? = null
@@ -249,9 +256,12 @@ class HealthConnectManager @Inject constructor(
                     diagnostics[name] = all.size.toString()
                     PagedRecords(all)
                 } catch (e: Exception) {
-                    // Type name and exception class only — no health values in logs.
-                    Log.w(TAG, "Health Connect read failed for $name: ${e.javaClass.simpleName}")
-                    diagnostics[name] = "ошибка: ${e.javaClass.simpleName}"
+                    // Type name, exception class and the platform's reason (e.g. "rate limited") —
+                    // never record values.
+                    val reason = if (e is android.os.RemoteException || e is IllegalStateException) e.message.orEmpty().take(120) else ""
+                    Log.w(TAG, "Health Connect read failed for $name: ${e.javaClass.simpleName} $reason")
+                    if (e is android.os.RemoteException) serviceRejected = true
+                    diagnostics[name] = "ошибка: ${e.javaClass.simpleName} $reason".trim()
                     PagedRecords(emptyList())
                 }
             }

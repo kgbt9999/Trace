@@ -17,6 +17,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -85,6 +86,16 @@ fun SettingsScreen(
             modifier = Modifier.padding(top = 4.dp, bottom = 12.dp),
         )
 
+        // Import results also pop up as a toast: the banner sits at the top of a long page,
+        // out of sight of the import buttons far below, so imports looked like they did nothing.
+        val importMsg = state.integrationMessage?.takeIf { isImportMessage(it) }
+        val importText = importMsg?.let { integrationMessageText(it) }
+        val toastContext = androidx.compose.ui.platform.LocalContext.current
+        LaunchedEffect(importMsg) {
+            if (importText != null) {
+                android.widget.Toast.makeText(toastContext, importText, android.widget.Toast.LENGTH_LONG).show()
+            }
+        }
         state.integrationMessage?.let { msg ->
             SettingsMessageBanner(
                 message = integrationMessageText(msg),
@@ -195,7 +206,7 @@ fun SettingsScreen(
 }
 
 @Composable
-private fun integrationMessageText(msg: String): String = when {
+internal fun integrationMessageText(msg: String): String = when {
     msg == "weather_ok" -> stringResource(R.string.settings_weather_ok)
     msg == "weather_fail" || msg == "weather_invalid" -> stringResource(R.string.settings_weather_fail)
     msg == "hc_ok" -> stringResource(R.string.settings_hc_sync_ok)
@@ -203,6 +214,7 @@ private fun integrationMessageText(msg: String): String = when {
     msg == "backup_ok" -> stringResource(R.string.settings_backup_ok)
     msg == "backup_fail" -> stringResource(R.string.settings_backup_fail)
     msg == "import_ok" -> stringResource(R.string.settings_backup_import_ok)
+    msg == "import_running" -> stringResource(R.string.settings_import_running)
     msg == "import_fail" -> stringResource(R.string.settings_backup_import_fail)
     msg.startsWith("import_fail:") -> stringResource(R.string.settings_import_fail_reason, msg.substringAfter(":"))
     msg == "weekly_folder_ok" -> stringResource(R.string.settings_weekly_backup_folder_ok)
@@ -213,6 +225,7 @@ private fun integrationMessageText(msg: String): String = when {
     msg == "clear_ok" -> stringResource(R.string.settings_clear_ok)
     msg == "clear_fail" -> stringResource(R.string.settings_clear_fail)
     msg == "flo_empty" -> stringResource(R.string.settings_flo_empty)
+    msg == "flo_running" -> stringResource(R.string.settings_import_running)
     msg == "flo_fail" -> stringResource(R.string.settings_flo_fail)
     msg.startsWith("flo_fail:") -> stringResource(R.string.settings_import_fail_reason, msg.substringAfter(":"))
     msg == "flo_cleared" -> stringResource(R.string.settings_flo_cleared)
@@ -231,3 +244,6 @@ private fun integrationMessageText(msg: String): String = when {
     msg == "layout_saved" -> stringResource(R.string.settings_layout_saved)
     else -> msg
 }
+
+internal fun isImportMessage(msg: String): Boolean =
+    msg == "import_running" || msg.startsWith("import_") || msg.startsWith("flo_")

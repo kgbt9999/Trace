@@ -1333,6 +1333,7 @@ private fun IntegrationsSettingsSection(
             FilledTonalButton(onClick = onImportFlo, modifier = Modifier.padding(top = 8.dp).fillMaxWidth()) {
                 Text(stringResource(R.string.settings_flo_import))
             }
+            ImportResultLine(state.integrationMessage, prefix = "flo_")
             if (state.floCount > 0) {
                 OutlinedButton(onClick = viewModel::clearFlo, modifier = Modifier.padding(top = 8.dp).fillMaxWidth()) {
                     Text(stringResource(R.string.settings_flo_clear))
@@ -1460,6 +1461,7 @@ private fun DataSettingsSection(
             FilledTonalButton(onClick = onImportBackup, modifier = Modifier.fillMaxWidth().padding(top = 8.dp)) {
                 Text(stringResource(R.string.settings_backup_import))
             }
+            ImportResultLine(state.integrationMessage, prefix = "import_")
             Text(
                 stringResource(R.string.settings_export_formats),
                 style = MaterialTheme.typography.labelMedium,
@@ -2035,4 +2037,16 @@ private fun hcTypeLabel(type: String): String = when (type) {
     "MenstruationPeriodRecord" -> "Менструация (период)"
     "HeartRateRecord" -> "Пульс"
     else -> type
+}
+
+/** Result of the last import, right under the button that started it. */
+@Composable
+private fun ImportResultLine(message: String?, prefix: String) {
+    val msg = message?.takeIf { it.startsWith(prefix) } ?: return
+    Text(
+        integrationMessageText(msg),
+        style = MaterialTheme.typography.bodyMedium,
+        color = if (msg.contains("fail") || msg.contains("empty")) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary,
+        modifier = Modifier.padding(top = 6.dp),
+    )
 }
