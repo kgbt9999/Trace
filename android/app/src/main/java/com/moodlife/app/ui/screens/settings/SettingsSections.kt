@@ -1195,6 +1195,7 @@ private fun IntegrationsSettingsSection(
                     modifier = Modifier.padding(top = 4.dp),
                 )
             }
+            HcDiagnostics(viewModel)
 
             if (!state.hcAvailable) {
                 Button(
@@ -1997,4 +1998,47 @@ private fun symptomScaleLabel(symptom: SymptomEntity): String = when (
     "options" -> stringResource(R.string.settings_scale_options)
     "0-5" -> stringResource(R.string.settings_scale_0_5)
     else -> stringResource(R.string.settings_scale_0_5)
+}
+
+/** Per record type from the last sync: how many records came in, or which error stopped it. */
+@Composable
+private fun HcDiagnostics(viewModel: SettingsViewModel) {
+    val raw by viewModel.observeHcDiagnostics().collectAsStateWithLifecycle(initialValue = null)
+    val rows = remember(raw) {
+        runCatching {
+            val o = org.json.JSONObject(raw ?: return@runCatching emptyList<Pair<String, String>>())
+            o.keys().asSequence().map { it to o.optString(it) }.toList()
+        }.getOrDefault(emptyList())
+    }
+    if (rows.isEmpty()) return
+    var open by remember { mutableStateOf(false) }
+    TextButton(onClick = { open = !open }, modifier = Modifier.padding(top = 4.dp)) {
+        Text(stringResource(R.string.settings_hc_diagnostics) + if (open) " ▲" else " ▼")
+    }
+    if (open) {
+        rows.forEach { (type, value) ->
+            Text(
+                "${hcTypeLabel(type)}: $value",
+                style = MaterialTheme.typography.bodySmall,
+                color = if (value.startsWith("ошибка")) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+    }
+}
+
+private fun hcTypeLabel(type: String): String = when (type) {
+    "StepsRecord" -> "Шаги"
+    "DistanceRecord" -> "Дистанция"
+    "ExerciseSessionRecord" -> "Тренировки"
+    "ActiveCaloriesBurnedRecord" -> "Активные калории"
+    "TotalCaloriesBurnedRecord" -> "Калории всего"
+    "SleepSessionRecord" -> "Сон"
+    "WeightRecord" -> "Вес"
+    "BodyFatRecord" -> "Жир, %"
+    "HeightRecord" -> "Рост"
+    "NutritionRecord" -> "Питание"
+    "MenstruationFlowRecord" -> "Менструация (выделения)"
+    "MenstruationPeriodRecord" -> "Менструация (период)"
+    "HeartRateRecord" -> "Пульс"
+    else -> type
 }

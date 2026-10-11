@@ -63,6 +63,8 @@ class SettingsRepository @Inject constructor(private val settingDao: SettingDao)
         const val KEY_HC_LAST_SYNC = "hc_last_sync_at"
         const val KEY_HC_LAST_ROWS = "hc_last_rows"
         const val KEY_HC_LAST_ORIGINS = "hc_last_origins"
+        /** JSON {recordType: count | "ошибка: …"} from the last Health Connect sync. */
+        const val KEY_HC_LAST_DIAGNOSTICS = "hc_last_diagnostics"
         const val KEY_BACKUP_LAST = "backup_last_path"
         /** Weekly auto-backup to user SAF folder — "true" / "false", default off. */
         const val KEY_WEEKLY_BACKUP_ENABLED = "weekly_backup_enabled"

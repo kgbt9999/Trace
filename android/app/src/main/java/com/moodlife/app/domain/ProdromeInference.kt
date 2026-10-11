@@ -81,6 +81,35 @@ object ProdromeInference {
         return result
     }
 
+    /**
+     * Factor → early-sign links where the wording differs ("Недосып" ↔ "Сон менее 5 часов").
+     * Each pair: words in the factor name → words in the sign name.
+     */
+    private val FACTOR_SIGN_SYNONYMS: List<Pair<List<String>, List<String>>> = listOf(
+        listOf("недосып", "мало сн", "не спал", "бессон") to listOf("сон менее", "мало сн", "бессон"),
+        listOf("долгий сон", "много сн", "пересып") to listOf("увеличение сна", "много сн", "долгий сон"),
+        listOf("трат", "покуп", "шопинг") to listOf("трат"),
+        listOf("риск") to listOf("риск"),
+        listOf("изоляц", "один", "одиноч") to listOf("изоляц"),
+    )
+
+    /**
+     * Early signs to switch on because a logged factor/trigger *is* that sign: same words in
+     * both names (e.g. factor «Изоляция» ↔ sign «Социальная изоляция») or a known synonym.
+     * Only turns signs on; the user can still switch them off.
+     */
+    fun matchSignIdsFromFactors(signs: List<SignRef>, activeFactorNames: List<String>): Set<String> {
+        if (activeFactorNames.isEmpty()) return emptySet()
+        val factors = activeFactorNames.map { it.lowercase() }
+        return signs.filter { sign ->
+            val s = sign.name.lowercase()
+            signMatchesAnySymptom(sign.name, activeFactorNames) ||
+                FACTOR_SIGN_SYNONYMS.any { (factorKeys, signKeys) ->
+                    factors.any { f -> factorKeys.any { f.contains(it) } } && signKeys.any { s.contains(it) }
+                }
+        }.map { it.id }.toSet()
+    }
+
     fun directionOf(name: String): String? {
         val n = name.lowercase()
         val maniaKeys = listOf(

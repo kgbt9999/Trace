@@ -42,6 +42,18 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.moodlife.app.R
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.material3.Switch
+import androidx.compose.ui.draw.clip
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.selection.selectable
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.IntrinsicSize
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.runtime.CompositionLocalProvider
 import com.moodlife.app.ui.components.LocalChartPlotHeight
 import com.moodlife.app.util.DateUtils
@@ -80,6 +92,7 @@ fun ReportsScreen(viewModel: ReportsViewModel = hiltViewModel()) {
     val charts = state.visibleCharts
     var dataFormatDialog by remember { mutableStateOf(false) }
     var doctorFormatDialog by remember { mutableStateOf(false) }
+    var showExport by rememberSaveable { mutableStateOf(false) }
     var zoomChartId by remember { mutableStateOf<ReportsCharts.Id?>(null) }
 
     fun launchExport(format: ExportFormat) {
@@ -107,11 +120,23 @@ fun ReportsScreen(viewModel: ReportsViewModel = hiltViewModel()) {
                 onNextMonth = viewModel::nextMonth,
                 onCustomRange = viewModel::setCustomRange,
             )
-            Text(
-                stringResource(R.string.reports_export_title),
-                style = MaterialTheme.typography.titleSmall,
-                modifier = Modifier.padding(start = 16.dp, top = 8.dp),
-            )
+            Row(
+                Modifier
+                    .fillMaxWidth()
+                    .padding(start = 16.dp, end = 12.dp, top = 8.dp)
+                    .heightIn(min = 48.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    stringResource(R.string.reports_export_title),
+                    style = MaterialTheme.typography.titleSmall,
+                    modifier = Modifier.weight(1f),
+                )
+                Switch(checked = showExport, onCheckedChange = { showExport = it })
+            }
+            if (!showExport) {
+                Spacer(Modifier.height(8.dp))
+            } else {
             Text(
                 stringResource(R.string.reports_export_hint),
                 style = MaterialTheme.typography.bodySmall,
@@ -145,6 +170,7 @@ fun ReportsScreen(viewModel: ReportsViewModel = hiltViewModel()) {
                         Text(stringResource(R.string.reports_export_readable_hint), style = MaterialTheme.typography.labelSmall)
                     }
                 }
+            }
             }
         }
 
@@ -563,22 +589,45 @@ private fun ReportPeriodSelector(
     val period = state.period
     Column(Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, top = 12.dp)) {
         Text(stringResource(R.string.reports_period_title), style = MaterialTheme.typography.titleSmall)
-        FlowRow(
-            Modifier.fillMaxWidth().padding(top = 6.dp),
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        // One line: equal flat segments (wrapping chips took two rows on a phone).
+        val outline = MaterialTheme.colorScheme.outline.copy(alpha = 0.6f)
+        val shape = RoundedCornerShape(4.dp)
+        Row(
+            Modifier
+                .fillMaxWidth()
+                .padding(top = 6.dp)
+                .height(IntrinsicSize.Min)
+                .clip(shape)
+                .border(1.dp, outline, shape),
         ) {
-            listOf(
+            val kinds = listOf(
                 ReportPeriod.Kind.DAYS_7 to R.string.reports_period_7,
                 ReportPeriod.Kind.DAYS_30 to R.string.reports_period_30,
                 ReportPeriod.Kind.DAYS_90 to R.string.reports_period_90,
                 ReportPeriod.Kind.MONTH to R.string.reports_period_month,
                 ReportPeriod.Kind.CUSTOM to R.string.reports_period_custom,
-            ).forEach { (kind, label) ->
-                FilterChip(
-                    selected = period.kind == kind,
-                    onClick = { onKind(kind) },
-                    label = { Text(stringResource(label)) },
-                )
+            )
+            kinds.forEachIndexed { index, (kind, label) ->
+                val selected = period.kind == kind
+                Box(
+                    Modifier
+                        .weight(1f)
+                        .fillMaxHeight()
+                        .heightIn(min = 44.dp)
+                        .background(if (selected) MaterialTheme.colorScheme.primary else Color.Transparent)
+                        .selectable(selected = selected, onClick = { onKind(kind) }, role = Role.Tab)
+                        .padding(horizontal = 2.dp, vertical = 6.dp),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Text(
+                        stringResource(label),
+                        style = MaterialTheme.typography.labelMedium,
+                        color = if (selected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface,
+                        maxLines = 1,
+                        softWrap = false,
+                    )
+                }
+                if (index < kinds.lastIndex) Box(Modifier.width(1.dp).fillMaxHeight().background(outline))
             }
         }
         when (period.kind) {

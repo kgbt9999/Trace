@@ -432,6 +432,7 @@ fun TodayScreen(
                                             color = parseCssColor(factor.color),
                                             options = listOf("Нет", "Да"),
                                             hint = factorHint,
+                                            compact = true,
                                         )
                                         "qual4-i" -> ScaleInput(
                                             label = stringResource(R.string.today_factor_intensity, factor.name),
@@ -440,6 +441,7 @@ fun TodayScreen(
                                             color = parseCssColor(factor.color),
                                             options = MoodScales.QUAL_LABELS_I,
                                             hint = factorHint,
+                                            compact = true,
                                         )
                                         else -> ScaleInput(
                                             label = stringResource(R.string.today_factor_intensity, factor.name),
@@ -449,6 +451,7 @@ fun TodayScreen(
                                             max = max,
                                             anchors = if (max == 5) MoodScales.INTENSITY_ANCHORS_COMPACT else null,
                                             hint = factorHint,
+                                            compact = true,
                                         )
                                     }
                                 }
@@ -744,13 +747,13 @@ fun TodayScreen(
             onDismiss = viewModel::dismissCatalogEdit,
             onSave = viewModel::saveCatalogEdit,
             onDeactivate = viewModel::deactivateCatalogEdit,
-            initialScaleType = if (edit.kind == CatalogEditTarget.Kind.SYMPTOM) edit.scaleType else null,
+            initialScaleType = if (edit.kind == CatalogEditTarget.Kind.WARNING) null else edit.scaleType,
             initialCategory = edit.category,
             initialColor = edit.color,
             initialDirection = edit.direction,
             showScale = edit.kind == CatalogEditTarget.Kind.SYMPTOM || edit.kind == CatalogEditTarget.Kind.FACTOR,
             showCategory = edit.kind == CatalogEditTarget.Kind.SYMPTOM || edit.kind == CatalogEditTarget.Kind.FACTOR,
-            showColor = edit.kind == CatalogEditTarget.Kind.SYMPTOM || edit.kind == CatalogEditTarget.Kind.FACTOR,
+            showColor = edit.kind == CatalogEditTarget.Kind.FACTOR,
             showDirection = edit.kind == CatalogEditTarget.Kind.WARNING,
             factorCategories = edit.kind == CatalogEditTarget.Kind.FACTOR,
         )
@@ -814,7 +817,7 @@ private fun DayScalesInput(
     state: com.moodlife.app.ui.screens.today.TodayUiState,
     viewModel: TodayViewModel,
 ) {
-    val scaleColor = LocalMoodColors.current.functioning
+    val scaleColor = MaterialTheme.colorScheme.primary
     // Core check-in (four mood axes + safety question) always visible; the rest one tap away.
     val enabled = state.trackables.filter { it.enabled }
     val primary = enabled.filter { it.section == "mood" || it.key == "safetyCheck" }
@@ -868,22 +871,20 @@ private fun TrackableValueInput(
     val onChange: (Int) -> Unit = { v ->
         if (marked && v == value) viewModel.clearAxis(item.key) else applyTrackableValue(item.key, v, viewModel)
     }
-    val sourceId = CitationTopics.sourceIdForAxis(item.key)
+    val question = com.moodlife.app.domain.DayQuestions.of(item.key)
     val axisCfg = state.checkInConfig.axes.find { it.id == item.key }
-    val label = trackableLabel(item.key, axisCfg?.label)
+    val label = axisCfg?.label?.takeIf { it.isNotBlank() } ?: question?.text ?: trackableLabel(item.key, null)
+    // One accent for the questionnaire; the safety question keeps its own colour.
     val color = if (item.key == "safetyCheck") LocalMoodColors.current.safety else scaleColor
     when (item.scaleType) {
         "options" -> {
-            val options = TodayTrackables.optionsFor(item.key)
+            val options = question?.options ?: TodayTrackables.optionsFor(item.key)
             ScaleInput(
                 label = label,
                 value = if (marked) value.coerceIn(0, options.lastIndex) else -1,
                 onValueChange = onChange,
                 color = color,
                 options = options,
-                hint = axisHint(item.key),
-                citationSourceId = sourceId,
-                onOpenSources = { viewModel.openSources(sourceId) },
                 compact = true,
             )
         }
@@ -893,26 +894,18 @@ private fun TrackableValueInput(
             onValueChange = onChange,
             color = color,
             options = listOf("Нет", "Да"),
-            hint = axisHint(item.key),
-            citationSourceId = sourceId,
-            onOpenSources = { viewModel.openSources(sourceId) },
             compact = true,
         )
         else -> {
             // 0–5 (and legacy 0–10 coerced)
             val max = 5
-            val axis = MoodScales.MOOD_AXES.find { it.key == item.key }
-            val customAnchors = axisCfg?.anchors()
             ScaleInput(
                 label = label,
                 value = if (marked) value.coerceIn(0, max) else -1,
                 onValueChange = onChange,
                 color = color,
                 max = max,
-                anchors = customAnchors ?: axis?.anchors ?: MoodScales.INTENSITY_ANCHORS_COMPACT,
-                hint = axisHint(item.key),
-                citationSourceId = sourceId,
-                onOpenSources = { viewModel.openSources(sourceId) },
+                anchors = axisCfg?.anchors() ?: com.moodlife.app.domain.DayQuestions.intensity(item.key),
                 compact = true,
             )
         }
@@ -991,13 +984,31 @@ private fun TodaySymptomsBody(
             Text(stringResource(R.string.today_seed_symptoms))
         }
     } else {
-        symptoms.forEach { symptom ->
-            key(symptom.id) {
-                SymptomRow(
-                    symptom = symptom,
-                    onSeverityChange = onUpdateSymptom,
-                    onEdit = { onEditSymptom(symptom.id) },
+        // Grouped by what the symptom points to (same rule the prodrome inference uses).
+        val groups = symptoms.groupBy { com.moodlife.app.domain.ProdromeInference.directionOf(it.name) ?: "other" }
+        listOf(
+            "depression" to R.string.today_symptoms_group_depression,
+            "mania" to R.string.today_symptoms_group_mania,
+            "other" to R.string.today_symptoms_group_other,
+        ).forEach { (dir, titleRes) ->
+            val items = groups[dir].orEmpty()
+            if (items.isEmpty()) return@forEach
+            if (groups.size > 1) {
+                Text(
+                    stringResource(titleRes),
+                    style = MaterialTheme.typography.labelLarge,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(top = 8.dp),
                 )
+            }
+            items.forEach { symptom ->
+                key(symptom.id) {
+                    SymptomRow(
+                        symptom = symptom,
+                        onSeverityChange = onUpdateSymptom,
+                        onEdit = { onEditSymptom(symptom.id) },
+                    )
+                }
             }
         }
     }
@@ -1022,8 +1033,8 @@ private fun SymptomRow(
     LaunchedEffect(symptom.severity, symptom.scaleType, symptom.scaleMax) {
         severity = symptom.severity.coerceIn(0, symptom.scaleMax)
     }
-    val fallbackColor = LocalMoodColors.current.energy
-    val color = remember(symptom.color) { parseCssColor(symptom.color, fallbackColor) }
+    // Same look as the day questions: one accent, no per-symptom colours.
+    val color = MaterialTheme.colorScheme.primary
     val onValueChange = remember(symptom.id, symptom.scaleMax, onSeverityChange) {
         { value: Int ->
             severity = value
@@ -1038,6 +1049,7 @@ private fun SymptomRow(
             color = color,
             options = SymptomYesNo,
             onEditLabel = onEdit,
+            compact = true,
         )
         "options" -> ScaleInput(
             label = symptom.name,
@@ -1046,6 +1058,7 @@ private fun SymptomRow(
             color = color,
             options = SymptomOptionsSeverity,
             onEditLabel = onEdit,
+            compact = true,
         )
         else -> ScaleInput(
             label = symptom.name,
@@ -1053,8 +1066,9 @@ private fun SymptomRow(
             onValueChange = onValueChange,
             color = color,
             max = 5,
-            anchors = MoodScales.INTENSITY_ANCHORS_COMPACT,
+            anchors = com.moodlife.app.domain.DayQuestions.intensity(""),
             onEditLabel = onEdit,
+            compact = true,
         )
     }
 }

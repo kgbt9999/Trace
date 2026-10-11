@@ -1081,6 +1081,7 @@ class TodayViewModel @Inject constructor(
         viewModelScope.launch {
             val entryId = ensureEntryForSideEffects() ?: return@launch
             factorRepository.setLog(entryId, factorId, intensity)
+            scheduleProdromeFromFactors(entryId)
         }
     }
 
@@ -1102,6 +1103,7 @@ class TodayViewModel @Inject constructor(
         viewModelScope.launch {
             val entryId = ensureEntryForSideEffects() ?: return@launch
             factorRepository.setLog(entryId, factorId, clamped, factor.scaleMax)
+            scheduleProdromeFromFactors(entryId)
         }
     }
 
@@ -1334,6 +1336,15 @@ class TodayViewModel @Inject constructor(
 
     private data class PendingSymptomWrite(val severity: Int, val scaleMax: Int)
 
+    /** Factors that are early signs (e.g. «Недосып») switch the matching prodrome on. */
+    private fun scheduleProdromeFromFactors(entryId: String) {
+        prodromeJob?.cancel()
+        prodromeJob = viewModelScope.launch {
+            delay(200)
+            applyProdromeFromSymptoms(entryId, _uiState.value.symptoms)
+        }
+    }
+
     private fun scheduleSymptomPersist() {
         symptomPersistJob?.cancel()
         symptomPersistJob = viewModelScope.launch {
@@ -1476,7 +1487,7 @@ class TodayViewModel @Inject constructor(
         pending.cancel()
         prodromeJob = null
         val symptoms = _uiState.value.symptoms
-        if (symptoms.none { it.severity > 0 }) return
+        if (symptoms.none { it.severity > 0 } && _uiState.value.factors.none { it.active }) return
         val entryId = _uiState.value.moodEntryId ?: ensureEntryForSideEffects() ?: return
         applyProdromeFromSymptoms(entryId, symptoms)
     }
@@ -1849,6 +1860,9 @@ class TodayViewModel @Inject constructor(
         val match = ProdromeInference.matchSignIds(
             signRefs,
             symptoms.map { ProdromeInference.SymptomSignal(it.name, it.severity, it.scaleMax) },
+        ) + ProdromeInference.matchSignIdsFromFactors(
+            signRefs,
+            _uiState.value.factors.filter { it.active && it.intensity > 0 }.map { it.name },
         )
         for (id in match) {
             warningSignRepository.setTrigger(entryId, id, 3)

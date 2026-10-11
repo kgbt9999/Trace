@@ -364,6 +364,8 @@ class SettingsViewModel @Inject constructor(
 
     fun observeTrackables() = settingsRepository.observe(com.moodlife.app.domain.TodayTrackables.KEY)
 
+    fun observeHcDiagnostics() = settingsRepository.observe(SettingsRepository.KEY_HC_LAST_DIAGNOSTICS)
+
     fun addWarning(name: String, direction: String) = viewModelScope.launch {
         val created = warningSignRepository.addSign(name, direction)
         _message.value = if (created != null) "warning_added" else null

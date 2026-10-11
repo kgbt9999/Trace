@@ -33,7 +33,7 @@
     <string name="reports_period_title">Период</string>
     <string name="reports_period_7">7 дней</string>
     <string name="reports_period_30">30 дней</string>
-    <string name="reports_period_90">3 месяца</string>
+    <string name="reports_period_90">3 мес.</string>
     <string name="reports_period_month">Месяц</string>
     <string name="reports_period_custom">Свой</string>
     <string name="reports_period_from">С</string>
@@ -326,6 +326,9 @@
     <string name="today_graph_params_section">Состояние за день</string>
     <string name="today_more_day_details">Подробнее о дне · %1$d из %2$d</string>
     <string name="today_summary_mood">Состояние</string>
+    <string name="today_symptoms_group_depression">Похоже на спад</string>
+    <string name="today_symptoms_group_mania">Похоже на подъём</string>
+    <string name="today_symptoms_group_other">Другое</string>
     <string name="today_summary_sleep">Сон</string>
     <string name="today_summary_meds">Лекарства %1$d/%2$d</string>
     <string name="today_summary_symptoms">Симптомы</string>
@@ -948,6 +951,7 @@
     <string name="today_trackables_empty">Нет включённых пунктов. Добавьте их в настройках экрана «Сегодня».</string>
     <string name="today_trackables_configure">Настроить пункты</string>
     <string name="today_trackables_settings_title">Шкалы дня</string>
+    <string name="settings_hc_diagnostics">Диагностика последней синхронизации</string>
     <string name="physical_body_previous">Было %1$s %2$s · %3$s</string>
     <string name="physical_body_saved">Сохранено</string>
     <string name="today_trackables_settings_desc">Какие шкалы показывать на «Сегодня» и какой шкалой оценивать (0–5, да/нет, варианты). Основные шкалы видны сразу, остальные — под «Подробнее о дне».</string>

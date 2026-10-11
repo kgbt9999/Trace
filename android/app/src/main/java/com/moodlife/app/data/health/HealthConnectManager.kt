@@ -2,6 +2,7 @@ package com.moodlife.app.data.health
 
 import android.content.ActivityNotFoundException
 import android.content.Context
+import android.util.Log
 import android.content.Intent
 import android.net.Uri
 import androidx.activity.ComponentActivity
@@ -223,8 +224,40 @@ class HealthConnectManager @Inject constructor(
                 return perm in granted
             }
 
+            // Per-type diagnostics: record count or error, saved for the Settings screen.
+            val diagnostics = linkedMapOf<String, String>()
+
+            /**
+             * Reads every page of one record type. A failure is recorded and yields no records
+             * instead of aborting the whole sync — previously one bad type (e.g. nutrition)
+             * threw, the sync retried three times and then saved nothing at all, sleep included.
+             */
+            suspend fun <T : androidx.health.connect.client.records.Record> readAll(type: KClass<T>): PagedRecords<T> {
+                val name = type.simpleName ?: "?"
+                return try {
+                    val all = mutableListOf<T>()
+                    var token: String? = null
+                    var pages = 0
+                    do {
+                        val page = client.readRecords(
+                            ReadRecordsRequest(type, timeRangeFilter = filter, pageToken = token),
+                        )
+                        all += page.records
+                        token = page.pageToken
+                        pages++
+                    } while (!token.isNullOrEmpty() && pages < MAX_PAGES)
+                    diagnostics[name] = all.size.toString()
+                    PagedRecords(all)
+                } catch (e: Exception) {
+                    // Type name and exception class only — no health values in logs.
+                    Log.w(TAG, "Health Connect read failed for $name: ${e.javaClass.simpleName}")
+                    diagnostics[name] = "ошибка: ${e.javaClass.simpleName}"
+                    PagedRecords(emptyList())
+                }
+            }
+
             if (canRead(StepsRecord::class)) {
-                val steps = client.readRecords(ReadRecordsRequest(StepsRecord::class, timeRangeFilter = filter))
+                val steps = readAll(StepsRecord::class)
                 val stepsByDate = mutableMapOf<String, Int>()
                 for (record in steps.records) {
                     noteOrigin(record.metadata.dataOrigin.packageName)
@@ -238,7 +271,7 @@ class HealthConnectManager @Inject constructor(
             }
 
             if (canRead(DistanceRecord::class)) {
-                val distance = client.readRecords(ReadRecordsRequest(DistanceRecord::class, timeRangeFilter = filter))
+                val distance = readAll(DistanceRecord::class)
                 val byDate = mutableMapOf<String, Double>()
                 for (record in distance.records) {
                     noteOrigin(record.metadata.dataOrigin.packageName)
@@ -252,9 +285,7 @@ class HealthConnectManager @Inject constructor(
             }
 
             if (canRead(ExerciseSessionRecord::class)) {
-                val sessions = client.readRecords(
-                    ReadRecordsRequest(ExerciseSessionRecord::class, timeRangeFilter = filter),
-                )
+                val sessions = readAll(ExerciseSessionRecord::class)
                 val minutesByDate = mutableMapOf<String, Int>()
                 for (record in sessions.records) {
                     noteOrigin(record.metadata.dataOrigin.packageName)
@@ -271,9 +302,7 @@ class HealthConnectManager @Inject constructor(
             if (canRead(ActiveCaloriesBurnedRecord::class) || canRead(TotalCaloriesBurnedRecord::class)) {
                 val calByDate = mutableMapOf<String, Double>()
                 if (canRead(ActiveCaloriesBurnedRecord::class)) {
-                    val active = client.readRecords(
-                        ReadRecordsRequest(ActiveCaloriesBurnedRecord::class, timeRangeFilter = filter),
-                    )
+                    val active = readAll(ActiveCaloriesBurnedRecord::class)
                     for (record in active.records) {
                         noteOrigin(record.metadata.dataOrigin.packageName)
                         val date = isoDate(record.startTime)
@@ -281,9 +310,7 @@ class HealthConnectManager @Inject constructor(
                     }
                 }
                 if (canRead(TotalCaloriesBurnedRecord::class) && calByDate.isEmpty()) {
-                    val total = client.readRecords(
-                        ReadRecordsRequest(TotalCaloriesBurnedRecord::class, timeRangeFilter = filter),
-                    )
+                    val total = readAll(TotalCaloriesBurnedRecord::class)
                     for (record in total.records) {
                         noteOrigin(record.metadata.dataOrigin.packageName)
                         val date = isoDate(record.startTime)
@@ -297,7 +324,7 @@ class HealthConnectManager @Inject constructor(
             }
 
             if (canRead(SleepSessionRecord::class)) {
-                val sleep = client.readRecords(ReadRecordsRequest(SleepSessionRecord::class, timeRangeFilter = filter))
+                val sleep = readAll(SleepSessionRecord::class)
                 val sessions = sleep.records.map { record ->
                     noteOrigin(record.metadata.dataOrigin.packageName)
                     SleepAggregation.Session(
@@ -330,14 +357,14 @@ class HealthConnectManager @Inject constructor(
                 val weightByDate = mutableMapOf<String, Float>()
                 val fatByDate = mutableMapOf<String, Float>()
                 if (canRead(WeightRecord::class)) {
-                    val weights = client.readRecords(ReadRecordsRequest(WeightRecord::class, timeRangeFilter = filter))
+                    val weights = readAll(WeightRecord::class)
                     for (record in weights.records) {
                         noteOrigin(record.metadata.dataOrigin.packageName)
                         weightByDate[isoDate(record.time)] = record.weight.inKilograms.toFloat()
                     }
                 }
                 if (canRead(BodyFatRecord::class)) {
-                    val fats = client.readRecords(ReadRecordsRequest(BodyFatRecord::class, timeRangeFilter = filter))
+                    val fats = readAll(BodyFatRecord::class)
                     for (record in fats.records) {
                         noteOrigin(record.metadata.dataOrigin.packageName)
                         fatByDate[isoDate(record.time)] = record.percentage.value.toFloat()
@@ -362,7 +389,7 @@ class HealthConnectManager @Inject constructor(
             }
 
             if (canRead(HeightRecord::class)) {
-                val heights = client.readRecords(ReadRecordsRequest(HeightRecord::class, timeRangeFilter = filter))
+                val heights = readAll(HeightRecord::class)
                 val latest = heights.records.maxByOrNull { it.time }
                 if (latest != null) {
                     noteOrigin(latest.metadata.dataOrigin.packageName)
@@ -375,7 +402,7 @@ class HealthConnectManager @Inject constructor(
             }
 
             if (canRead(NutritionRecord::class)) {
-                val nutrition = client.readRecords(ReadRecordsRequest(NutritionRecord::class, timeRangeFilter = filter))
+                val nutrition = readAll(NutritionRecord::class)
                 data class Macros(var kcal: Double = 0.0, var p: Double = 0.0, var c: Double = 0.0, var f: Double = 0.0)
                 val byDate = mutableMapOf<String, Macros>()
                 for (record in nutrition.records) {
@@ -407,9 +434,7 @@ class HealthConnectManager @Inject constructor(
             }
 
             if (canRead(MenstruationFlowRecord::class)) {
-                val flow = client.readRecords(
-                    ReadRecordsRequest(MenstruationFlowRecord::class, timeRangeFilter = filter),
-                )
+                val flow = readAll(MenstruationFlowRecord::class)
                 for (record in flow.records) {
                     noteOrigin(record.metadata.dataOrigin.packageName)
                     val date = isoDate(record.time)
@@ -435,9 +460,7 @@ class HealthConnectManager @Inject constructor(
             }
 
             if (canRead(MenstruationPeriodRecord::class)) {
-                val periods = client.readRecords(
-                    ReadRecordsRequest(MenstruationPeriodRecord::class, timeRangeFilter = filter),
-                )
+                val periods = readAll(MenstruationPeriodRecord::class)
                 val latestStart = periods.records.maxByOrNull { it.startTime }?.startTime
                 if (latestStart != null) {
                     noteOrigin(periods.records.maxByOrNull { it.startTime }?.metadata?.dataOrigin?.packageName)
@@ -451,7 +474,7 @@ class HealthConnectManager @Inject constructor(
             }
 
             if (canRead(HeartRateRecord::class)) {
-                val hr = client.readRecords(ReadRecordsRequest(HeartRateRecord::class, timeRangeFilter = filter))
+                val hr = readAll(HeartRateRecord::class)
                 val avgByDate = mutableMapOf<String, Pair<Long, Int>>()
                 for (record in hr.records) {
                     noteOrigin(record.metadata.dataOrigin.packageName)
@@ -484,6 +507,10 @@ class HealthConnectManager @Inject constructor(
             settingsRepository.set(SettingsRepository.KEY_HC_LAST_SYNC, System.currentTimeMillis().toString())
             settingsRepository.set(SettingsRepository.KEY_HC_LAST_ROWS, rows.toString())
             settingsRepository.set(SettingsRepository.KEY_HC_LAST_ORIGINS, JSONArray(originList).toString())
+            settingsRepository.set(
+                SettingsRepository.KEY_HC_LAST_DIAGNOSTICS,
+                org.json.JSONObject(diagnostics as Map<*, *>).toString(),
+            )
 
             return SyncResult(rowsWritten = rows, originLabels = originList)
     }
@@ -546,8 +573,13 @@ class HealthConnectManager @Inject constructor(
 
     companion object {
         const val SOURCE = "health-connect"
+        private const val TAG = "HealthConnectSync"
+        private const val MAX_PAGES = 50
 
         /** Awake, out of bed, awake in bed (Health Connect stage codes 1, 3, 7). */
         private val AWAKE_STAGES = setOf(1, 3, 7)
     }
 }
+
+/** Same shape as ReadRecordsResponse.records so existing per-type code stays unchanged. */
+private class PagedRecords<T>(val records: List<T>)
