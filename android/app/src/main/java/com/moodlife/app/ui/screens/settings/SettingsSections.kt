@@ -1333,7 +1333,7 @@ private fun IntegrationsSettingsSection(
             FilledTonalButton(onClick = onImportFlo, modifier = Modifier.padding(top = 8.dp).fillMaxWidth()) {
                 Text(stringResource(R.string.settings_flo_import))
             }
-            ImportResultLine(state.integrationMessage, prefix = "flo_")
+            ImportResultLine(state.integrationMessage, prefix = "import_")
             if (state.floCount > 0) {
                 OutlinedButton(onClick = viewModel::clearFlo, modifier = Modifier.padding(top = 8.dp).fillMaxWidth()) {
                     Text(stringResource(R.string.settings_flo_clear))

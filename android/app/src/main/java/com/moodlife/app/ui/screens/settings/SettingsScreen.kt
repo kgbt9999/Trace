@@ -55,10 +55,10 @@ fun SettingsScreen(
         PermissionController.createRequestPermissionResultContract(),
     ) { viewModel.onHcPermissionsResult() }
     val floLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
-        uri?.let(viewModel::importFlo)
+        uri?.let(viewModel::importAny)
     }
     val importLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
-        uri?.let(viewModel::importBackup)
+        uri?.let(viewModel::importAny)
     }
     val folderLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocumentTree()) { uri ->
         uri?.let(viewModel::setWeeklyBackupFolder)
@@ -138,7 +138,7 @@ fun SettingsScreen(
                                 ),
                             )
                         },
-                        onImportFlo = { floLauncher.launch(arrayOf("application/json", "text/plain", "*/*")) },
+                        onImportFlo = { floLauncher.launch(arrayOf("*/*")) },
                         onRequestHcPermissions = { hcLauncher.launch(viewModel.hcPermissions) },
                         onPickWeeklyFolder = { folderLauncher.launch(null) },
                         onShowClearDialog = { showClearDialog = true },
@@ -177,7 +177,7 @@ fun SettingsScreen(
                         ),
                     )
                 },
-                onImportFlo = { floLauncher.launch(arrayOf("application/json", "text/plain", "*/*")) },
+                onImportFlo = { floLauncher.launch(arrayOf("*/*")) },
                 onRequestHcPermissions = { hcLauncher.launch(viewModel.hcPermissions) },
                 onPickWeeklyFolder = { folderLauncher.launch(null) },
                 onShowClearDialog = { showClearDialog = true },
@@ -214,6 +214,9 @@ internal fun integrationMessageText(msg: String): String = when {
     msg == "backup_ok" -> stringResource(R.string.settings_backup_ok)
     msg == "backup_fail" -> stringResource(R.string.settings_backup_fail)
     msg == "import_ok" -> stringResource(R.string.settings_backup_import_ok)
+    msg.startsWith("import_done:") -> msg.substringAfter(":").split("|").let { p ->
+        stringResource(R.string.settings_import_done, p.getOrElse(0) { "" }, p.getOrElse(1) { "0" }, p.getOrElse(2) { "0" })
+    }
     msg == "import_running" -> stringResource(R.string.settings_import_running)
     msg == "import_fail" -> stringResource(R.string.settings_backup_import_fail)
     msg.startsWith("import_fail:") -> stringResource(R.string.settings_import_fail_reason, msg.substringAfter(":"))

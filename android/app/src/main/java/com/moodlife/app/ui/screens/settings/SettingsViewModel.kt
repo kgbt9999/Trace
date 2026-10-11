@@ -114,6 +114,7 @@ class SettingsViewModel @Inject constructor(
     private val healthConnectManager: HealthConnectManager,
     private val driveBackupManager: DriveBackupManager,
     private val jsonBackupImporter: JsonBackupImporter,
+    private val universalImporter: com.moodlife.app.data.backup.UniversalImporter,
     private val floRepository: FloRepository,
     private val periodRepository: PeriodRepository,
     private val exportManager: ExportManager,
@@ -702,38 +703,6 @@ class SettingsViewModel @Inject constructor(
         return fmt.format(java.util.Date(ms))
     }
 
-    fun importFlo(uri: Uri) = viewModelScope.launch {
-        _message.value = "flo_running"
-        try {
-            val files = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
-                context.contentResolver.openInputStream(uri)?.use {
-                    com.moodlife.app.data.backup.ImportFileReader.read(it)
-                }
-            }
-            if (files == null) {
-                _message.value = "flo_fail:файл не открывается"
-                return@launch
-            }
-            // Flo's export is a ZIP with several JSON files; import every one that has entries.
-            var imported = 0
-            var detected = 0
-            for (file in files.filter { it.text.startsWith("{") || it.text.startsWith("[") }) {
-                val result = floRepository.importJson(file.text)
-                imported += result.imported
-                detected += result.detected
-            }
-            Log.i(IMPORT_TAG, "Flo import: files=${files.size} detected=$detected imported=$imported")
-            _message.value = when {
-                files.isEmpty() -> "flo_fail:в архиве нет JSON-файлов"
-                detected == 0 -> "flo_empty"
-                else -> "flo_ok:$imported"
-            }
-        } catch (e: Exception) {
-            Log.w(IMPORT_TAG, "Flo import failed: ${e.javaClass.simpleName}")
-            _message.value = "flo_fail:${importReason(e)}"
-        }
-    }
-
     fun clearFlo() = viewModelScope.launch {
         floRepository.clearAll()
         _message.value = "flo_cleared"
@@ -760,23 +729,31 @@ class SettingsViewModel @Inject constructor(
         _message.value = "backup_ok"
     }
 
-    fun importBackup(uri: Uri) = viewModelScope.launch {
+    /** Any supported file: Trace backup, Flo, eMoods, Daylio, Bearable, CSV/JSON with dates, ZIPs of these. */
+    fun importAny(uri: Uri) = viewModelScope.launch {
         _message.value = "import_running"
         try {
+            val name = displayName(uri)
             val stream = context.contentResolver.openInputStream(uri) ?: run {
-                _message.value = "import_fail"
+                _message.value = "import_fail:файл не открывается"
                 return@launch
             }
-            stream.use {
-                val result = jsonBackupImporter.importFromStream(it)
-                Log.i(IMPORT_TAG, "Backup import: success=${result.success} message=${result.message}")
-                _message.value = if (result.success) "import_ok" else "import_fail:${result.message}"
+            val summary = stream.use { universalImporter.import(it, name) }
+            Log.i(IMPORT_TAG, "Import: formats=${summary.formats} days=${summary.days} notes=${summary.notes} error=${summary.error != null}")
+            _message.value = when {
+                summary.error != null -> "import_fail:${summary.error}"
+                else -> "import_done:${summary.formats.joinToString(", ")}|${summary.days}|${summary.notes}"
             }
         } catch (e: Exception) {
-            Log.w(IMPORT_TAG, "Backup import failed: ${e.javaClass.simpleName}")
+            Log.w(IMPORT_TAG, "Import failed: ${e.javaClass.simpleName}")
             _message.value = "import_fail:${importReason(e)}"
         }
     }
+
+    private fun displayName(uri: Uri): String = runCatching {
+        context.contentResolver.query(uri, arrayOf(android.provider.OpenableColumns.DISPLAY_NAME), null, null, null)
+            ?.use { c -> if (c.moveToFirst()) c.getString(0) else null }
+    }.getOrNull() ?: "file"
 
     fun setWeeklyBackupFolder(uri: Uri) = viewModelScope.launch {
         com.moodlife.app.workers.WeeklyFolderBackupWorker.takePersistablePermission(context, uri)

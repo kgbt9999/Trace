@@ -136,6 +136,28 @@ class MoodRepository @Inject constructor(
         /** Scales the user marked; values for other keys are stored as 0 but ignored. */
         val marked: Set<String> = emptySet(),
     ) {
+        /** Sets one day scale by its key and marks it. */
+        fun withAxis(key: String, value: Int): MoodFields {
+            val next = when (key) {
+                "depressed" -> copy(depressed = value)
+                "elevated" -> copy(elevated = value)
+                "anxious" -> copy(anxious = value)
+                "irritable" -> copy(irritable = value)
+                "energy" -> copy(energy = value)
+                "concentration" -> copy(concentration = value)
+                "appetite" -> copy(appetite = value)
+                "sociability" -> copy(sociability = value)
+                "sleepQuality" -> copy(sleepQuality = value)
+                "functioning" -> copy(functioning = value)
+                "safetyCheck" -> copy(safetyCheck = value)
+                "alcoholUse" -> copy(alcoholUse = value)
+                "substanceUse" -> copy(substanceUse = value)
+                "routineScore" -> copy(routineScore = value)
+                else -> return this
+            }
+            return next.copy(marked = marked + key)
+        }
+
         companion object {
             fun fromEntity(e: MoodEntryEntity) = MoodFields(
                 depressed = e.depressed,

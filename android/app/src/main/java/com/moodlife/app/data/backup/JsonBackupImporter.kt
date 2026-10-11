@@ -36,6 +36,13 @@ class JsonBackupImporter @Inject constructor(
         }
     }
 
+    /** Trace JSON backup text (already unpacked). */
+    fun importText(text: String): ImportResult = try {
+        importJson(text)
+    } catch (e: org.json.JSONException) {
+        ImportResult(false, "файл не похож на резервную копию Trace (JSON не читается)")
+    }
+
     private fun importJson(text: String): ImportResult {
         val root = JSONObject(text)
         val appId = root.optString("app")
@@ -59,7 +66,7 @@ class JsonBackupImporter @Inject constructor(
                 }
             }
             db.setTransactionSuccessful()
-            ImportResult(true, "Импортировано строк: $rows")
+            ImportResult(true, "Импортировано строк: $rows", rows)
         } catch (e: Exception) {
             ImportResult(false, e.message ?: "Ошибка импорта")
         } finally {
@@ -269,5 +276,5 @@ class JsonBackupImporter @Inject constructor(
         return true
     }
 
-    data class ImportResult(val success: Boolean, val message: String)
+    data class ImportResult(val success: Boolean, val message: String, val rows: Int = 0)
 }

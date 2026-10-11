@@ -703,11 +703,12 @@
     <string name="settings_backup_export">Экспорт JSON</string>
     <string name="settings_backup_ok">Файл готов — выберите Google Drive или другое хранилище</string>
     <string name="settings_backup_fail">Ошибка экспорта</string>
-    <string name="settings_backup_import">Импорт JSON или CSV</string>
+    <string name="settings_backup_import">Импорт резервной копии или файла другого приложения</string>
     <string name="settings_backup_import_ok">Данные импортированы</string>
     <string name="settings_backup_import_fail">Ошибка импорта</string>
     <string name="settings_import_fail_reason">Не удалось импортировать: %1$s</string>
     <string name="settings_import_running">Читаю файл…</string>
+    <string name="settings_import_done">Импортировано: %1$s. Дней: %2$s, заметок: %3$s</string>
     <string name="settings_clear_data">Удалить все данные</string>
     <string name="settings_clear_confirm">Удалить все записи и настройки? Это нельзя отменить.</string>
     <string name="settings_clear_ok">Данные удалены</string>
@@ -716,7 +717,7 @@
     <string name="settings_yandex_key_hint">Если Open-Meteo недоступен — опционально</string>
     <string name="settings_flo">Синхронизация с Flo</string>
     <string name="settings_flo_hint">Импорт выгрузки Flo: ZIP-архив из письма Flo или JSON-файл из него. Дополняет дни, ручные записи цикла не стирает.</string>
-    <string name="settings_flo_import">Выбрать файл Flo (ZIP или JSON)</string>
+    <string name="settings_flo_import">Выбрать файл (ZIP, JSON или CSV)</string>
     <string name="settings_flo_count">Импортировано дней: %1$d</string>
     <string name="settings_flo_ok">Импортировано записей Flo: %1$s</string>
     <string name="settings_flo_empty">В файле не найдено записей Flo</string>
@@ -926,8 +927,8 @@
     <string name="settings_nav_integrations">Импорт данных</string>
     <string name="settings_import_hub_title">Импорт данных</string>
     <string name="settings_import_hub_desc">Как Guava: Health Connect — основной канал. Где HC нет — открыть приложение и импорт файла с инструкцией. Без выдуманной «прямой» синхронизации.</string>
-    <string name="settings_import_file_title">Загрузка файла</string>
-    <string name="settings_import_file_hint">JSON-бэкап Trace, CSV дней или экспорт цикла (Flo JSON). Явное действие пользователя.</string>
+    <string name="settings_import_file_title">Импорт из других приложений</string>
+    <string name="settings_import_file_hint">Flo, eMoods, Daylio, Bearable, резервная копия Trace или любой CSV/JSON с датами — формат определяется сам, ZIP-архивы распаковываются. Импорт только дополняет: то, что вы уже отметили, не перезаписывается; всё, что нельзя положить в шкалы, сохраняется заметкой дня.</string>
     <string name="settings_import_file_btn">Выбрать файл</string>
     <string name="settings_import_open_app">Открыть приложение</string>
     <string name="settings_import_manual">Инструкция вручную</string>
