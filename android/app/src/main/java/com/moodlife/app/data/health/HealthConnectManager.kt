@@ -507,6 +507,8 @@ class HealthConnectManager @Inject constructor(
             settingsRepository.set(SettingsRepository.KEY_HC_LAST_SYNC, System.currentTimeMillis().toString())
             settingsRepository.set(SettingsRepository.KEY_HC_LAST_ROWS, rows.toString())
             settingsRepository.set(SettingsRepository.KEY_HC_LAST_ORIGINS, JSONArray(originList).toString())
+            // Record counts per type only (no values) — lets a connected debugger see what HC returned.
+            Log.i(TAG, "Sync read counts: $diagnostics; sources: ${originList.size}")
             settingsRepository.set(
                 SettingsRepository.KEY_HC_LAST_DIAGNOSTICS,
                 org.json.JSONObject(diagnostics as Map<*, *>).toString(),
