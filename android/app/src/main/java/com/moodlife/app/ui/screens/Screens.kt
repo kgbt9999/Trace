@@ -231,6 +231,8 @@ fun TodayScreen(
             TodaySections.Id.MOOD,
             TodaySections.Id.EXTRA,
             TodaySections.Id.CLINICAL,
+            // Multi-slot mood check-ins were removed from Today (saved check-ins stay in the DB).
+            TodaySections.Id.CHECKINS,
         )
         val visiblePrefs = state.sectionPrefs
             .filter { it.visible && it.id !in duplicateSheets }
@@ -255,39 +257,15 @@ fun TodayScreen(
                     TodaySections.Id.MOOD,
                     TodaySections.Id.EXTRA,
                     TodaySections.Id.CLINICAL -> Unit
+                    // Which scales and which scale type: Settings → layout («Шкалы дня»).
                     TodaySections.Id.GRAPH_PARAMS -> {
-                        var configuring by rememberSaveable { mutableStateOf(false) }
                         CollapsibleSection(
                             title,
                             initiallyExpanded = true,
                             helpText = help,
-                            onEdit = { configuring = !configuring },
+                            onEdit = { viewModel.openSettingsSection("layout") },
                         ) {
-                            if (configuring) {
-                                Text(
-                                    stringResource(R.string.today_chart_params_pick),
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                )
-                                Spacer(Modifier.height(8.dp))
-                            }
-                            GraphParamsTrackablePicker(
-                                state = state,
-                                viewModel = viewModel,
-                                onToggle = viewModel::toggleTrackable,
-                                onScale = viewModel::setTrackableScale,
-                                configuring = configuring,
-                            )
-                            TextButton(
-                                onClick = { configuring = !configuring },
-                                modifier = Modifier.heightIn(min = 48.dp),
-                            ) {
-                                Text(
-                                    stringResource(
-                                        if (configuring) R.string.today_scales_configure_done else R.string.today_scales_configure,
-                                    ),
-                                )
-                            }
+                            DayScalesInput(state = state, viewModel = viewModel)
                         }
                     }
                     TodaySections.Id.CONTEXT -> key(state.date) {
@@ -324,22 +302,7 @@ fun TodayScreen(
                         HealthSummaryCards(state.healthDays, Modifier.padding(top = 8.dp))
                     }
                     }
-                    TodaySections.Id.CHECKINS -> key(state.date, state.checkInConfig) {
-                        CollapsibleSection(
-                            title,
-                            initiallyExpanded = true,
-                            subtitle = stringResource(R.string.checkins_hint),
-                            helpText = help,
-                            onEdit = { viewModel.openSettingsSection("layout") },
-                        ) {
-                            MoodCheckInsCard(
-                                checkIns = state.checkIns,
-                                onSave = viewModel::saveCheckIn,
-                                date = state.date,
-                                config = state.checkInConfig,
-                            )
-                        }
-                    }
+                    TodaySections.Id.CHECKINS -> Unit
                     // Sleep times stay as clock fields (not intensity chips): duration/bedtime
                     // need exact HH:mm. Quality/«дела» live in CLINICAL as unified trackables.
                     TodaySections.Id.SLEEP -> key(state.date) {
@@ -847,143 +810,44 @@ fun TodayScreen(
 }
 
 @Composable
-private fun GraphParamsTrackablePicker(
+private fun DayScalesInput(
     state: com.moodlife.app.ui.screens.today.TodayUiState,
     viewModel: TodayViewModel,
-    onToggle: (String) -> Unit,
-    onScale: (String, String) -> Unit,
-    configuring: Boolean,
 ) {
     val scaleColor = LocalMoodColors.current.functioning
-    if (!configuring) {
-        // Daily entry: only value inputs. The four mood axes and the safety question are the
-        // core check-in; the rest is one tap away so the card stays short.
-        val enabled = state.trackables.filter { it.enabled }
-        val primary = enabled.filter { it.section == "mood" || it.key == "safetyCheck" }
-        val secondary = enabled - primary.toSet()
-        var showMore by rememberSaveable { mutableStateOf(false) }
-        Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            if (enabled.isEmpty()) {
-                Text(
-                    stringResource(R.string.today_trackables_empty),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-            primary.forEach { item ->
-                key(item.key, item.scaleType) {
-                    TrackableValueInput(item = item, state = state, viewModel = viewModel, scaleColor = scaleColor)
-                }
-            }
-            if (secondary.isNotEmpty()) {
-                val filled = secondary.count { it.key in state.markedAxes }
-                TextButton(
-                    onClick = { showMore = !showMore },
-                    modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp),
-                ) {
-                    Text(
-                        stringResource(R.string.today_more_day_details, filled, secondary.size) +
-                            if (showMore) " ▲" else " ▼",
-                    )
-                }
-                if (showMore) {
-                    secondary.forEach { item ->
-                        key(item.key, item.scaleType) {
-                            TrackableValueInput(item = item, state = state, viewModel = viewModel, scaleColor = scaleColor)
-                        }
-                    }
-                }
+    // Core check-in (four mood axes + safety question) always visible; the rest one tap away.
+    val enabled = state.trackables.filter { it.enabled }
+    val primary = enabled.filter { it.section == "mood" || it.key == "safetyCheck" }
+    val secondary = enabled - primary.toSet()
+    var showMore by rememberSaveable { mutableStateOf(false) }
+    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        if (enabled.isEmpty()) {
+            Text(
+                stringResource(R.string.today_trackables_empty),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        primary.forEach { item ->
+            key(item.key, item.scaleType) {
+                TrackableValueInput(item = item, state = state, viewModel = viewModel, scaleColor = scaleColor)
             }
         }
-        return
-    }
-    val sections = listOf(
-        "mood" to R.string.today_mood_section,
-        "extra" to R.string.today_extra_section,
-        "clinical" to R.string.today_clinical_section,
-    )
-    var expandedHidden by remember { mutableStateOf(setOf<String>()) }
-    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        sections.forEach { (section, titleRes) ->
-            val items = com.moodlife.app.domain.TodayTrackables.forSection(state.trackables, section)
-            if (items.isEmpty()) return@forEach
-            val enabled = items.filter { it.enabled }
-            val hidden = items.filter { !it.enabled }
-            val showHidden = section in expandedHidden
-            Text(
-                stringResource(titleRes),
-                style = MaterialTheme.typography.titleSmall,
-                color = MaterialTheme.colorScheme.primary,
-            )
-            if (enabled.isEmpty()) {
+        if (secondary.isNotEmpty()) {
+            val filled = secondary.count { it.key in state.markedAxes }
+            TextButton(
+                onClick = { showMore = !showMore },
+                modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp),
+            ) {
                 Text(
-                    stringResource(R.string.today_trackables_empty),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    stringResource(R.string.today_more_day_details, filled, secondary.size) +
+                        if (showMore) " ▲" else " ▼",
                 )
             }
-            enabled.forEach { item ->
-                key(item.key, item.scaleType) {
-                    Column(Modifier.fillMaxWidth()) {
-                        Row(
-                            Modifier.fillMaxWidth(),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                        ) {
-                            Text(
-                                trackableLabel(item.key, null),
-                                style = MaterialTheme.typography.titleSmall,
-                                modifier = Modifier.weight(1f),
-                            )
-                            Switch(
-                                checked = true,
-                                onCheckedChange = { onToggle(item.key) },
-                            )
-                        }
-                        ScaleTypeChips(
-                            selected = item.scaleType,
-                            onSelect = { onScale(item.key, it) },
-                            options = TRACKABLE_SCALE_OPTIONS,
-                            showTitle = false,
-                            modifier = Modifier.padding(bottom = 2.dp),
-                        )
-                    }
-                }
-            }
-            if (hidden.isNotEmpty()) {
-                TextButton(
-                    onClick = {
-                        expandedHidden = if (showHidden) {
-                            expandedHidden - section
-                        } else {
-                            expandedHidden + section
-                        }
-                    },
-                ) {
-                    Text(
-                        stringResource(R.string.today_graph_params_hidden) +
-                            " (${hidden.size})" +
-                            if (showHidden) " ▲" else " ▼",
-                    )
-                }
-                if (showHidden) {
-                    hidden.forEach { item ->
-                        Row(
-                            Modifier
-                                .fillMaxWidth()
-                                .padding(vertical = 2.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                        ) {
-                            Text(
-                                trackableLabel(item.key, null),
-                                style = MaterialTheme.typography.bodyMedium,
-                                modifier = Modifier.weight(1f),
-                            )
-                            Switch(
-                                checked = false,
-                                onCheckedChange = { onToggle(item.key) },
-                            )
-                        }
+            if (showMore) {
+                secondary.forEach { item ->
+                    key(item.key, item.scaleType) {
+                        TrackableValueInput(item = item, state = state, viewModel = viewModel, scaleColor = scaleColor)
                     }
                 }
             }
@@ -1020,6 +884,7 @@ private fun TrackableValueInput(
                 hint = axisHint(item.key),
                 citationSourceId = sourceId,
                 onOpenSources = { viewModel.openSources(sourceId) },
+                compact = true,
             )
         }
         "yesno" -> ScaleInput(
@@ -1031,6 +896,7 @@ private fun TrackableValueInput(
             hint = axisHint(item.key),
             citationSourceId = sourceId,
             onOpenSources = { viewModel.openSources(sourceId) },
+            compact = true,
         )
         else -> {
             // 0–5 (and legacy 0–10 coerced)
@@ -1047,6 +913,7 @@ private fun TrackableValueInput(
                 hint = axisHint(item.key),
                 citationSourceId = sourceId,
                 onOpenSources = { viewModel.openSources(sourceId) },
+                compact = true,
             )
         }
     }

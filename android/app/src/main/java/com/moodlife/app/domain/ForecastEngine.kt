@@ -9,8 +9,12 @@ object ForecastEngine {
     private const val HORIZON = 2
     private const val RECENT_WINDOW_DAYS = 14
 
-    /** Recent days count double: current state predicts the next week better than old history. */
-    private const val RECENT_WEIGHT = 2.0
+    // Part weights: the recent fortnight predicts the coming week better than old history;
+    // a warning sign present right now outweighs both.
+    private const val W_BASE = 1.0
+    private const val W_RECENT = 2.0
+    private const val W_PHASE = 1.0
+    private const val W_SIGN = 3.0
 
     data class ForecastProb(
         val elevation: Double?,
@@ -92,37 +96,38 @@ object ForecastEngine {
         phase: CycleUtils.CyclePhase?,
         precipType: String?,
         recent: List<HistDay>,
+        today: String? = null,
     ): ForecastProb {
         val elevOut: (HistDay) -> Boolean = { it.elevated >= 2 }
         val depOut: (HistDay) -> Boolean = { it.depressed >= 2 }
         val mixedOut: (HistDay) -> Boolean = { it.depressed >= 2 && it.elevated >= 2 }
 
-        val recentMania = recent.any { it.warningMania || it.elevated >= 2 || (it.sleepHours != null && it.sleepHours < 6f) }
-        val recentDep = recent.any { it.warningDep || it.depressed >= 2 }
-        val lastWeeks = recentDays(hist, RECENT_WINDOW_DAYS)
+        val maniaSign: (HistDay) -> Boolean = { d -> d.warningMania || (d.sleepHours != null && d.sleepHours < 6f) }
+        val depSign: (HistDay) -> Boolean = { d -> d.warningDep || d.depressed >= 2 }
+        val lastWeeks = recentDays(hist, RECENT_WINDOW_DAYS, today)
 
-        // Personal base rate (whole history) + recent rate are always available once the user
-        // has MIN_SAMPLE days. Before, only prodrome-lag and cycle-phase parts existed; without
-        // logged warning signs or cycle data every part was empty and the forecast stayed blank.
+        // Base rate (all history) + recent rate are the prior. Conditional "after a sign, within
+        // HORIZON days" rates apply only when such a sign is actually in the last days — they
+        // used to be mixed in every day, inflating calm days. Fixed weights, not sample size:
+        // otherwise 180 history days drowned a present warning sign.
         val elev = blend(
-            baseRate(hist, elevOut),
-            baseRate(lastWeeks, elevOut).weighted(RECENT_WEIGHT),
-            lagProb(hist, { it.warningMania }, elevOut),
-            phaseRate(hist, phase, elevOut),
-            if (recentMania) lagProb(hist, { d -> d.warningMania || (d.sleepHours != null && d.sleepHours < 6f) }, elevOut) else ProbPart(null, 0),
+            baseRate(hist, elevOut).weighted(W_BASE),
+            baseRate(lastWeeks, elevOut).weighted(W_RECENT),
+            phaseRate(hist, phase, elevOut).weighted(W_PHASE),
+            if (recent.any(maniaSign)) lagProb(hist, maniaSign, elevOut).weighted(W_SIGN) else NONE,
         )
         val dep = blend(
-            baseRate(hist, depOut),
-            baseRate(lastWeeks, depOut).weighted(RECENT_WEIGHT),
-            lagProb(hist, { it.warningDep }, depOut),
-            phaseRate(hist, phase, depOut),
-            if (recentDep) lagProb(hist, { it.warningDep || it.depressed >= 2 }, depOut) else ProbPart(null, 0),
+            baseRate(hist, depOut).weighted(W_BASE),
+            baseRate(lastWeeks, depOut).weighted(W_RECENT),
+            phaseRate(hist, phase, depOut).weighted(W_PHASE),
+            if (recent.any(depSign)) lagProb(hist, depSign, depOut).weighted(W_SIGN) else NONE,
         )
+        val mixedSign: (HistDay) -> Boolean = { maniaSign(it) && depSign(it) }
         val mixed = blend(
-            baseRate(hist, mixedOut),
-            baseRate(lastWeeks, mixedOut).weighted(RECENT_WEIGHT),
-            lagProb(hist, { it.warningMania && it.warningDep }, mixedOut),
-            phaseRate(hist, phase, mixedOut),
+            baseRate(hist, mixedOut).weighted(W_BASE),
+            baseRate(lastWeeks, mixedOut).weighted(W_RECENT),
+            phaseRate(hist, phase, mixedOut).weighted(W_PHASE),
+            if (recent.any(mixedSign)) lagProb(hist, mixedSign, mixedOut).weighted(W_SIGN) else NONE,
         )
 
         val n = hist.size
@@ -198,7 +203,7 @@ object ForecastEngine {
             CycleUtils.calcCyclePhase(it, cycleLength, periodLength, date, irregular)
         }
         val recent = recentWindow(hist, today, date)
-        val probs = probabilitiesForDay(hist, markers?.phase, null, recent)
+        val probs = probabilitiesForDay(hist, markers?.phase, null, recent, today)
         val worst = maxOf(probs.elevation ?: 0.0, probs.depression ?: 0.0, probs.mixed ?: 0.0)
         val score = if (probs.elevation == null && probs.depression == null) null
         else ((10 - worst * 10).coerceIn(0.0, 10.0) * 10).toInt() / 10.0
@@ -222,11 +227,11 @@ object ForecastEngine {
     private fun baseRate(days: List<HistDay>, outcome: (HistDay) -> Boolean): ProbPart =
         ProbPart(rate(days.count(outcome), days.size), days.size)
 
-    /** Days within [windowDays] calendar days of the latest entry. */
-    private fun recentDays(hist: List<HistDay>, windowDays: Int): List<HistDay> {
-        val last = hist.maxOfOrNull { it.date } ?: return emptyList()
-        val from = DateUtils.addDays(last, -(windowDays - 1).toLong())
-        return hist.filter { it.date >= from }
+    /** Days within the last [windowDays] calendar days before [today] (or the latest entry). */
+    private fun recentDays(hist: List<HistDay>, windowDays: Int, today: String?): List<HistDay> {
+        val end = today ?: hist.maxOfOrNull { it.date } ?: return emptyList()
+        val from = DateUtils.addDays(end, -(windowDays - 1).toLong())
+        return hist.filter { it.date >= from && it.date <= end }
     }
 
     /**
@@ -255,11 +260,14 @@ object ForecastEngine {
         return ProbPart(rate(subset.count(outcome), subset.size), subset.size)
     }
 
+    private val NONE = ProbPart(null, 0)
+
+    /** Weighted mean of the parts that have at least [MIN_SAMPLE] observations. */
     private fun blend(vararg parts: ProbPart): ProbPart {
         val usable = parts.filter { it.p != null && it.n >= MIN_SAMPLE }
         if (usable.isEmpty()) return ProbPart(null, parts.sumOf { it.n })
-        val totalWeight = usable.sumOf { it.n * it.weight }
-        val p = usable.sumOf { (it.p ?: 0.0) * it.n * it.weight } / totalWeight
+        val totalWeight = usable.sumOf { it.weight }
+        val p = usable.sumOf { (it.p ?: 0.0) * it.weight } / totalWeight
         return ProbPart(p, usable.sumOf { it.n })
     }
 }

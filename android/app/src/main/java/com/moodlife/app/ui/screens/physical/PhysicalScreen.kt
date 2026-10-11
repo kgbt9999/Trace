@@ -143,12 +143,14 @@ fun PhysicalScreen(
         }
         if (state.bodyMeasurementsEnabled) {
             Spacer(Modifier.height(12.dp))
+            val bodyChartsVisible by viewModel.bodyChartsVisible.collectAsStateWithLifecycle()
             BodyMeasurementsSection(
                 entryDate = state.anchorDate,
                 current = state.bodyMeasurementForDate,
                 history = state.bodyMeasurementHistory,
                 hcDays = state.chartHcDays,
-                onSave = viewModel::saveBodyMeasurement,
+                chartsVisible = bodyChartsVisible,
+                onChartsVisibleChange = viewModel::setBodyChartsVisible,
                 onSaveField = viewModel::saveBodyMeasurementField,
             )
         }

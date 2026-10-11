@@ -54,6 +54,11 @@ fun ScaleInput(
     citationSourceId: String? = null,
     onOpenSources: (() -> Unit)? = null,
     onEditLabel: (() -> Unit)? = null,
+    /**
+     * Daily-entry density: no card frame or hint, numbers only on numeric steps (the anchor
+     * word for the chosen value is shown in the readout). Twelve full cards made Today a wall.
+     */
+    compact: Boolean = false,
 ) {
     val isNumeric = options == null
     val count = if (isNumeric) max + 1 else options.size
@@ -68,18 +73,22 @@ fun ScaleInput(
     Surface(
         modifier = modifier
             .fillMaxWidth()
-            .padding(vertical = 6.dp)
+            .padding(vertical = if (compact) 2.dp else 6.dp)
             .semantics { contentDescription = "scale_$label" },
         shape = shape,
-        color = MaterialTheme.colorScheme.surfaceContainerLow,
+        color = if (compact) Color.Transparent else MaterialTheme.colorScheme.surfaceContainerLow,
         tonalElevation = 0.dp,
         shadowElevation = 0.dp,
-        border = androidx.compose.foundation.BorderStroke(
-            1.dp,
-            MaterialTheme.colorScheme.outline.copy(alpha = 0.35f),
-        ),
+        border = if (compact) {
+            null
+        } else {
+            androidx.compose.foundation.BorderStroke(
+                1.dp,
+                MaterialTheme.colorScheme.outline.copy(alpha = 0.35f),
+            )
+        },
     ) {
-        Column(Modifier.padding(14.dp)) {
+        Column(Modifier.padding(if (compact) 0.dp else 14.dp)) {
             Row(
                 Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically,
@@ -110,7 +119,7 @@ fun ScaleInput(
                             .padding(2.dp),
                     )
                 }
-                if (citationSourceId != null && onOpenSources != null) {
+                if (!compact && citationSourceId != null && onOpenSources != null) {
                     SourceCitation(citationSourceId, onOpenSources)
                 }
                 Spacer(Modifier.width(8.dp))
@@ -127,14 +136,14 @@ fun ScaleInput(
                         .padding(horizontal = 8.dp, vertical = 3.dp),
                 )
             }
-            Spacer(Modifier.padding(top = 8.dp))
+            Spacer(Modifier.padding(top = if (compact) 4.dp else 8.dp))
             if (isNumeric) {
                 NumericSteps(
                     label = label,
                     value = value,
                     max = max,
                     count = count,
-                    anchors = anchors,
+                    anchors = if (compact) null else anchors,
                     color = color,
                     onValueChange = onValueChange,
                 )
@@ -147,7 +156,7 @@ fun ScaleInput(
                     onValueChange = onValueChange,
                 )
             }
-            if (!hint.isNullOrBlank()) {
+            if (!compact && !hint.isNullOrBlank()) {
                 Text(
                     text = hint,
                     style = MaterialTheme.typography.bodySmall,

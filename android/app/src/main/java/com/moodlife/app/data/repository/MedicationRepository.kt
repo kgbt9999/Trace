@@ -232,6 +232,19 @@ class MedicationRepository @Inject constructor(
         medicationLogDao.deleteByMedAndDate(medicationId, date)
     }
 
+    /**
+     * Whether [med] belongs on [date] when that day has no journal row yet: only from the day it
+     * was added. Without this a newly added medication showed up (as "missed") on every past day.
+     */
+    fun isPlannedOn(med: MedicationEntity, date: String): Boolean =
+        med.isActive && date >= startDate(med)
+
+    fun startDate(med: MedicationEntity): String =
+        java.time.Instant.ofEpochMilli(med.createdAt)
+            .atZone(java.time.ZoneId.systemDefault())
+            .toLocalDate()
+            .toString()
+
     fun effectiveName(med: MedicationEntity, log: MedicationLogEntity?): String =
         log?.nameSnapshot?.takeIf { it.isNotBlank() } ?: med.name
 

@@ -160,46 +160,6 @@ class ReportsRepository @Inject constructor(
         }
     }
 
-    /** Per-day taken lines: "12 мая — Название · доза · слоты". */
-    fun observeMedTakenLines(from: String, to: String): Flow<List<String>> =
-        combine(
-            medicationLogDao.observeRange(from, to),
-            medicationDao.observeVisibleInRange(from, to),
-        ) { logs, meds ->
-            if (meds.isEmpty()) return@combine emptyList()
-            val byDate = logs.groupBy { it.date }
-            buildList {
-                daysIn(from, to).forEach { iso ->
-                    val d = LocalDate.parse(iso)
-                    val dayLogs = byDate[iso].orEmpty()
-                    val dayLabel = "${d.dayOfMonth} ${DateUtils.MONTH_NAMES_RU[d.monthValue - 1].take(3).lowercase()}"
-                    meds.forEach { med ->
-                        val log = dayLogs.find { it.medicationId == med.id } ?: return@forEach
-                        val day = MedsUtils.daySlots(
-                            log.intakeTimesSnapshot?.takeIf { it.isNotBlank() } ?: med.intakeTimes,
-                            log.taken,
-                            log.slotsTaken,
-                        )
-                        val takenLabels = if (day.untimed) {
-                            if (day.takenCount > 0) listOf("день") else emptyList()
-                        } else {
-                            day.slots.filter { day.taken[it] == true }.map { MedsUtils.slotLabel(it) }
-                        }
-                        if (takenLabels.isEmpty()) return@forEach
-                        val name = log.nameSnapshot?.takeIf { it.isNotBlank() } ?: med.name
-                        val doseStr = (log.dosageOverride ?: med.dosage)?.takeIf { it.isNotBlank() }
-                        add(
-                            buildString {
-                                append(dayLabel).append(" — ").append(name)
-                                if (doseStr != null) append(" · ").append(doseStr)
-                                append(" · ").append(takenLabels.joinToString(", "))
-                            },
-                        )
-                    }
-                }
-            }
-        }
-
     /**
      * Frequency and average intensity of early-warning signs logged in the period.
      * Counts and intensity only — not progress toward an episode.

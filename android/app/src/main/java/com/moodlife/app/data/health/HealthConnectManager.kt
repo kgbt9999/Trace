@@ -17,6 +17,7 @@ import androidx.health.connect.client.records.MenstruationFlowRecord
 import androidx.health.connect.client.records.MenstruationPeriodRecord
 import androidx.health.connect.client.records.NutritionRecord
 import androidx.health.connect.client.records.SleepSessionRecord
+import com.moodlife.app.domain.SleepAggregation
 import androidx.health.connect.client.records.StepsRecord
 import androidx.health.connect.client.records.TotalCaloriesBurnedRecord
 import androidx.health.connect.client.records.WeightRecord
@@ -297,21 +298,26 @@ class HealthConnectManager @Inject constructor(
 
             if (canRead(SleepSessionRecord::class)) {
                 val sleep = client.readRecords(ReadRecordsRequest(SleepSessionRecord::class, timeRangeFilter = filter))
-                val hoursByDate = mutableMapOf<String, Float>()
-                for (record in sleep.records) {
+                val sessions = sleep.records.map { record ->
                     noteOrigin(record.metadata.dataOrigin.packageName)
-                    val date = isoDate(record.endTime)
-                    val hours = ChronoUnit.MINUTES.between(record.startTime, record.endTime) / 60f
-                    hoursByDate[date] = (hoursByDate[date] ?: 0f) + hours
+                    SleepAggregation.Session(
+                        origin = record.metadata.dataOrigin.packageName,
+                        start = record.startTime,
+                        end = record.endTime,
+                        awakeMinutes = record.stages
+                            .filter { it.stage in AWAKE_STAGES }
+                            .sumOf { ChronoUnit.MINUTES.between(it.startTime, it.endTime).coerceAtLeast(0) },
+                    )
                 }
-                for ((date, hours) in hoursByDate) {
+                for (day in SleepAggregation.byDay(sessions)) {
                     externalHealthRepository.upsertMerged(
                         ExternalHealthDayEntity(
                             id = "",
-                            date = date,
+                            date = day.date,
                             source = SOURCE,
                             kind = "sleep",
-                            sleepHours = hours,
+                            sleepHours = day.hours,
+                            payload = day.payload(),
                             createdAt = 0,
                             updatedAt = 0,
                         ),
@@ -540,5 +546,8 @@ class HealthConnectManager @Inject constructor(
 
     companion object {
         const val SOURCE = "health-connect"
+
+        /** Awake, out of bed, awake in bed (Health Connect stage codes 1, 3, 7). */
+        private val AWAKE_STAGES = setOf(1, 3, 7)
     }
 }

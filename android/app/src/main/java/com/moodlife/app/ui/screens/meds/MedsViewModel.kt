@@ -65,6 +65,7 @@ class MedsViewModel @Inject constructor(
             var scheduled = 0
             meds.forEach { med ->
                 val log = dayLogs.find { it.medicationId == med.id }
+                if (log == null && !medicationRepository.isPlannedOn(med, date)) return@forEach
                 val day = MedsUtils.daySlots(
                     medicationRepository.effectiveIntakeTimes(med, log),
                     log?.taken == true,

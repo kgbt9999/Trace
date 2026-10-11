@@ -67,7 +67,6 @@ data class ReportsUiState(
     val routineSeries: List<Pair<String, Float>> = emptyList(),
     val safetySeries: List<Pair<String, Float>> = emptyList(),
     val medDoseSeries: List<MedDoseSeries> = emptyList(),
-    val medTakenLines: List<String> = emptyList(),
     val adherenceDays: List<Pair<String, Float?>> = emptyList(),
     val warningStats: List<WarningSignStat> = emptyList(),
     val monthSummaries: List<MonthEntrySummary> = emptyList(),
@@ -194,10 +193,6 @@ class ReportsViewModel @Inject constructor(
         _range.flatMapLatest { (from, to) -> reportsRepository.observeMedDoseSeries(from, to) },
     ) { state, series ->
         state.copy(medDoseSeries = series)
-    }.combine(
-        _range.flatMapLatest { (from, to) -> reportsRepository.observeMedTakenLines(from, to) },
-    ) { state, lines ->
-        state.copy(medTakenLines = lines)
     }.combine(
         _range.flatMapLatest { (from, to) -> reportsRepository.observeAdherenceDays(from, to) },
     ) { state, days ->

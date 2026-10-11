@@ -74,6 +74,8 @@ class SettingsRepository @Inject constructor(private val settingDao: SettingDao)
         const val KEY_BODY_HEIGHT_CM = "body_height_cm"
         /** Show body measurements block on Physical tab — "true" / "false", default off. */
         const val KEY_BODY_MEASUREMENTS_ENABLED = "body_measurements_enabled"
+        /** "false" hides body measurement charts on Physical (default: shown). */
+        const val KEY_BODY_CHARTS_VISIBLE = "body_charts_visible"
         /** Show lab results on Physical — "true"/"false"; absent defaults to on (Ornament-like). */
         const val KEY_LAB_RESULTS_ENABLED = "lab_results_enabled"
         /** Nutrition goals JSON: {"kcal":N,"protein":N,"fat":N,"carbs":N} — optional. */

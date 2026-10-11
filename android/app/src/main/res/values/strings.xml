@@ -324,8 +324,6 @@
     <string name="reports_charts_move_up">Выше</string>
     <string name="reports_charts_move_down">Ниже</string>
     <string name="today_graph_params_section">Состояние за день</string>
-    <string name="today_scales_configure">Настроить шкалы</string>
-    <string name="today_scales_configure_done">Готово</string>
     <string name="today_more_day_details">Подробнее о дне · %1$d из %2$d</string>
     <string name="today_summary_mood">Состояние</string>
     <string name="today_summary_sleep">Сон</string>
@@ -384,14 +382,13 @@
     <string name="reports_history_meds">Лекарства: %1$s</string>
     <string name="reports_med_adherence_title">Приём по дням</string>
     <string name="reports_med_adherence_hint">Зелёный — все слоты отмечены, красный — есть пропуски, серый — нет журнала.</string>
-    <string name="reports_level2_title">Тревога и активность</string>
-    <string name="reports_level2_hint">Тревога (0–5) и силы, приведённые к той же шкале 0–5; ниже — раздражение.</string>
-    <string name="reports_level3_title">Дополнительные оси</string>
-    <string name="reports_level3_hint">Уровень 3: внимание, общение, аппетит — удобно смотреть раз в неделю.</string>
+    <string name="reports_level2_title">Тревога и раздражение</string>
+    <string name="reports_level2_hint">Обе шкалы 0–5: нет · чуть · заметно · мешает · сильно · срыв.</string>
+    <string name="reports_level3_title">Силы, концентрация, общение, аппетит</string>
+    <string name="reports_level3_hint">Отмеченные дни. Силы, концентрация и общение — относительно обычного для вас; аппетит — насколько он отличался от обычного.</string>
     <string name="reports_med_legend_taken">Принял</string>
     <string name="reports_med_legend_missed">Пропустил</string>
     <string name="reports_med_legend_none">Нет данных</string>
-    <string name="reports_med_taken_list_title">Что принято по дням</string>
     <string name="calendar_icon_note_hint">Краткое значение значка (только для себя)</string>
     <string name="calendar_day_meds_title">Дневник лекарств</string>
     <string name="calendar_day_meds_list_title">Лекарства</string>
@@ -950,8 +947,10 @@
     <string name="today_trackables_hint">Выберите пункт — затем оцените интенсивность. Список и тип шкалы настраиваются в «Экран Сегодня».</string>
     <string name="today_trackables_empty">Нет включённых пунктов. Добавьте их в настройках экрана «Сегодня».</string>
     <string name="today_trackables_configure">Настроить пункты</string>
-    <string name="today_trackables_settings_title">Оси: выбор пунктов и шкал</string>
-    <string name="today_trackables_settings_desc">Основные оси, дополнительно, сон и дела — как триггеры: что показывать и какой шкалой оценивать.</string>
+    <string name="today_trackables_settings_title">Шкалы дня</string>
+    <string name="physical_body_previous">Было %1$s %2$s · %3$s</string>
+    <string name="physical_body_saved">Сохранено</string>
+    <string name="today_trackables_settings_desc">Какие шкалы показывать на «Сегодня» и какой шкалой оценивать (0–5, да/нет, варианты). Основные шкалы видны сразу, остальные — под «Подробнее о дне».</string>
     <string name="today_trackables_save">Сохранить оси</string>
 
     <string name="settings_nav_other">Другие настройки</string>

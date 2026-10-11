@@ -436,7 +436,10 @@ class TodayViewModel @Inject constructor(
                             DbSnapshot(
                                 date = values[0] as String,
                                 entry = values[1] as MoodEntryEntity?,
-                                meds = values[2] as List<MedicationEntity>,
+                                meds = (values[2] as List<MedicationEntity>).let { meds ->
+                                    val logged = (values[3] as List<MedicationLogEntity>).map { it.medicationId }.toSet()
+                                    meds.filter { it.id in logged || medicationRepository.isPlannedOn(it, date) }
+                                },
                                 medLogs = values[3] as List<MedicationLogEntity>,
                                 symptoms = values[4] as List<SymptomEntity>,
                                 symptomLogs = values[5] as List<SymptomLogEntity>,
@@ -693,7 +696,11 @@ class TodayViewModel @Inject constructor(
         viewModelScope.launch {
             val existingId = editor.existingId
             if (existingId == null) {
-                medicationRepository.addMedicationDetailed(trimmed, dosage, slots, isRegular)
+                val created = medicationRepository.addMedicationDetailed(trimmed, dosage, slots, isRegular)
+                // Added while viewing a past day: put it on that day only, not on every day before.
+                if (created != null && date < DateUtils.todayIso()) {
+                    medicationRepository.updateDaySnapshot(created.id, date, updateDosage = false)
+                }
                 _uiState.update { it.copy(medEditor = null, saveMessage = "med_added") }
             } else {
                 when (scope) {
@@ -1898,7 +1905,11 @@ class TodayViewModel @Inject constructor(
         if (state.sleepHoursText.isNotBlank()) return
         val hours = sleep.sleepHours ?: return
         _uiState.update {
-            it.copy(sleepHoursText = String.format(java.util.Locale.US, "%.1f", hours))
+            it.copy(
+                sleepHoursText = String.format(java.util.Locale.US, "%.1f", hours),
+                sleepTime = it.sleepTime.ifBlank { com.moodlife.app.domain.SleepAggregation.bedTime(sleep.payload).orEmpty() },
+                wakeTime = it.wakeTime.ifBlank { com.moodlife.app.domain.SleepAggregation.wakeTime(sleep.payload).orEmpty() },
+            )
         }
     }
 
@@ -1907,7 +1918,12 @@ class TodayViewModel @Inject constructor(
         val hours = sleep.sleepHours ?: return
         markUserEdited()
         _uiState.update {
-            it.copy(sleepHoursText = String.format(java.util.Locale.US, "%.1f", hours), userEdited = true)
+            it.copy(
+                sleepHoursText = String.format(java.util.Locale.US, "%.1f", hours),
+                sleepTime = com.moodlife.app.domain.SleepAggregation.bedTime(sleep.payload) ?: it.sleepTime,
+                wakeTime = com.moodlife.app.domain.SleepAggregation.wakeTime(sleep.payload) ?: it.wakeTime,
+                userEdited = true,
+            )
         }
     }
 

@@ -52,11 +52,22 @@ class ForecastEngineTest {
     }
 
     @Test
-    fun `warning signs preceding low days raise depression probability`() {
+    fun `a warning sign in the last days raises depression probability`() {
+        // Signs fall on the day before each low day; on 2026-10-11 yesterday had a sign.
+        val plain = ForecastEngine.buildForecast("2026-10-11", history(40), null, 28, 5, false, 1)
+            .first().probabilities.depression!!
+        val withSigns = ForecastEngine.buildForecast("2026-10-11", history(40, warningDep = true), null, 28, 5, false, 1)
+            .first().probabilities.depression!!
+        assertTrue("signs=$withSigns plain=$plain", withSigns > plain + 0.1)
+    }
+
+    @Test
+    fun `sign statistics do not inflate a calm day`() {
+        // No sign and no low day in the two days before 2026-10-10 → only base/recent rates apply.
         val plain = ForecastEngine.buildForecast("2026-10-10", history(40), null, 28, 5, false, 1)
             .first().probabilities.depression!!
         val withSigns = ForecastEngine.buildForecast("2026-10-10", history(40, warningDep = true), null, 28, 5, false, 1)
             .first().probabilities.depression!!
-        assertTrue("signs=$withSigns plain=$plain", withSigns > plain)
+        assertEquals(plain, withSigns, 1e-9)
     }
 }
