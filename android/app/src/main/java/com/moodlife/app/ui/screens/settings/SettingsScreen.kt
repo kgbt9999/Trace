@@ -215,7 +215,15 @@ internal fun integrationMessageText(msg: String): String = when {
     msg == "backup_fail" -> stringResource(R.string.settings_backup_fail)
     msg == "import_ok" -> stringResource(R.string.settings_backup_import_ok)
     msg.startsWith("import_done:") -> msg.substringAfter(":").split("|").let { p ->
-        stringResource(R.string.settings_import_done, p.getOrElse(0) { "" }, p.getOrElse(1) { "0" }, p.getOrElse(2) { "0" })
+        buildString {
+            append(stringResource(R.string.settings_import_done, p.getOrElse(0) { "" }, p.getOrElse(1) { "0" }, p.getOrElse(2) { "0" }))
+            val from = p.getOrElse(3) { "" }
+            val to = p.getOrElse(4) { "" }
+            if (from.isNotEmpty()) append(". ").append(stringResource(R.string.settings_import_range, from, to))
+            val filled = p.getOrElse(5) { "0" }.toIntOrNull() ?: 0
+            val kept = p.getOrElse(6) { "0" }.toIntOrNull() ?: 0
+            if (filled + kept > 0) append(". ").append(stringResource(R.string.settings_import_sleep, filled, kept))
+        }
     }
     msg == "import_running" -> stringResource(R.string.settings_import_running)
     msg == "import_fail" -> stringResource(R.string.settings_backup_import_fail)

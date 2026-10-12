@@ -715,6 +715,8 @@
     <string name="settings_import_fail_reason">Не удалось импортировать: %1$s</string>
     <string name="settings_import_running">Читаю файл…</string>
     <string name="settings_import_done">Импортировано: %1$s. Дней: %2$s, заметок: %3$s</string>
+    <string name="settings_import_range">Даты в файле: %1$s — %2$s</string>
+    <string name="settings_import_sleep">Сон добавлен за %1$d дн., уже был заполнен (не тронут) за %2$d дн.</string>
     <string name="settings_clear_data">Удалить все данные</string>
     <string name="settings_clear_confirm">Удалить все записи и настройки? Это нельзя отменить.</string>
     <string name="settings_clear_ok">Данные удалены</string>

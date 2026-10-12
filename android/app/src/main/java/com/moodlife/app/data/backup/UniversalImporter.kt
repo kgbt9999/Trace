@@ -26,7 +26,17 @@ class UniversalImporter @Inject constructor(
     private val dayNoteRepository: DayNoteRepository,
     private val dayNoteDao: DayNoteDao,
 ) {
-    data class Summary(val formats: List<String>, val days: Int, val notes: Int, val error: String? = null)
+    data class Summary(
+        val formats: List<String>,
+        val days: Int,
+        val notes: Int,
+        val error: String? = null,
+        /** Dates found in the file and how many got sleep — so "nothing changed" is explainable. */
+        val firstDate: String? = null,
+        val lastDate: String? = null,
+        val sleepFilled: Int = 0,
+        val sleepKept: Int = 0,
+    )
 
     suspend fun import(stream: InputStream, name: String): Summary = withContext(Dispatchers.IO) {
         val files = ImportFileReader.read(stream, name)
@@ -34,6 +44,9 @@ class UniversalImporter @Inject constructor(
         val formats = mutableListOf<String>()
         var days = 0
         var notes = 0
+        val dates = mutableListOf<String>()
+        var sleepFilled = 0
+        var sleepKept = 0
         for (file in files) {
             val text = file.text
             if (text.isBlank()) continue
@@ -53,7 +66,8 @@ class UniversalImporter @Inject constructor(
                 }
                 else -> {
                     val parsed = ForeignImport.parse(file.name, text) ?: continue
-                    val (d, n) = merge(parsed.days)
+                    dates += parsed.days.map { it.date }
+                    val (d, n) = merge(parsed.days) { filled -> if (filled) sleepFilled++ else sleepKept++ }
                     formats += parsed.format
                     days += d
                     notes += n
@@ -63,11 +77,14 @@ class UniversalImporter @Inject constructor(
         if (formats.isEmpty()) {
             Summary(emptyList(), 0, 0, "не найдено дат: формат файла не распознан")
         } else {
-            Summary(formats.distinct(), days, notes)
+            Summary(formats.distinct(), days, notes, firstDate = dates.minOrNull(), lastDate = dates.maxOrNull(), sleepFilled = sleepFilled, sleepKept = sleepKept)
         }
     }
 
-    private suspend fun merge(incoming: List<ForeignImport.Day>): Pair<Int, Int> {
+    private suspend fun merge(
+        incoming: List<ForeignImport.Day>,
+        onSleep: (filled: Boolean) -> Unit = {},
+    ): Pair<Int, Int> {
         var daysChanged = 0
         var notesAdded = 0
         incoming.groupBy { it.date }.forEach { (date, list) ->
@@ -82,9 +99,15 @@ class UniversalImporter @Inject constructor(
                     changed = true
                 }
             }
-            if (sleep != null && fields.sleepHours == null) {
-                fields = fields.copy(sleepHours = sleep)
-                changed = true
+            if (sleep != null) {
+                if (fields.sleepHours == null) {
+                    fields = fields.copy(sleepHours = sleep)
+                    changed = true
+                    onSleep(true)
+                } else {
+                    // Already entered for that day — kept, but reported.
+                    onSleep(false)
+                }
             }
             val bed = list.firstNotNullOfOrNull { it.bedTime }
             val wake = list.firstNotNullOfOrNull { it.wakeTime }

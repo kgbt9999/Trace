@@ -742,7 +742,8 @@ class SettingsViewModel @Inject constructor(
             Log.i(IMPORT_TAG, "Import: formats=${summary.formats} days=${summary.days} notes=${summary.notes} error=${summary.error != null}")
             _message.value = when {
                 summary.error != null -> "import_fail:${summary.error}"
-                else -> "import_done:${summary.formats.joinToString(", ")}|${summary.days}|${summary.notes}"
+                else -> "import_done:${summary.formats.joinToString(", ")}|${summary.days}|${summary.notes}" +
+                    "|${summary.firstDate.orEmpty()}|${summary.lastDate.orEmpty()}|${summary.sleepFilled}|${summary.sleepKept}"
             }
         } catch (e: Exception) {
             Log.w(IMPORT_TAG, "Import failed: ${e.javaClass.simpleName}")
