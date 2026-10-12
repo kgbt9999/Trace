@@ -176,6 +176,8 @@ data class TodayUiState(
     val sectionPrefs: List<TodaySections.Pref> = TodaySections.defaults(),
     val cycleDayLabel: String? = null,
     val moonLabel: String? = null,
+    val latestWeightKg: Float? = null,
+    val latestWeightDate: String? = null,
     val checkInScheme: String = "morning_day_night",
     val checkInAxes: Set<String> = setOf("tension", "clarity", "impulse", "fatigue"),
     val checkInConfig: com.moodlife.app.domain.CheckInConfig = com.moodlife.app.domain.CheckInConfig.default(),
@@ -203,6 +205,7 @@ class TodayViewModel @Inject constructor(
     private val weatherRepository: WeatherRepository,
     private val externalHealthRepository: ExternalHealthRepository,
     private val periodRepository: PeriodRepository,
+    private val bodyMeasurementRepository: com.moodlife.app.data.repository.BodyMeasurementRepository,
     private val settingsRepository: SettingsRepository,
     private val healthConnectManager: HealthConnectManager,
 ) : ViewModel() {
@@ -356,6 +359,15 @@ class TodayViewModel @Inject constructor(
                 }
         }
         viewModelScope.launch {
+            // Latest manual weight on or before the day (for «Контекст дня»).
+            _selectedDate.flatMapLatest { date ->
+                bodyMeasurementRepository.observeRange(DateUtils.addDays(date, -365), date)
+            }.collect { rows ->
+                val w = rows.filter { it.weightKg != null }.maxByOrNull { it.date }
+                _uiState.update { it.copy(latestWeightKg = w?.weightKg, latestWeightDate = w?.date) }
+            }
+        }
+        viewModelScope.launch {
             combine(_selectedDate, periodRepository.observe()) { date, period ->
                 date to period
             }.collect { (date, period) ->
@@ -370,7 +382,7 @@ class TodayViewModel @Inject constructor(
                         period.irregular,
                     )
                     val info = com.moodlife.app.domain.CycleUtils.PHASE_INFO[m.phase]
-                    "${info?.emoji.orEmpty()} День ${m.dayOfCycle} · ${info?.label.orEmpty()}"
+                    "${info?.emoji.orEmpty()} День ${m.dayOfCycle}"
                 }
                 _uiState.update {
                     it.copy(

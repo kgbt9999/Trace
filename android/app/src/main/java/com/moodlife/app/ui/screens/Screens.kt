@@ -285,11 +285,15 @@ fun TodayScreen(
                         helpText = help,
                         onEdit = { viewModel.openSettingsSection("integrations") },
                     ) {
+                        val hcSleep = state.healthDays.firstOrNull { it.kind == "sleep" }?.sleepHours
+                        val hcWeight = state.healthDays.firstOrNull { it.kind == "weight" }?.weightKg
                         com.moodlife.app.ui.components.DayContextCompact(
                             weather = state.weather,
                             moonLabel = state.moonLabel,
                             cycleLabel = state.cycleDayLabel,
-                            health = state.healthDays,
+                            sleepHours = state.sleepHoursText.replace(',', '.').toFloatOrNull() ?: hcSleep,
+                            weightKg = state.latestWeightKg ?: hcWeight,
+                            moodPhase = state.episodePhase?.takeIf { state.moodEntryId != null },
                         )
                     }
                     }

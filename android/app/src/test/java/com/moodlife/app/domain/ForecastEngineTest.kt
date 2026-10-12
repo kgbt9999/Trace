@@ -70,4 +70,23 @@ class ForecastEngineTest {
             .first().probabilities.depression!!
         assertEquals(plain, withSigns, 1e-9)
     }
+
+    @Test
+    fun `phase shares never overlap and add up to one`() {
+        val shares = ForecastEngine.phaseShares(ForecastEngine.ForecastProb(elevation = 0.6, depression = 0.5, mixed = 0.3, sample = 30, note = ""))!!
+        assertEquals(1.0, shares.values.sum(), 1e-9)
+        assertEquals(0.3, shares.getValue(ForecastEngine.Phase.MIXED), 1e-9)
+        assertEquals(0.2, shares.getValue(ForecastEngine.Phase.DEPRESSION), 1e-9)
+        assertEquals(0.3, shares.getValue(ForecastEngine.Phase.HYPOMANIA), 1e-9)
+    }
+
+    @Test
+    fun `self-check only uses earlier days and reports a baseline`() {
+        val hist = history(40)
+        val check = ForecastEngine.backtest(hist, null, 28, 5, false)
+        assertEquals(40 - ForecastEngine.MIN_SAMPLE, check.days)
+        assertTrue(check.hits in 0..check.days)
+        // Every 4th day is low, so "always even" is right on ~3/4 of the days.
+        assertEquals(0.75, check.baselineAccuracy!!, 0.05)
+    }
 }

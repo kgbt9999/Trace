@@ -491,6 +491,12 @@
     <string name="forecast_cell_mixed">Смешанное</string>
     <string name="forecast_overview_hint">Оценка дня из 10: зелёный — спокойно, жёлтый — внимание, красный — риск выше.</string>
     <string name="forecast_common_title">На эти дни</string>
+    <string name="forecast_check_title">Точность прогноза на ваших данных: %1$d%%</string>
+    <string name="forecast_check_body">Проверено на прошлых днях: фаза угадана в %1$d из %2$d (прогноз строился только по дням до них). Простое угадывание «как обычно» дало бы %3$d%%.</string>
+    <string name="forecast_check_warnings">Когда прогноз предупреждал (≥30%%), фаза наступала в %1$d из %2$d дней (%3$d%%).</string>
+    <string name="forecast_check_episodes">Из %2$d дней с депрессией/гипоманией прогноз заранее предупредил о %1$d (%3$d%%).</string>
+    <string name="forecast_check_weak">Пока прогноз не лучше простого угадывания — опирайтесь на него осторожно; точность вырастет с историей.</string>
+    <string name="forecast_check_none">Точность прогноза появится, когда в дневнике будет больше 8 дней.</string>
     <string name="forecast_prob_elev">Вероятность подъёма (подъём «заметно» и выше): ~%1$d%%</string>
     <string name="forecast_prob_dep">Вероятность спада (подавленность «заметно» и выше): ~%1$d%%</string>
     <string name="settings_symptoms">Симптомы</string>

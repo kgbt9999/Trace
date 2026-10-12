@@ -69,6 +69,7 @@ import com.moodlife.app.util.DateUtils
 fun ForecastScreen(viewModel: ForecastViewModel = hiltViewModel()) {
     val days by viewModel.days.collectAsStateWithLifecycle()
     val horizon by viewModel.horizonDays.collectAsStateWithLifecycle()
+    val check by viewModel.check.collectAsStateWithLifecycle()
     val shareLauncher = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) {}
 
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp)) {
@@ -98,7 +99,7 @@ fun ForecastScreen(viewModel: ForecastViewModel = hiltViewModel()) {
         // Advice and the method note used to repeat on every day; said once here.
         val commonRecs = days.map { it.recommendations.toSet() }.reduce { a, b -> a intersect b }
         Spacer(Modifier.height(12.dp))
-        ForecastOverview(days, days.first().recommendations.filter { it in commonRecs })
+        ForecastOverview(days, days.first().recommendations.filter { it in commonRecs }, check)
         // A tip shown on one day is not repeated on the following days of the same run.
         var shownBefore = commonRecs
         days.forEach { day ->
@@ -180,7 +181,7 @@ private fun dayTitle(iso: String): String {
 
 /** The whole horizon at a glance: one coloured score per day. */
 @Composable
-private fun ForecastOverview(days: List<ForecastEngine.ForecastDay>, commonRecs: List<String>) {
+private fun ForecastOverview(days: List<ForecastEngine.ForecastDay>, commonRecs: List<String>, check: ForecastEngine.Backtest?) {
     var open by rememberSaveable { mutableStateOf(false) }
     MoodCard {
         Row(
@@ -212,6 +213,7 @@ private fun ForecastOverview(days: List<ForecastEngine.ForecastDay>, commonRecs:
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.padding(top = 8.dp),
         )
+        ForecastReliability(check)
         if (commonRecs.isNotEmpty()) {
             Text(stringResource(R.string.forecast_common_title), style = MaterialTheme.typography.titleSmall, modifier = Modifier.padding(top = 10.dp))
             commonRecs.forEach { Text("• $it", style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(top = 4.dp)) }
@@ -316,19 +318,13 @@ private data class PhaseSlice(val label: String, val share: Float, val color: Co
  */
 @Composable
 private fun phaseSlices(p: ForecastEngine.ForecastProb): List<PhaseSlice>? {
-    val dep = p.depression ?: return null
-    val elev = p.elevation ?: return null
-    val mixed = (p.mixed ?: 0.0).coerceAtMost(minOf(dep, elev))
-    val depOnly = (dep - mixed).coerceAtLeast(0.0)
-    val elevOnly = (elev - mixed).coerceAtLeast(0.0)
-    val busy = (depOnly + elevOnly + mixed).coerceAtMost(1.0)
-    val scale = if (depOnly + elevOnly + mixed > 1.0) 1.0 / (depOnly + elevOnly + mixed) else 1.0
+    val shares = ForecastEngine.phaseShares(p) ?: return null
     val mood = LocalMoodColors.current
     return listOf(
-        PhaseSlice("Депрессия", (depOnly * scale).toFloat(), mood.depressed),
-        PhaseSlice("Гипомания", (elevOnly * scale).toFloat(), mood.elevated),
-        PhaseSlice("Смешанное", (mixed * scale).toFloat(), mood.irritable),
-        PhaseSlice("Ровное", (1.0 - busy).toFloat().coerceAtLeast(0f), mood.success),
+        PhaseSlice("Депрессия", shares.getValue(ForecastEngine.Phase.DEPRESSION).toFloat(), mood.depressed),
+        PhaseSlice("Гипомания", shares.getValue(ForecastEngine.Phase.HYPOMANIA).toFloat(), mood.elevated),
+        PhaseSlice("Смешанное", shares.getValue(ForecastEngine.Phase.MIXED).toFloat(), mood.irritable),
+        PhaseSlice("Ровное", shares.getValue(ForecastEngine.Phase.EVEN).toFloat(), mood.success),
     )
 }
 
@@ -376,6 +372,54 @@ private fun PhaseLegend(slices: List<PhaseSlice>, modifier: Modifier = Modifier)
                 Box(Modifier.size(10.dp).clip(CircleShape).background(s.color))
                 Text(s.label, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(start = 8.dp).weight(1f))
                 Text("${(s.share * 100).roundToInt()}%", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.SemiBold)
+            }
+        }
+    }
+}
+
+/** "How right was it before": the self-check on past days, with the naive baseline next to it. */
+@Composable
+private fun ForecastReliability(check: ForecastEngine.Backtest?) {
+    val acc = check?.accuracy
+    Surface(
+        Modifier.fillMaxWidth().padding(top = 10.dp),
+        shape = RoundedCornerShape(10.dp),
+        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.7f),
+    ) {
+        Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+            if (check == null || acc == null) {
+                Text(stringResource(R.string.forecast_check_none), style = MaterialTheme.typography.bodySmall)
+                return@Column
+            }
+            Text(
+                stringResource(R.string.forecast_check_title, (acc * 100).roundToInt()),
+                style = MaterialTheme.typography.titleSmall,
+            )
+            Text(
+                stringResource(R.string.forecast_check_body, check.hits, check.days, ((check.baselineAccuracy ?: 0.0) * 100).roundToInt()),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            if (check.warnings > 0) {
+                Text(
+                    stringResource(R.string.forecast_check_warnings, check.warningsTrue, check.warnings, check.warningsTrue * 100 / check.warnings),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            if (check.episodes > 0) {
+                Text(
+                    stringResource(R.string.forecast_check_episodes, check.episodesWarned, check.episodes, check.episodesWarned * 100 / check.episodes),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            if (acc <= (check.baselineAccuracy ?: 0.0)) {
+                Text(
+                    stringResource(R.string.forecast_check_weak),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = LocalMoodColors.current.warning,
+                )
             }
         }
     }

@@ -1,8 +1,6 @@
 package com.moodlife.app.ui.components
 
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.Row
@@ -10,8 +8,6 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -19,12 +15,11 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.moodlife.app.data.local.entity.ExternalHealthDayEntity
 import com.moodlife.app.data.local.entity.WeatherDayEntity
 import com.moodlife.app.ui.theme.LocalMoodColors
 import java.util.Locale
@@ -39,122 +34,103 @@ fun dayContextSummary(weather: WeatherDayEntity?, moonLabel: String?, cycleLabel
         cycleLabel,
     ).joinToString(" · ").ifBlank { null }
 
+/** Short clinical name for the day's classified phase (EpisodeClassifier storage keys). */
+private fun moodPhaseName(key: String): String = when (key) {
+    "euthymic" -> "Ровное"
+    "prodromal_depression" -> "Начало депрессии"
+    "prodromal_mania" -> "Начало гипомании"
+    "acute_depression" -> "Депрессия"
+    "acute_mania" -> "Гипомания"
+    "mixed" -> "Смешанное"
+    "recovery" -> "Восстановление"
+    else -> key
+}
+
 /**
- * Weather, moon, cycle and synced health for the day: a weather headline, small labelled
- * tiles for the numbers (unusual values tinted), moon and cycle side by side.
+ * Day context: weather headline, the four weather numbers in one row, then sleep · weight ·
+ * mood phase, then cycle (phase icon + day of cycle) and moon.
  */
 @Composable
 fun DayContextCompact(
     weather: WeatherDayEntity?,
     moonLabel: String?,
     cycleLabel: String?,
-    health: List<ExternalHealthDayEntity>,
+    sleepHours: Float?,
+    weightKg: Float?,
+    moodPhase: String?,
     modifier: Modifier = Modifier,
-    cycleColor: Color? = null,
 ) {
     val warn = LocalMoodColors.current.warning
-    Column(modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+    Column(modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(10.dp)) {
         if (weather != null) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(weather.icon ?: "🌡️", fontSize = 34.sp)
                 Column(Modifier.padding(start = 12.dp)) {
                     Row(verticalAlignment = Alignment.Bottom) {
                         Text("${weather.tempAvg.roundToInt()}°", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.SemiBold)
-                        Text(
-                            "  ${weather.description}",
-                            style = MaterialTheme.typography.titleMedium,
-                            modifier = Modifier.padding(bottom = 4.dp),
-                        )
+                        Text("  ${weather.description}", style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(bottom = 4.dp))
                     }
                     Text(
-                        listOfNotNull("${weather.tempMin.roundToInt()}…${weather.tempMax.roundToInt()}°", weather.cityName?.takeIf { it.isNotBlank() })
-                            .joinToString(" · "),
+                        listOfNotNull(
+                            "${weather.tempMin.roundToInt()}…${weather.tempMax.roundToInt()}°",
+                            weather.precipitation.takeIf { it > 0f }?.let { String.format(RU, "осадки %.1f мм", it) },
+                            weather.cityName?.takeIf { it.isNotBlank() },
+                        ).joinToString(" · "),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
             }
-            TileGrid(
-                listOfNotNull(
-                    Triple("Давление", "${weather.pressure.roundToInt()} мм", weather.pressure < 745f || weather.pressure > 765f),
-                    Triple("Влажность", "${weather.humidity}%", false),
-                    Triple("Ветер", String.format(RU, "%.1f м/с", weather.windSpeed), weather.windSpeed > 10f),
-                    Triple("УФ-индекс", String.format(RU, "%.1f", weather.uvIndex), weather.uvIndex >= 6f),
-                    if (weather.precipitation > 0f) Triple("Осадки", String.format(RU, "%.1f мм", weather.precipitation), false) else null,
+            TileRow(
+                listOf(
+                    Tile("Давление", "${weather.pressure.roundToInt()} мм", if (weather.pressure < 745f || weather.pressure > 765f) warn else null),
+                    Tile("Влажность", "${weather.humidity}%"),
+                    Tile("Ветер", String.format(RU, "%.1f м/с", weather.windSpeed), if (weather.windSpeed > 10f) warn else null),
+                    Tile("УФ", String.format(RU, "%.1f", weather.uvIndex), if (weather.uvIndex >= 6f) warn else null),
                 ),
-                warn,
             )
         }
-        if (moonLabel != null || cycleLabel != null) {
-            Row(Modifier.fillMaxWidth().height(IntrinsicSize.Min), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                moonLabel?.let { label ->
-                    InfoTile("Луна", Modifier.weight(1f).fillMaxHeight()) {
-                        Text(label, style = MaterialTheme.typography.bodyMedium)
-                    }
-                }
-                cycleLabel?.let { label ->
-                    InfoTile("Цикл", Modifier.weight(1f).fillMaxHeight()) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            cycleColor?.let { Box(Modifier.padding(end = 6.dp).size(8.dp).clip(CircleShape).background(it)) }
-                            Text(label.dropWhile { !it.isLetterOrDigit() }.trim(), style = MaterialTheme.typography.bodyMedium)
-                        }
-                    }
-                }
-            }
-        }
-        val body = health.mapNotNull { d ->
-            when (d.kind) {
-                "activity" -> d.steps?.let { "Шаги" to "$it" }
-                "sleep" -> d.sleepHours?.let { "Сон" to String.format(RU, "%.1f ч", it) }
-                "weight" -> d.weightKg?.let { "Вес" to String.format(RU, "%.1f кг", it) }
-                "nutrition" -> d.calories?.let { "Питание" to "$it ккал" }
-                else -> null
-            }
-        }
-        if (body.isNotEmpty()) {
-            TileGrid(body.map { (label, value) -> Triple(label, value, false) }, warn)
-        }
-        if (weather == null && moonLabel == null && cycleLabel == null && body.isEmpty()) {
-            Text("Нет данных за этот день", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        TileRow(
+            listOf(
+                Tile("Сон", sleepHours?.let { String.format(RU, "%.1f ч", it) } ?: "—"),
+                Tile("Вес", weightKg?.let { String.format(RU, "%.1f кг", it) } ?: "—"),
+                Tile("Состояние", moodPhase?.let(::moodPhaseName) ?: "—"),
+            ),
+        )
+        if (cycleLabel != null || moonLabel != null) {
+            TileRow(
+                listOfNotNull(
+                    cycleLabel?.let { Tile("Цикл", it) },
+                    moonLabel?.let { Tile("Луна", it) },
+                ),
+            )
         }
     }
 }
 
-/** Equal-width tiles, three per row, so the block reads as a tidy grid. */
+private data class Tile(val label: String, val value: String, val accent: Color? = null)
+
+/** Equal-width tiles in a single row. */
 @Composable
-private fun TileGrid(items: List<Triple<String, String, Boolean>>, warn: Color) {
-    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        items.chunked(3).forEach { row ->
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                row.forEach { (label, value, alert) ->
-                    StatTile(label, value, if (alert) warn else null, Modifier.weight(1f))
+private fun TileRow(tiles: List<Tile>) {
+    Row(Modifier.fillMaxWidth().height(IntrinsicSize.Min), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        tiles.forEach { t ->
+            Surface(
+                Modifier.weight(1f).fillMaxHeight(),
+                shape = RoundedCornerShape(10.dp),
+                color = t.accent?.copy(alpha = 0.16f) ?: MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.7f),
+            ) {
+                Column(Modifier.padding(horizontal = 10.dp, vertical = 8.dp)) {
+                    Text(t.label, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
+                    Text(
+                        t.value,
+                        style = MaterialTheme.typography.titleSmall,
+                        color = t.accent ?: MaterialTheme.colorScheme.onSurface,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis,
+                    )
                 }
-                repeat(3 - row.size) { Box(Modifier.weight(1f)) }
             }
-        }
-    }
-}
-
-@Composable
-private fun StatTile(label: String, value: String, accent: Color? = null, modifier: Modifier = Modifier) {
-    Surface(
-        modifier,
-        shape = RoundedCornerShape(10.dp),
-        color = accent?.copy(alpha = 0.16f) ?: MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.7f),
-    ) {
-        Column(Modifier.padding(horizontal = 12.dp, vertical = 8.dp)) {
-            Text(label, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            Text(value, style = MaterialTheme.typography.titleSmall, color = accent ?: MaterialTheme.colorScheme.onSurface)
-        }
-    }
-}
-
-@Composable
-private fun InfoTile(title: String, modifier: Modifier = Modifier, content: @Composable () -> Unit) {
-    Surface(modifier, shape = RoundedCornerShape(12.dp), color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.7f)) {
-        Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-            Text(title, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            content()
         }
     }
 }

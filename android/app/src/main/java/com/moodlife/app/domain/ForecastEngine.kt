@@ -16,6 +16,9 @@ object ForecastEngine {
     private const val W_PHASE = 1.0
     private const val W_SIGN = 3.0
 
+    /** A phase at or above this probability counts as a warning (also the «спокойно» boundary). */
+    const val WARN_LEVEL = 0.3
+
     data class ForecastProb(
         val elevation: Double?,
         val depression: Double?,
@@ -216,6 +219,106 @@ object ForecastEngine {
             risks = emptyList(),
             score = score,
         )
+    }
+
+    // ---------- phase shares & self-check ----------
+
+    enum class Phase { DEPRESSION, HYPOMANIA, MIXED, EVEN }
+
+    /**
+     * Probabilities overlap (a mixed day also counts as low and as high). For display and for
+     * checking they are split into non-overlapping shares that add up to 1: mixed once,
+     * low-only, high-only, remainder = even.
+     */
+    fun phaseShares(p: ForecastProb): Map<Phase, Double>? {
+        val dep = p.depression ?: return null
+        val elev = p.elevation ?: return null
+        val mixed = (p.mixed ?: 0.0).coerceAtMost(minOf(dep, elev))
+        val depOnly = (dep - mixed).coerceAtLeast(0.0)
+        val elevOnly = (elev - mixed).coerceAtLeast(0.0)
+        val busy = depOnly + elevOnly + mixed
+        val scale = if (busy > 1.0) 1.0 / busy else 1.0
+        return mapOf(
+            Phase.DEPRESSION to depOnly * scale,
+            Phase.HYPOMANIA to elevOnly * scale,
+            Phase.MIXED to mixed * scale,
+            Phase.EVEN to (1.0 - busy * scale).coerceAtLeast(0.0),
+        )
+    }
+
+    fun actualPhase(d: HistDay): Phase = when {
+        d.depressed >= 2 && d.elevated >= 2 -> Phase.MIXED
+        d.depressed >= 2 -> Phase.DEPRESSION
+        d.elevated >= 2 -> Phase.HYPOMANIA
+        else -> Phase.EVEN
+    }
+
+    data class Backtest(
+        /** Past days that could be checked (enough history before them). */
+        val days: Int,
+        /** Days where the most likely phase matched what was recorded. */
+        val hits: Int,
+        /** Same, for the naive rule "always say the most frequent phase so far". */
+        val baselineHits: Int,
+        /** Days the forecast warned (depression or hypomania ≥ 30%) and how many came true. */
+        val warnings: Int = 0,
+        val warningsTrue: Int = 0,
+        /** Recorded depression/hypomania/mixed days and how many had been warned about. */
+        val episodes: Int = 0,
+        val episodesWarned: Int = 0,
+    ) {
+        val accuracy: Double? get() = if (days == 0) null else hits.toDouble() / days
+        val baselineAccuracy: Double? get() = if (days == 0) null else baselineHits.toDouble() / days
+    }
+
+    /**
+     * Honest self-check: for every past day, forecast it from the days *before* it only (as the
+     * app would have on that morning) and compare the most likely phase with what was recorded.
+     */
+    fun backtest(
+        hist: List<HistDay>,
+        lastPeriodStart: String?,
+        cycleLength: Int,
+        periodLength: Int,
+        irregular: Boolean,
+    ): Backtest {
+        val sorted = hist.sortedBy { it.date }
+        var days = 0
+        var hits = 0
+        var baseHits = 0
+        var warnings = 0
+        var warningsTrue = 0
+        var episodes = 0
+        var episodesWarned = 0
+        for (i in sorted.indices) {
+            val target = sorted[i]
+            val before = sorted.subList(0, i)
+            if (before.size < MIN_SAMPLE) continue
+            val phase = lastPeriodStart?.let {
+                CycleUtils.calcCyclePhase(it, cycleLength, periodLength, target.date, irregular).phase
+            }
+            val probs = probabilitiesForDay(before, phase, null, recentWindow(before, target.date, target.date), target.date)
+            val shares = phaseShares(probs) ?: continue
+            val predicted = shares.maxBy { it.value }.key
+            val actual = actualPhase(target)
+            val naive = before.groupingBy { actualPhase(it) }.eachCount().maxBy { it.value }.key
+            days++
+            if (predicted == actual) hits++
+            if (naive == actual) baseHits++
+            val warnDep = (probs.depression ?: 0.0) >= WARN_LEVEL
+            val warnElev = (probs.elevation ?: 0.0) >= WARN_LEVEL
+            val wasDep = target.depressed >= 2
+            val wasElev = target.elevated >= 2
+            if (warnDep || warnElev) {
+                warnings++
+                if ((warnDep && wasDep) || (warnElev && wasElev)) warningsTrue++
+            }
+            if (wasDep || wasElev) {
+                episodes++
+                if ((wasDep && warnDep) || (wasElev && warnElev)) episodesWarned++
+            }
+        }
+        return Backtest(days, hits, baseHits, warnings, warningsTrue, episodes, episodesWarned)
     }
 
     private data class ProbPart(val p: Double?, val n: Int, val weight: Double = 1.0) {

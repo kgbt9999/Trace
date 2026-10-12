@@ -256,7 +256,9 @@ class ForecastRepository @Inject constructor(
     private val warningTriggerDao: WarningTriggerDao,
     private val warningSignDao: WarningSignDao,
 ) {
-    fun observeForecast(dayCount: Int = 7): Flow<List<ForecastEngine.ForecastDay>> {
+    data class ForecastResult(val days: List<ForecastEngine.ForecastDay>, val check: ForecastEngine.Backtest)
+
+    fun observeForecast(dayCount: Int = 7): Flow<ForecastResult> {
         val today = DateUtils.todayIso()
         val from = DateUtils.addDays(today, -180)
         return combine(
@@ -291,10 +293,15 @@ class ForecastRepository @Inject constructor(
                     },
                     setting.lastPeriodStart, setting.cycleLength, setting.periodLength, setting.irregular,
                 )
-                ForecastEngine.buildForecast(
-                    today, hist, setting.lastPeriodStart,
-                    setting.cycleLength, setting.periodLength, setting.irregular,
-                    dayCount = dayCount,
+                ForecastResult(
+                    days = ForecastEngine.buildForecast(
+                        today, hist, setting.lastPeriodStart,
+                        setting.cycleLength, setting.periodLength, setting.irregular,
+                        dayCount = dayCount,
+                    ),
+                    check = ForecastEngine.backtest(
+                        hist, setting.lastPeriodStart, setting.cycleLength, setting.periodLength, setting.irregular,
+                    ),
                 )
             }
     }

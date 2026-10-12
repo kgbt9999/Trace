@@ -10,6 +10,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import javax.inject.Inject
 
@@ -22,9 +23,15 @@ class ForecastViewModel @Inject constructor(
 
     val horizonDays: StateFlow<Int> = _horizonDays
 
-    val days: StateFlow<List<ForecastEngine.ForecastDay>> =
-        _horizonDays.flatMapLatest { n -> forecastRepository.observeForecast(n) }
-            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+    private val result = _horizonDays.flatMapLatest { n -> forecastRepository.observeForecast(n) }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
+
+    val days: StateFlow<List<ForecastEngine.ForecastDay>> = result.map { it?.days.orEmpty() }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+
+    /** How often the model got past days right (forecast from earlier days only). */
+    val check: StateFlow<ForecastEngine.Backtest?> = result.map { it?.check }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
 
     fun setHorizon(days: Int) {
         _horizonDays.value = days.coerceIn(1, 14)
