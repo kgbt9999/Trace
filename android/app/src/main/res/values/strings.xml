@@ -462,7 +462,7 @@
 
     <!-- Other tabs -->
     <string name="calendar_cycle_settings">Настроить цикл</string>
-    <string name="calendar_subtitle">Цвет дня — по настроению. Полоска внизу — менструация.</string>
+    <string name="calendar_subtitle">Ваш месяц: настроение по дням, цикл и луна. Нажмите на день, чтобы открыть его.</string>
     <string name="calendar_subtab_overview">Обзор</string>
     <string name="calendar_subtab_meds">Лекарства</string>
     <string name="calendar_subtab_physical">Физическое</string>
@@ -489,6 +489,8 @@
     <string name="forecast_cell_dep">Спад</string>
     <string name="forecast_cell_elev">Подъём</string>
     <string name="forecast_cell_mixed">Смешанное</string>
+    <string name="forecast_overview_hint">Оценка дня из 10: зелёный — спокойно, жёлтый — внимание, красный — риск выше.</string>
+    <string name="forecast_common_title">На эти дни</string>
     <string name="forecast_prob_elev">Вероятность подъёма (подъём «заметно» и выше): ~%1$d%%</string>
     <string name="forecast_prob_dep">Вероятность спада (подавленность «заметно» и выше): ~%1$d%%</string>
     <string name="settings_symptoms">Симптомы</string>
