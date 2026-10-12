@@ -558,6 +558,9 @@ private fun CalendarMonthGrid(
                     }
                 }
             }
+            if (state.period?.lastPeriodStart != null) {
+                CyclePhaseLegend(Modifier.padding(top = 8.dp))
+            }
         }
     }
 }
@@ -869,14 +872,6 @@ private fun androidx.compose.foundation.layout.RowScope.CalendarDayCell(
                     lineHeight = 11.sp,
                 )
             }
-            if (isPeriod) {
-                Box(
-                    Modifier
-                        .size(width = 7.dp, height = 3.dp)
-                        .clip(RoundedCornerShape(50))
-                        .background(palette.cycle),
-                )
-            }
         }
         Box(
             Modifier
@@ -915,6 +910,41 @@ private fun androidx.compose.foundation.layout.RowScope.CalendarDayCell(
                         softWrap = false,
                     )
                 }
+            }
+        }
+        // Cycle phase as a strip along the bottom of the cell (period days thicker).
+        cycleMarkers?.phase?.let { phase ->
+            CycleUtils.PHASE_INFO[phase]?.let { info ->
+                Box(
+                    Modifier
+                        .padding(top = 1.dp)
+                        .fillMaxWidth()
+                        .height(if (isPeriod) 4.dp else 2.dp)
+                        .clip(RoundedCornerShape(50))
+                        .background(info.color.copy(alpha = if (isPeriod) 1f else 0.75f)),
+                )
+            }
+        }
+    }
+}
+
+/** Colour key for the phase strips; shown only when the cycle is set up. */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun CyclePhaseLegend(modifier: Modifier = Modifier) {
+    FlowRow(
+        modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(10.dp),
+        verticalArrangement = Arrangement.spacedBy(4.dp),
+    ) {
+        CycleUtils.PHASE_INFO.values.forEach { info ->
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Box(Modifier.size(width = 12.dp, height = 3.dp).clip(RoundedCornerShape(50)).background(info.color))
+                Text(
+                    " ${info.label}",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
             }
         }
     }

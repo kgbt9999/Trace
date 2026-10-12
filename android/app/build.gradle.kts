@@ -75,6 +75,15 @@ android {
                 "proguard-rules.pro",
             )
         }
+        // Declared after release: initWith copies its settings at this point.
+        // Optimized like release (R8, not debuggable) but signed with the debug key, so it
+        // installs *over* the debug build and keeps the diary. Debug builds of Compose apps are
+        // noticeably janky; use this one on a real phone: ./gradlew installStaging
+        create("staging") {
+            initWith(getByName("release"))
+            signingConfig = signingConfigs.getByName("debug")
+            matchingFallbacks += listOf("release")
+        }
     }
 
     compileOptions {

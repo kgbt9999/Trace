@@ -27,6 +27,9 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.moodlife.app.R
+import androidx.compose.ui.Alignment
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.Surface
 import com.moodlife.app.domain.ForecastEngine
 import com.moodlife.app.domain.MoonPhaseCalc
 import com.moodlife.app.ui.components.EmptyStateCard
@@ -89,99 +92,94 @@ fun ForecastScreen(viewModel: ForecastViewModel = hiltViewModel()) {
         if (days.isEmpty()) {
             EmptyStateCard(message = stringResource(R.string.forecast_empty))
         } else {
+            // Advice and the method note were repeated on every day card; say them once.
+            val commonRecs = days.map { it.recommendations.toSet() }.reduce { a, b -> a intersect b }
+            ForecastBasisCard(days, days.first().recommendations.filter { it in commonRecs })
+            days.forEach { day ->
+                Spacer(Modifier.height(12.dp))
+                ForecastDayCard(day, commonRecs)
+            }
+        }
+    }
+}
+
+/** Said once for the whole feed: how it is computed, sample size, advice common to every day. */
+@Composable
+private fun ForecastBasisCard(days: List<ForecastEngine.ForecastDay>, commonRecs: List<String>) {
+    val first = days.first()
+    MoodCard {
+        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            Text(stringResource(R.string.forecast_basis_title), style = MaterialTheme.typography.titleSmall)
             Text(
-                stringResource(R.string.forecast_feed_hint, days.size),
+                first.probabilities.note,
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(bottom = 8.dp),
             )
-            days.forEachIndexed { index, day ->
-                if (index > 0) Spacer(Modifier.height(12.dp))
-                ForecastDayCard(day)
+            Text(
+                stringResource(R.string.forecast_basis_legend),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            commonRecs.forEach { Text("• $it", style = MaterialTheme.typography.bodyMedium) }
+        }
+    }
+}
+
+@Composable
+private fun ForecastDayCard(day: ForecastEngine.ForecastDay, commonRecs: Set<String>) {
+    val moon = MoonPhaseCalc.moonPhase(day.date)
+    MoodCard {
+        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    DateUtils.formatRu(DateUtils.parseIso(day.date)),
+                    style = MaterialTheme.typography.titleMedium,
+                    modifier = Modifier.weight(1f),
+                )
+                day.score?.let {
+                    Text(
+                        stringResource(R.string.forecast_score_short, it),
+                        style = MaterialTheme.typography.titleMedium,
+                        color = MaterialTheme.colorScheme.primary,
+                    )
+                }
+            }
+            Text(
+                listOfNotNull(
+                    "${moon.icon} ${moon.label}",
+                    day.phaseInfo?.let { "${it.emoji} ${it.label}" },
+                ).joinToString(" · "),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            val p = day.probabilities
+            if (p.depression != null || p.elevation != null) {
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    ProbabilityCell(stringResource(R.string.forecast_cell_dep), p.depression, Modifier.weight(1f))
+                    ProbabilityCell(stringResource(R.string.forecast_cell_elev), p.elevation, Modifier.weight(1f))
+                    ProbabilityCell(stringResource(R.string.forecast_cell_mixed), p.mixed, Modifier.weight(1f))
+                }
+            } else {
+                Text(
+                    stringResource(R.string.forecast_score_empty),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            day.risks.forEach { risk -> Text("⚠ ${risk.description}", style = MaterialTheme.typography.bodySmall) }
+            day.recommendations.filter { it !in commonRecs }.take(3).forEach {
+                Text("• $it", style = MaterialTheme.typography.bodyMedium)
             }
         }
     }
 }
 
 @Composable
-private fun ForecastDayCard(day: ForecastEngine.ForecastDay) {
-    val moon = MoonPhaseCalc.moonPhase(day.date)
-    MoodCard {
-        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                Text(DateUtils.formatRu(DateUtils.parseIso(day.date)), style = MaterialTheme.typography.titleMedium)
-                Text(
-                    buildString {
-                        append(moon.icon)
-                        day.phaseInfo?.emoji?.let { append(" $it") }
-                        if (day.risks.isNotEmpty()) append(" ⚠")
-                    },
-                    style = MaterialTheme.typography.titleMedium,
-                )
-            }
-            Text(
-                "${moon.icon} ${moon.label}",
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-            Text(
-                day.score?.let { stringResource(R.string.forecast_score, it) }
-                    ?: stringResource(R.string.forecast_score_empty),
-                style = MaterialTheme.typography.bodyLarge,
-            )
-            Text(
-                day.phaseInfo?.let { "${it.emoji} ${it.label}" }
-                    ?: stringResource(R.string.forecast_phase_empty),
-                style = MaterialTheme.typography.bodyMedium,
-            )
-            Text(
-                day.probabilities.note,
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                lineHeight = MaterialTheme.typography.bodySmall.lineHeight * 1.35f,
-            )
-            Text(
-                day.probabilities.elevation?.let { stringResource(R.string.forecast_prob_elev, (it * 100).toInt()) }
-                    ?: stringResource(R.string.forecast_prob_elev_empty),
-                style = MaterialTheme.typography.bodyMedium,
-            )
-            Text(
-                day.probabilities.depression?.let { stringResource(R.string.forecast_prob_dep, (it * 100).toInt()) }
-                    ?: stringResource(R.string.forecast_prob_dep_empty),
-                style = MaterialTheme.typography.bodyMedium,
-            )
-            Text(
-                day.probabilities.mixed?.let { stringResource(R.string.forecast_prob_mixed, (it * 100).toInt()) }
-                    ?: stringResource(R.string.forecast_prob_mixed_empty),
-                style = MaterialTheme.typography.bodyMedium,
-            )
-            Text(
-                stringResource(R.string.forecast_sample, day.probabilities.sample),
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-            if (day.risks.isEmpty()) {
-                Text(
-                    stringResource(R.string.forecast_risks_empty),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            } else {
-                day.risks.forEach { risk ->
-                    Text("• ${risk.description}", style = MaterialTheme.typography.bodySmall)
-                }
-            }
-            if (day.recommendations.isEmpty()) {
-                Text(
-                    stringResource(R.string.forecast_recommendations_empty),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            } else {
-                day.recommendations.take(3).forEach {
-                    Text("• $it", style = MaterialTheme.typography.bodyMedium)
-                }
-            }
+private fun ProbabilityCell(label: String, value: Double?, modifier: Modifier = Modifier) {
+    Surface(modifier, shape = RoundedCornerShape(4.dp), color = MaterialTheme.colorScheme.surfaceVariant) {
+        Column(Modifier.padding(horizontal = 8.dp, vertical = 6.dp)) {
+            Text(label, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(value?.let { "${(it * 100).toInt()}%" } ?: "—", style = MaterialTheme.typography.titleSmall)
         }
     }
 }

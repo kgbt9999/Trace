@@ -79,7 +79,6 @@ import com.moodlife.app.ui.components.CollapsibleSection
 import com.moodlife.app.ui.components.DateNavigationCard
 import com.moodlife.app.ui.components.EditCatalogItemDialog
 import com.moodlife.app.ui.components.EmptyStateCard
-import com.moodlife.app.ui.components.HealthSummaryCards
 import com.moodlife.app.ui.components.LaunchTipCard
 import com.moodlife.app.ui.components.MedicationFormDialog
 import com.moodlife.app.ui.components.MoodCheckInsCard
@@ -91,7 +90,6 @@ import com.moodlife.app.ui.components.ScaleTypeChips
 import com.moodlife.app.ui.components.SleepHoursField
 import com.moodlife.app.ui.components.SleepTimeField
 import com.moodlife.app.ui.components.TRACKABLE_SCALE_OPTIONS
-import com.moodlife.app.ui.components.WeatherCard
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.LinearProgressIndicator
@@ -204,7 +202,15 @@ fun TodayScreen(
             modifier = Modifier.padding(bottom = 4.dp),
         )
 
-        DaySummaryRow(state, modifier = Modifier.padding(bottom = 8.dp))
+        DaySummaryRow(state, modifier = Modifier.padding(bottom = 4.dp))
+        state.lastSavedAt?.let { ts ->
+            Text(
+                stringResource(R.string.today_last_saved, LAST_SAVED_FORMAT.format(Date(ts))),
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(bottom = 8.dp),
+            )
+        }
 
         TodayClinicalBanners(state)
 
@@ -274,34 +280,17 @@ fun TodayScreen(
                     CollapsibleSection(
                         title,
                         initiallyExpanded = false,
-                        subtitle = stringResource(R.string.today_context_hint),
+                        subtitle = com.moodlife.app.ui.components.dayContextSummary(state.weather, state.moonLabel, state.cycleDayLabel)
+                            ?: stringResource(R.string.today_context_hint),
                         helpText = help,
                         onEdit = { viewModel.openSettingsSection("integrations") },
                     ) {
-                        WeatherCard(state.weather, date = state.date)
-                        state.moonLabel?.let { moon ->
-                            Text(
-                                moon,
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                modifier = Modifier.padding(top = 8.dp),
-                            )
-                        }
-                        state.cycleDayLabel?.let { cycle ->
-                            Text(
-                                cycle,
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                modifier = Modifier.padding(top = 4.dp),
-                            )
-                            Text(
-                                stringResource(R.string.today_context_cycle_note),
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                modifier = Modifier.padding(top = 2.dp),
-                            )
-                        }
-                        HealthSummaryCards(state.healthDays, Modifier.padding(top = 8.dp))
+                        com.moodlife.app.ui.components.DayContextCompact(
+                            weather = state.weather,
+                            moonLabel = state.moonLabel,
+                            cycleLabel = state.cycleDayLabel,
+                            health = state.healthDays,
+                        )
                     }
                     }
                     TodaySections.Id.CHECKINS -> Unit
@@ -687,15 +676,28 @@ fun TodayScreen(
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.padding(top = 16.dp),
         )
+        if (state.moodEntryId != null) {
+            TextButton(
+                onClick = { showDeleteEntryDialog = true },
+                colors = androidx.compose.material3.ButtonDefaults.textButtonColors(
+                    contentColor = MaterialTheme.colorScheme.error,
+                ),
+                modifier = Modifier.padding(top = 8.dp),
+            ) {
+                Icon(Icons.Outlined.Delete, contentDescription = null, modifier = Modifier.padding(end = 6.dp).size(18.dp))
+                Text(stringResource(R.string.today_delete))
+            }
+        }
         Spacer(modifier = Modifier.height(16.dp))
         }
 
-        HorizontalDivider()
-        TodaySaveBar(
-            state = state,
-            onSave = viewModel::save,
-            onDelete = { showDeleteEntryDialog = true },
-        )
+        // Values autosave; the bar only flashes the result of an explicit save, then hides.
+        androidx.compose.animation.AnimatedVisibility(visible = state.isSaving || state.saveMessage != null) {
+            Column {
+                HorizontalDivider()
+                TodaySaveBar(state = state)
+            }
+        }
     }
 
     state.medEditor?.let { editor ->
@@ -878,7 +880,8 @@ private fun TrackableValueInput(
     // question; check-ins are gone, so the questionnaire wording always wins.
     val label = question?.text ?: trackableLabel(item.key, null)
     // One accent for the questionnaire; the safety question keeps its own colour.
-    val color = if (item.key == "safetyCheck") LocalMoodColors.current.safety else scaleColor
+    // Warning colour only for an actual "yes" answer; «Нет» looked alarming in red.
+    val color = if (item.key == "safetyCheck" && marked && value > 0) LocalMoodColors.current.safety else scaleColor
     when (item.scaleType) {
         "options" -> {
             val options = question?.options ?: TodayTrackables.optionsFor(item.key)
@@ -1408,42 +1411,14 @@ private fun TodayMedRow(
  * save (kept for reassurance) instead of two permanent full-width buttons.
  */
 @Composable
-private fun TodaySaveBar(
-    state: com.moodlife.app.ui.screens.today.TodayUiState,
-    onSave: () -> Unit,
-    onDelete: () -> Unit,
-) {
+private fun TodaySaveBar(state: com.moodlife.app.ui.screens.today.TodayUiState) {
     Surface(color = MaterialTheme.colorScheme.surface) {
-        Row(
-            Modifier
-                .fillMaxWidth()
-                .padding(start = 16.dp, end = 4.dp)
-                .heightIn(min = 48.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            val status = state.saveMessage?.let { saveMessageText(it) }
-                ?: state.lastSavedAt?.let { stringResource(R.string.today_last_saved, LAST_SAVED_FORMAT.format(Date(it))) }
-                ?: stringResource(R.string.today_autosave_hint)
-            Text(
-                status,
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.weight(1f),
-                maxLines = 2,
-            )
-            TextButton(onClick = onSave, enabled = !state.isSaving) {
-                Text(stringResource(if (state.isSaving) R.string.today_saving else R.string.today_save))
-            }
-            if (state.moodEntryId != null) {
-                IconButton(onClick = onDelete) {
-                    Icon(
-                        Icons.Outlined.Delete,
-                        contentDescription = stringResource(R.string.today_delete),
-                        tint = MaterialTheme.colorScheme.error,
-                    )
-                }
-            }
-        }
+        Text(
+            state.saveMessage?.let { saveMessageText(it) } ?: stringResource(R.string.today_saving),
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp),
+        )
     }
 }
 

@@ -85,7 +85,14 @@ class FloRepository @Inject constructor(
             .filter { FloParse.mapFlow(it.flow) > 0 }
             .map { it.date }
             .sorted()
-        val latestFlow = flowDates.lastOrNull()
+        // Start of the most recent period = first day of the last consecutive run of flow days
+        // (taking the last flow day shifted every cycle phase by the period length).
+        val latestFlow = flowDates.lastOrNull()?.let { last ->
+            val set = flowDates.toSet()
+            var start = java.time.LocalDate.parse(last)
+            while (start.minusDays(1).toString() in set) start = start.minusDays(1)
+            start.toString()
+        }
         if (latestFlow != null || parsed.cycleLength != null) {
             periodRepository.update(
                 cycleLength = parsed.cycleLength,

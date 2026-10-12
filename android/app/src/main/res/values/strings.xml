@@ -483,6 +483,12 @@
     <string name="reports_insights_need_data">Нужно минимум 14 дней записей для паттернов.</string>
     <string name="forecast_disclaimer">Вероятности по вашей истории. Подъём ≠ хороший день. Не заменяет врача.</string>
     <string name="forecast_score">Оценка дня: %1$.1f / 10</string>
+    <string name="forecast_score_short">%1$.1f / 10</string>
+    <string name="forecast_basis_title">Как считается прогноз</string>
+    <string name="forecast_basis_legend">Спад / подъём — вероятность, что подавленность или подъём будут «заметно» и выше; смешанное — оба сразу. Оценка дня: 10 — риск низкий.</string>
+    <string name="forecast_cell_dep">Спад</string>
+    <string name="forecast_cell_elev">Подъём</string>
+    <string name="forecast_cell_mixed">Смешанное</string>
     <string name="forecast_prob_elev">Вероятность подъёма (подъём «заметно» и выше): ~%1$d%%</string>
     <string name="forecast_prob_dep">Вероятность спада (подавленность «заметно» и выше): ~%1$d%%</string>
     <string name="settings_symptoms">Симптомы</string>

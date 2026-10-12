@@ -86,6 +86,16 @@ class UniversalImporter @Inject constructor(
                 fields = fields.copy(sleepHours = sleep)
                 changed = true
             }
+            val bed = list.firstNotNullOfOrNull { it.bedTime }
+            val wake = list.firstNotNullOfOrNull { it.wakeTime }
+            if (bed != null && fields.sleepTime.isNullOrBlank()) {
+                fields = fields.copy(sleepTime = bed)
+                changed = true
+            }
+            if (wake != null && fields.wakeTime.isNullOrBlank()) {
+                fields = fields.copy(wakeTime = wake)
+                changed = true
+            }
             if (changed) {
                 moodRepository.saveToday(date, fields)
                 daysChanged++

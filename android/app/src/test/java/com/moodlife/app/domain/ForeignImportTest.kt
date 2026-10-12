@@ -66,4 +66,21 @@ class ForeignImportTest {
     fun `file without dates is not recognised`() {
         assertNull(ForeignImport.parse("a.csv", "name,value\nfoo,1\n"))
     }
+
+    @Test
+    fun `sleep as android export becomes sleep hours, bed and wake times`() {
+        val csv = "Id,Tz,From,To,Sched,Hours,Rating,Comment,Framerate,Snore,Noise,Cycles,DeepSleep,LenAdjust,Geo,\"23:00\"\n" +
+            "\"1\",\"Europe/Moscow\",\"09. 10. 2026 23:40\",\"10. 10. 2026 7:10\",\"10. 10. 2026 7:00\",\"7.25\",\"4.0\",\"#home\",\"10000\",\"-1\",\"-1.0\",\"5\",\"0.35\",\"0\",\"\",\"0.1\"\n" +
+            "Id,Tz,From,To,Sched,Hours,Rating,Comment,Framerate,Snore,Noise,Cycles,DeepSleep,LenAdjust,Geo\n" +
+            "\"2\",\"Europe/Moscow\",\"10. 10. 2026 14:00\",\"10. 10. 2026 14:45\",\"\",\"0.75\",\"0.0\",\"\",\"10000\",\"-1\",\"-1.0\",\"0\",\"-1.0\",\"0\",\"\"\n"
+        val r = ForeignImport.parse("sleep-export.csv", csv)!!
+        assertEquals("Sleep as Android", r.format)
+        val d = r.days.single()
+        assertEquals("2026-10-10", d.date)
+        assertEquals(8.0f, d.sleepHours!!, 0.01f)
+        assertEquals("23:40", d.bedTime)
+        assertEquals("07:10", d.wakeTime)
+        assertTrue(d.notes.single().contains("оценка 4"))
+        assertTrue(d.notes.single().contains("глубокий сон 35%"))
+    }
 }

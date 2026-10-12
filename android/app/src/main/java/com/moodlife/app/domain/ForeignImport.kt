@@ -23,6 +23,8 @@ object ForeignImport {
         val values: Map<String, Int> = emptyMap(),
         val sleepHours: Float? = null,
         val notes: List<String> = emptyList(),
+        val bedTime: String? = null,
+        val wakeTime: String? = null,
     )
 
     data class Result(val format: String, val days: List<Day>)
@@ -40,6 +42,9 @@ object ForeignImport {
     private fun parseCsv(fileName: String, text: String): Result? {
         val rows = Csv.parse(text)
         if (rows.size < 2) return null
+        if (rows.first().firstOrNull()?.trim() == "Id" && rows.first().any { it.trim() == "Hours" }) {
+            return Result("Sleep as Android", sleepAsAndroid(rows))
+        }
         val header = rows.first().map { it.trim() }
         val norm = header.map { it.lowercase() }
         val body = rows.drop(1).filter { r -> r.any { it.isNotBlank() } }
@@ -83,6 +88,44 @@ object ForeignImport {
                 values = values,
                 sleepHours = sleepCol?.let { r.getOrNull(it) }?.replace(',', '.')?.toFloatOrNull()?.takeIf { it in 0f..24f },
                 notes = leftovers("eMoods", header, r, known),
+            )
+        }
+    }
+
+    private val SAA_TIME = DateTimeFormatter.ofPattern("d. M. yyyy H:mm")
+
+    /**
+     * Sleep as Android `sleep-export.csv`: every night is a header row starting with "Id"
+     * followed by its value row (then optional event/noise rows). Times look like
+     * "10. 04. 2026 6:30". A night belongs to the day you wake up on; naps add up, bed/wake
+     * times come from the longest sleep.
+     */
+    private fun sleepAsAndroid(rows: List<List<String>>): List<Day> {
+        data class Night(val date: String, val from: java.time.LocalDateTime, val to: java.time.LocalDateTime, val hours: Float, val note: String?)
+        val nights = mutableListOf<Night>()
+        rows.forEachIndexed { i, header ->
+            if (header.firstOrNull()?.trim() != "Id") return@forEachIndexed
+            val values = rows.getOrNull(i + 1) ?: return@forEachIndexed
+            fun v(name: String) = header.indexOfFirst { it.trim() == name }.takeIf { it >= 0 }?.let { values.getOrNull(it) }?.trim().orEmpty()
+            val from = runCatching { java.time.LocalDateTime.parse(v("From"), SAA_TIME) }.getOrNull() ?: return@forEachIndexed
+            val to = runCatching { java.time.LocalDateTime.parse(v("To"), SAA_TIME) }.getOrNull() ?: return@forEachIndexed
+            val hours = v("Hours").replace(',', '.').toFloatOrNull()?.takeIf { it in 0f..24f } ?: return@forEachIndexed
+            val note = listOfNotNull(
+                v("Rating").toFloatOrNull()?.takeIf { it > 0f }?.let { "оценка ${"%.1f".format(it)}" },
+                v("DeepSleep").toFloatOrNull()?.takeIf { it in 0f..1f }?.let { "глубокий сон ${(it * 100).toInt()}%" },
+                v("Comment").takeIf { it.isNotBlank() },
+            ).joinToString(" · ").ifBlank { null }
+            nights += Night(to.toLocalDate().toString(), from, to, hours, note)
+        }
+        val hm = DateTimeFormatter.ofPattern("HH:mm")
+        return nights.groupBy { it.date }.map { (date, list) ->
+            val main = list.maxBy { it.hours }
+            Day(
+                date = date,
+                sleepHours = list.sumOf { it.hours.toDouble() }.toFloat().coerceAtMost(24f),
+                bedTime = main.from.format(hm),
+                wakeTime = main.to.format(hm),
+                notes = list.mapNotNull { it.note }.map { "Sleep as Android · $it" },
             )
         }
     }
