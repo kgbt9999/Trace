@@ -27,6 +27,8 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.moodlife.app.R
+import kotlin.math.roundToInt
+import androidx.compose.foundation.Canvas
 import com.moodlife.app.ui.theme.LocalMoodColors
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.font.FontWeight
@@ -255,64 +257,20 @@ private fun ForecastDayCard(day: ForecastEngine.ForecastDay, commonRecs: Set<Str
                 }
             }
         }
-        val p = day.probabilities
-        // The most likely mood phase and the cycle phase as two clear labels.
-        Row(Modifier.padding(top = 10.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            val mood = LocalMoodColors.current
-            if (p.depression != null || p.elevation != null) {
-                val leading = listOf(
-                    Triple("Депрессия", p.depression ?: 0.0, mood.depressed),
-                    Triple("Гипомания", p.elevation ?: 0.0, mood.elevated),
-                    Triple("Смешанное состояние", p.mixed ?: 0.0, mood.irritable),
-                ).maxBy { it.second }
-                if (leading.second < LEADING_THRESHOLD) {
-                    PhaseChip("Фаза: ровное состояние", mood.success)
-                } else {
-                    PhaseChip("Фаза: ${leading.first.lowercase()} · ${(leading.second * 100).toInt()}%", leading.third)
-                }
-            }
-            day.phaseInfo?.let { PhaseChip("${it.emoji} ${it.label}", it.color) }
+        day.phaseInfo?.let { info ->
+            Row(Modifier.padding(top = 8.dp)) { PhaseChip("${info.emoji} ${info.label}", info.color) }
         }
-        if (p.depression != null || p.elevation != null) {
-            Column(Modifier.padding(top = 10.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                val mood = LocalMoodColors.current
-                ProbabilityBar(stringResource(R.string.forecast_cell_dep), p.depression, mood.depressed)
-                ProbabilityBar(stringResource(R.string.forecast_cell_elev), p.elevation, mood.elevated)
-                ProbabilityBar(stringResource(R.string.forecast_cell_mixed), p.mixed, mood.irritable)
+        // Phase pie: sector size = how likely each phase is.
+        phaseSlices(day.probabilities)?.let { slices ->
+            Row(Modifier.fillMaxWidth().padding(top = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+                PhaseDonut(slices)
+                PhaseLegend(slices, Modifier.weight(1f).padding(start = 16.dp))
             }
         }
         day.risks.forEach { r -> Text("⚠ ${r.description}", style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(top = 6.dp)) }
         day.recommendations.filter { it !in commonRecs }.take(3).forEach {
             Text("• $it", style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(top = 6.dp))
         }
-    }
-}
-
-@Composable
-private fun ProbabilityBar(label: String, value: Double?, color: Color) {
-    Row(verticalAlignment = Alignment.CenterVertically) {
-        Text(label, style = MaterialTheme.typography.labelMedium, modifier = Modifier.width(96.dp))
-        Box(
-            Modifier
-                .weight(1f)
-                .height(8.dp)
-                .clip(RoundedCornerShape(50))
-                .background(MaterialTheme.colorScheme.surfaceVariant),
-        ) {
-            Box(
-                Modifier
-                    .fillMaxWidth(((value ?: 0.0).toFloat()).coerceIn(0f, 1f))
-                    .fillMaxHeight()
-                    .clip(RoundedCornerShape(50))
-                    .background(color),
-            )
-        }
-        Text(
-            value?.let { "${(it * 100).toInt()}%" } ?: "—",
-            style = MaterialTheme.typography.labelMedium,
-            textAlign = TextAlign.End,
-            modifier = Modifier.width(44.dp),
-        )
     }
 }
 
@@ -334,8 +292,6 @@ private fun buildShareText(days: List<ForecastEngine.ForecastDay>): String = bui
     }
 }
 
-/** Below this every mood phase is unlikely (same 30% that keeps the day score ≥ 7 «спокойно»). */
-private const val LEADING_THRESHOLD = 0.3
 
 @Composable
 private fun PhaseChip(text: String, color: Color) {
@@ -347,5 +303,80 @@ private fun PhaseChip(text: String, color: Color) {
             color = MaterialTheme.colorScheme.onSurface,
             modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
         )
+    }
+}
+
+/** One slice of the day's phase pie. */
+private data class PhaseSlice(val label: String, val share: Float, val color: Color)
+
+/**
+ * Probabilities overlap (a mixed day also counts as low and as high), so for the pie they are
+ * split into non-overlapping shares: mixed, low only, high only, and the remainder as even.
+ * Shares always add up to 100%.
+ */
+@Composable
+private fun phaseSlices(p: ForecastEngine.ForecastProb): List<PhaseSlice>? {
+    val dep = p.depression ?: return null
+    val elev = p.elevation ?: return null
+    val mixed = (p.mixed ?: 0.0).coerceAtMost(minOf(dep, elev))
+    val depOnly = (dep - mixed).coerceAtLeast(0.0)
+    val elevOnly = (elev - mixed).coerceAtLeast(0.0)
+    val busy = (depOnly + elevOnly + mixed).coerceAtMost(1.0)
+    val scale = if (depOnly + elevOnly + mixed > 1.0) 1.0 / (depOnly + elevOnly + mixed) else 1.0
+    val mood = LocalMoodColors.current
+    return listOf(
+        PhaseSlice("Депрессия", (depOnly * scale).toFloat(), mood.depressed),
+        PhaseSlice("Гипомания", (elevOnly * scale).toFloat(), mood.elevated),
+        PhaseSlice("Смешанное", (mixed * scale).toFloat(), mood.irritable),
+        PhaseSlice("Ровное", (1.0 - busy).toFloat().coerceAtLeast(0f), mood.success),
+    )
+}
+
+/** Donut chart: sector size = share of the phase; the largest one is written in the centre. */
+@Composable
+private fun PhaseDonut(slices: List<PhaseSlice>, modifier: Modifier = Modifier) {
+    val leading = slices.maxBy { it.share }
+    val track = MaterialTheme.colorScheme.surfaceVariant
+    Box(modifier.size(112.dp), contentAlignment = Alignment.Center) {
+        Canvas(Modifier.fillMaxSize()) {
+            val stroke = 16.dp.toPx()
+            val inset = stroke / 2
+            val arcSize = androidx.compose.ui.geometry.Size(size.width - stroke, size.height - stroke)
+            val topLeft = androidx.compose.ui.geometry.Offset(inset, inset)
+            drawArc(track, 0f, 360f, false, topLeft, arcSize, style = androidx.compose.ui.graphics.drawscope.Stroke(stroke))
+            val visible = slices.filter { it.share > 0.005f }
+            val gap = if (visible.size > 1) 2f else 0f
+            var start = -90f
+            visible.forEach { s ->
+                val sweep = s.share * 360f
+                drawArc(
+                    s.color,
+                    start + gap / 2,
+                    (sweep - gap).coerceAtLeast(0.5f),
+                    false,
+                    topLeft,
+                    arcSize,
+                    style = androidx.compose.ui.graphics.drawscope.Stroke(stroke),
+                )
+                start += sweep
+            }
+        }
+        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            Text("${(leading.share * 100).roundToInt()}%", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+            Text(leading.label.lowercase(), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+    }
+}
+
+@Composable
+private fun PhaseLegend(slices: List<PhaseSlice>, modifier: Modifier = Modifier) {
+    Column(modifier, verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        slices.sortedByDescending { it.share }.forEach { s ->
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Box(Modifier.size(10.dp).clip(CircleShape).background(s.color))
+                Text(s.label, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(start = 8.dp).weight(1f))
+                Text("${(s.share * 100).roundToInt()}%", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.SemiBold)
+            }
+        }
     }
 }

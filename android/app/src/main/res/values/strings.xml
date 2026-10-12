@@ -485,7 +485,7 @@
     <string name="forecast_score">Оценка дня: %1$.1f / 10</string>
     <string name="forecast_score_short">%1$.1f / 10</string>
     <string name="forecast_basis_title">Как считается прогноз</string>
-    <string name="forecast_basis_legend">Депрессия / гипомания — вероятность, что подавленность или подъём будут «заметно» и выше; смешанное — оба сразу. Если все ниже 30% — фаза «ровное состояние». Оценка дня: 10 — риск низкий.</string>
+    <string name="forecast_basis_legend">Круг дня — вероятность каждой фазы: депрессия (подавленность «заметно» и выше), гипомания (подъём «заметно» и выше), смешанное (оба сразу) и ровное состояние. Смешанные дни считаются один раз, поэтому сумма всегда 100%. Оценка дня: 10 — риск низкий.</string>
     <string name="forecast_cell_dep">Депрессия</string>
     <string name="forecast_cell_elev">Гипомания</string>
     <string name="forecast_cell_mixed">Смешанное</string>
