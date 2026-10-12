@@ -834,16 +834,25 @@ private fun DayMood.color(): Color {
 }
 
 private fun DayMood.label(): String = when (this) {
-    DayMood.LOW -> "Спад"
-    DayMood.HIGH -> "Подъём"
-    DayMood.MIXED -> "Смешанный"
+    DayMood.LOW -> "Депрессия"
+    DayMood.HIGH -> "Гипомания"
+    DayMood.MIXED -> "Смешанное"
     DayMood.ANXIOUS -> "Тревога"
-    DayMood.IRRITABLE -> "Раздражение"
-    DayMood.EVEN -> "Ровный"
+    DayMood.IRRITABLE -> "Раздражительность"
+    DayMood.EVEN -> "Ровное"
+}
+
+/** Letter shown in the cell; even days get no letter (colour only). */
+private fun DayMood.letter(): String? = when (this) {
+    DayMood.LOW -> "Д"
+    DayMood.HIGH -> "Г"
+    DayMood.MIXED -> "С"
+    DayMood.ANXIOUS -> "Т"
+    DayMood.IRRITABLE -> "Р"
+    DayMood.EVEN -> null
 }
 
 private val CYCLE_PERIOD = Color(0xFFEC4899)
-private val CYCLE_OVULATION = Color(0xFFF59E0B)
 
 /**
  * One day: number, mood as the cell colour (explained in the legend below the grid), period as
@@ -898,49 +907,53 @@ private fun androidx.compose.foundation.layout.RowScope.CalendarDayCell(
         moon?.let {
             Text(it.icon, fontSize = 10.sp, modifier = Modifier.align(Alignment.TopEnd).padding(end = 4.dp, top = 4.dp))
         }
-        personalIcon?.let {
-            Text(it, fontSize = 16.sp, modifier = Modifier.align(Alignment.Center).padding(top = 6.dp))
+        // Centre: the user's own day icon, else the state letter (Д/Г/С/Т/Р).
+        val centre = personalIcon ?: mood?.letter()
+        centre?.let {
+            Text(
+                it,
+                fontSize = if (personalIcon != null) 16.sp else 15.sp,
+                fontWeight = FontWeight.Bold,
+                color = if (personalIcon != null) Color.Unspecified else MaterialTheme.colorScheme.onSurface,
+                modifier = Modifier.align(Alignment.Center).padding(top = 8.dp),
+            )
         }
-        when {
-            cycle?.isPeriod == true -> Box(
-                Modifier
-                    .align(Alignment.BottomCenter)
-                    .padding(start = 6.dp, end = 6.dp, bottom = 5.dp)
-                    .fillMaxWidth()
-                    .height(4.dp)
-                    .clip(RoundedCornerShape(50))
-                    .background(CYCLE_PERIOD),
-            )
-            cycle?.isOvulation == true -> Box(
-                Modifier
-                    .align(Alignment.BottomCenter)
-                    .padding(bottom = 5.dp)
-                    .size(6.dp)
-                    .clip(CircleShape)
-                    .background(CYCLE_OVULATION),
-            )
+        // Bottom: cycle marks as icons, no bars.
+        val cycleIcon = when {
+            cycle?.isPeriod == true -> "🩸"
+            cycle?.isOvulation == true -> "✨"
+            else -> null
+        }
+        cycleIcon?.let {
+            Text(it, fontSize = 10.sp, modifier = Modifier.align(Alignment.BottomEnd).padding(end = 4.dp, bottom = 3.dp))
         }
     }
 }
 
-/** Legend in words, plus where the cycle is today. */
+/** Legend in words: letters for the day's state, icons for cycle and moon. */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun CalendarLegend(state: CalendarUiState, modifier: Modifier = Modifier) {
     Column(modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        FlowRow(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        FlowRow(horizontalArrangement = Arrangement.spacedBy(14.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
             DayMood.entries.forEach { m ->
                 LegendItem(label = m.label()) {
-                    Box(Modifier.size(12.dp).clip(RoundedCornerShape(3.dp)).background(m.color().copy(alpha = 0.55f)))
+                    Box(
+                        Modifier.size(20.dp).clip(RoundedCornerShape(6.dp)).background(m.color().copy(alpha = 0.35f)),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        m.letter()?.let { Text(it, fontSize = 11.sp, fontWeight = FontWeight.Bold) }
+                    }
                 }
             }
         }
-        if (state.period?.lastPeriodStart != null) {
-            FlowRow(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                LegendItem("Месячные") { Box(Modifier.size(width = 14.dp, height = 4.dp).clip(RoundedCornerShape(50)).background(CYCLE_PERIOD)) }
-                LegendItem("Овуляция (оценка)") { Box(Modifier.size(6.dp).clip(CircleShape).background(CYCLE_OVULATION)) }
-                LegendItem("Новолуние / полнолуние") { Text("🌑🌕", fontSize = 10.sp) }
+        FlowRow(horizontalArrangement = Arrangement.spacedBy(14.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            if (state.period?.lastPeriodStart != null) {
+                LegendItem("Месячные") { Text("🩸", fontSize = 12.sp) }
+                LegendItem("Овуляция (оценка)") { Text("✨", fontSize = 12.sp) }
             }
+            LegendItem("Новолуние") { Text("🌑", fontSize = 12.sp) }
+            LegendItem("Полнолуние") { Text("🌕", fontSize = 12.sp) }
         }
     }
 }

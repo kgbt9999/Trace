@@ -238,7 +238,7 @@ private fun ForecastDayCard(day: ForecastEngine.ForecastDay, commonRecs: Set<Str
             Column(Modifier.weight(1f)) {
                 Text(dayTitle(day.date), style = MaterialTheme.typography.titleMedium)
                 Text(
-                    listOfNotNull("${moon.icon} ${moon.label}", day.phaseInfo?.let { "${it.emoji} ${it.label}" }).joinToString("  ·  "),
+                    "${moon.icon} ${moon.label}",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -256,6 +256,23 @@ private fun ForecastDayCard(day: ForecastEngine.ForecastDay, commonRecs: Set<Str
             }
         }
         val p = day.probabilities
+        // The most likely mood phase and the cycle phase as two clear labels.
+        Row(Modifier.padding(top = 10.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            val mood = LocalMoodColors.current
+            if (p.depression != null || p.elevation != null) {
+                val leading = listOf(
+                    Triple("Депрессия", p.depression ?: 0.0, mood.depressed),
+                    Triple("Гипомания", p.elevation ?: 0.0, mood.elevated),
+                    Triple("Смешанное состояние", p.mixed ?: 0.0, mood.irritable),
+                ).maxBy { it.second }
+                if (leading.second < LEADING_THRESHOLD) {
+                    PhaseChip("Фаза: ровное состояние", mood.success)
+                } else {
+                    PhaseChip("Фаза: ${leading.first.lowercase()} · ${(leading.second * 100).toInt()}%", leading.third)
+                }
+            }
+            day.phaseInfo?.let { PhaseChip("${it.emoji} ${it.label}", it.color) }
+        }
         if (p.depression != null || p.elevation != null) {
             Column(Modifier.padding(top = 10.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 val mood = LocalMoodColors.current
@@ -314,5 +331,21 @@ private fun buildShareText(days: List<ForecastEngine.ForecastDay>): String = bui
             appendLine(day.risks.joinToString("; ") { it.description })
         }
         appendLine()
+    }
+}
+
+/** Below this every mood phase is unlikely (same 30% that keeps the day score ≥ 7 «спокойно»). */
+private const val LEADING_THRESHOLD = 0.3
+
+@Composable
+private fun PhaseChip(text: String, color: Color) {
+    Surface(shape = RoundedCornerShape(8.dp), color = color.copy(alpha = 0.18f)) {
+        Text(
+            text,
+            style = MaterialTheme.typography.labelLarge,
+            fontWeight = FontWeight.SemiBold,
+            color = MaterialTheme.colorScheme.onSurface,
+            modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+        )
     }
 }
