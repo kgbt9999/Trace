@@ -462,7 +462,7 @@
 
     <!-- Other tabs -->
     <string name="calendar_cycle_settings">Настроить цикл</string>
-    <string name="calendar_subtitle">Ваш месяц: настроение по дням, цикл и луна. Нажмите на день, чтобы открыть его.</string>
+    <string name="calendar_subtitle">Цвет дня — по настроению. Значок в углу — фаза цикла.</string>
     <string name="calendar_subtab_overview">Обзор</string>
     <string name="calendar_subtab_meds">Лекарства</string>
     <string name="calendar_subtab_physical">Физическое</string>

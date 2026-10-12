@@ -537,9 +537,6 @@ private fun CalendarMonthGrid(
                 Icon(Icons.AutoMirrored.Filled.ArrowForward, contentDescription = stringResource(R.string.calendar_next_month))
             }
         }
-        if (state.period?.lastPeriodStart != null) {
-            CycleTodayLine(state, Modifier.padding(horizontal = 12.dp).padding(bottom = 8.dp))
-        }
         Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp)) {
             listOf(
                 R.string.weekday_mon, R.string.weekday_tue, R.string.weekday_wed,
@@ -563,7 +560,9 @@ private fun CalendarMonthGrid(
                     }
                 }
             }
-            CalendarLegend(state, Modifier.padding(top = 12.dp, start = 4.dp, end = 4.dp))
+            if (state.period?.lastPeriodStart != null) {
+                CyclePhaseIconLegend(Modifier.padding(top = 10.dp, start = 4.dp, end = 4.dp))
+            }
         }
     }
 }
@@ -800,65 +799,6 @@ private fun SummaryChip(label: String, value: Int) {
     }
 }
 
-/** What a calendar day "was", for the cell colour and the legend. */
-private enum class DayMood { LOW, HIGH, MIXED, ANXIOUS, IRRITABLE, EVEN }
-
-private fun dayMood(entry: MoodEntryEntity?): DayMood? {
-    entry ?: return null
-    if (entry.markedPolarity() == null && entry.markedValue("anxious") == null && entry.markedValue("irritable") == null) return null
-    val dep = entry.markedValue("depressed") ?: 0
-    val elev = entry.markedValue("elevated") ?: 0
-    val anx = entry.markedValue("anxious") ?: 0
-    val irr = entry.markedValue("irritable") ?: 0
-    return when {
-        dep >= 2 && elev >= 2 -> DayMood.MIXED
-        dep >= 2 && dep >= elev -> DayMood.LOW
-        elev >= 2 -> DayMood.HIGH
-        anx >= 3 -> DayMood.ANXIOUS
-        irr >= 3 -> DayMood.IRRITABLE
-        else -> DayMood.EVEN
-    }
-}
-
-@Composable
-private fun DayMood.color(): Color {
-    val p = LocalMoodColors.current
-    return when (this) {
-        DayMood.LOW -> p.depressed
-        DayMood.HIGH -> p.elevated
-        DayMood.MIXED -> Color((p.depressed.red + p.elevated.red) / 2, (p.depressed.green + p.elevated.green) / 2, (p.depressed.blue + p.elevated.blue) / 2)
-        DayMood.ANXIOUS -> p.anxious
-        DayMood.IRRITABLE -> p.irritable
-        DayMood.EVEN -> p.success
-    }
-}
-
-private fun DayMood.label(): String = when (this) {
-    DayMood.LOW -> "Депрессия"
-    DayMood.HIGH -> "Гипомания"
-    DayMood.MIXED -> "Смешанное"
-    DayMood.ANXIOUS -> "Тревога"
-    DayMood.IRRITABLE -> "Раздражительность"
-    DayMood.EVEN -> "Ровное"
-}
-
-/** Letter shown in the cell; even days get no letter (colour only). */
-private fun DayMood.letter(): String? = when (this) {
-    DayMood.LOW -> "Д"
-    DayMood.HIGH -> "Г"
-    DayMood.MIXED -> "С"
-    DayMood.ANXIOUS -> "Т"
-    DayMood.IRRITABLE -> "Р"
-    DayMood.EVEN -> null
-}
-
-private val CYCLE_PERIOD = Color(0xFFEC4899)
-
-/**
- * One day: number, mood as the cell colour (explained in the legend below the grid), period as
- * a pink bar, estimated ovulation as an amber dot, moon only on new/full moon. The old cell
- * packed codes like «П3»/«Т3», a moon icon on every day and a colour strip per cycle phase.
- */
 @Composable
 private fun androidx.compose.foundation.layout.RowScope.CalendarDayCell(
     iso: String?,
@@ -866,122 +806,150 @@ private fun androidx.compose.foundation.layout.RowScope.CalendarDayCell(
     onClick: () -> Unit,
 ) {
     val entry = iso?.let { state.entriesByDate[it] }
-    val mood = dayMood(entry)
-    val moodColor = mood?.color()
+    val palette = LocalMoodColors.current
+    val tint = MoodDayColors.cellTint(entry, palette)
     val isToday = iso == state.todayIso
-    val cycle = iso?.let { cycleMarkersFor(it, state) }
-    // New/full moon spans several days in the phase table; mark only its first day.
-    val moon = iso?.let { MoonPhaseCalc.moonPhase(it) }
-        ?.takeIf { it.id == "new" || it.id == "full" }
-        ?.takeIf { m -> MoonPhaseCalc.moonPhase(DateUtils.addDays(iso, -1)).id != m.id }
-    val personalIcon = iso?.let { state.dayIcons[it] }
-    val dayNum = iso?.substringAfterLast('-')?.trimStart('0')
-    val shape = RoundedCornerShape(12.dp)
-    Box(
-        Modifier
-            .weight(1f)
-            .aspectRatio(0.92f)
-            .padding(2.dp)
-            .clip(shape)
-            .background(moodColor?.copy(alpha = 0.28f) ?: Color.Transparent)
-            .then(if (isToday) Modifier.border(2.dp, MaterialTheme.colorScheme.primary, shape) else Modifier)
-            .clickable(enabled = iso != null, onClick = onClick)
-            .semantics {
-                contentDescription = listOfNotNull(
-                    dayNum?.let { "День $it" },
-                    mood?.label(),
-                    "месячные".takeIf { cycle?.isPeriod == true },
-                    "овуляция (оценка)".takeIf { cycle?.isOvulation == true },
-                    moon?.label,
-                ).joinToString(", ")
-            },
-    ) {
-        if (dayNum == null) return@Box
-        Text(
-            dayNum,
-            style = MaterialTheme.typography.labelLarge,
-            fontWeight = if (entry != null) FontWeight.SemiBold else FontWeight.Normal,
-            color = MaterialTheme.colorScheme.onSurface,
-            modifier = Modifier.align(Alignment.TopStart).padding(start = 6.dp, top = 4.dp),
-        )
-        moon?.let {
-            Text(it.icon, fontSize = 10.sp, modifier = Modifier.align(Alignment.TopEnd).padding(end = 4.dp, top = 4.dp))
-        }
-        // Centre: the user's own day icon, else the state letter (Д/Г/С/Т/Р).
-        val centre = personalIcon ?: mood?.letter()
-        centre?.let {
-            Text(
-                it,
-                fontSize = if (personalIcon != null) 16.sp else 15.sp,
-                fontWeight = FontWeight.Bold,
-                color = if (personalIcon != null) Color.Unspecified else MaterialTheme.colorScheme.onSurface,
-                modifier = Modifier.align(Alignment.Center).padding(top = 8.dp),
+    val period = state.period
+    val cycleMarkers = iso?.let { d ->
+        period?.lastPeriodStart?.let { start ->
+            CycleUtils.calcCyclePhase(
+                start,
+                period.cycleLength,
+                period.periodLength,
+                d,
+                period.irregular,
             )
         }
-        // Bottom: cycle marks as icons, no bars.
-        val cycleIcon = when {
-            cycle?.isPeriod == true -> "🩸"
-            cycle?.isOvulation == true -> "✨"
-            else -> null
-        }
-        cycleIcon?.let {
-            Text(it, fontSize = 10.sp, modifier = Modifier.align(Alignment.BottomEnd).padding(end = 4.dp, bottom = 3.dp))
-        }
     }
-}
-
-/** Legend in words: letters for the day's state, icons for cycle and moon. */
-@OptIn(ExperimentalLayoutApi::class)
-@Composable
-private fun CalendarLegend(state: CalendarUiState, modifier: Modifier = Modifier) {
-    Column(modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        FlowRow(horizontalArrangement = Arrangement.spacedBy(14.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-            DayMood.entries.forEach { m ->
-                LegendItem(label = m.label()) {
-                    Box(
-                        Modifier.size(20.dp).clip(RoundedCornerShape(6.dp)).background(m.color().copy(alpha = 0.35f)),
-                        contentAlignment = Alignment.Center,
-                    ) {
-                        m.letter()?.let { Text(it, fontSize = 11.sp, fontWeight = FontWeight.Bold) }
-                    }
+    val isPeriod = cycleMarkers?.isPeriod == true
+    val moon = iso?.let { MoonPhaseCalc.moonPhase(it) }
+    val glyph = entry?.let { dayGlyph(it) }
+    val personalIcon = iso?.let { state.dayIcons[it] }
+    val weatherIcon = iso?.let { state.weatherByDate[it] }?.icon?.take(2)?.takeIf { it.isNotBlank() }
+    val primaryBadge = personalIcon ?: glyph?.takeIf { it != "·" }
+    val baseBg = if (tint == Color.Transparent) {
+        Color.Transparent
+    } else {
+        tint.copy(alpha = 0.55f)
+    }
+    val dayNum = iso?.substringAfterLast('-')?.trimStart('0')
+    Column(
+        Modifier
+            .weight(1f)
+            .aspectRatio(0.85f)
+            .padding(2.dp)
+            .clip(RoundedCornerShape(10.dp))
+            .background(baseBg)
+            .then(
+                if (isToday) {
+                    Modifier.border(2.dp, MaterialTheme.colorScheme.primary, RoundedCornerShape(10.dp))
+                } else {
+                    Modifier
+                },
+            )
+            .clickable(enabled = iso != null, onClick = onClick)
+            .padding(horizontal = 2.dp, vertical = 2.dp)
+            .semantics {
+                contentDescription = buildString {
+                    dayNum?.let { append("День $it") }
+                    primaryBadge?.let { append(", $it") }
+                    moon?.let { append(", ${it.label}") }
+                }
+            },
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        Row(
+            Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            dayNum?.let {
+                Text(
+                    it,
+                    style = MaterialTheme.typography.labelSmall,
+                    fontWeight = if (entry != null) FontWeight.SemiBold else FontWeight.Normal,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    maxLines = 1,
+                    fontSize = 10.sp,
+                    lineHeight = 11.sp,
+                )
+            }
+            cycleMarkers?.phase?.let { phase ->
+                CycleUtils.PHASE_INFO[phase]?.let { info ->
+                    Text(info.emoji, fontSize = 9.sp, lineHeight = 10.sp, maxLines = 1, softWrap = false)
                 }
             }
         }
-        FlowRow(horizontalArrangement = Arrangement.spacedBy(14.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-            if (state.period?.lastPeriodStart != null) {
-                LegendItem("Месячные") { Text("🩸", fontSize = 12.sp) }
-                LegendItem("Овуляция (оценка)") { Text("✨", fontSize = 12.sp) }
+        Box(
+            Modifier
+                .weight(1f)
+                .fillMaxWidth(),
+            contentAlignment = Alignment.Center,
+        ) {
+            if (primaryBadge != null) {
+                Text(
+                    primaryBadge,
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Bold,
+                    lineHeight = 14.sp,
+                    maxLines = 1,
+                    softWrap = false,
+                    textAlign = TextAlign.Center,
+                )
             }
-            LegendItem("Новолуние") { Text("🌑", fontSize = 12.sp) }
-            LegendItem("Полнолуние") { Text("🌕", fontSize = 12.sp) }
+        }
+        val secondary = buildList {
+            weatherIcon?.let { add(it) }
+            moon?.icon?.let { add(it) }
+            if (personalIcon != null && glyph != null && glyph != "·") add(glyph)
+        }.take(2)
+        if (secondary.isNotEmpty()) {
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(1.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                secondary.forEach { mark ->
+                    Text(
+                        mark,
+                        fontSize = 7.sp,
+                        lineHeight = 8.sp,
+                        maxLines = 1,
+                        softWrap = false,
+                    )
+                }
+            }
         }
     }
 }
 
-@Composable
-private fun LegendItem(label: String, swatch: @Composable () -> Unit) {
-    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-        swatch()
-        Text(label, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+private fun dayGlyph(entry: MoodEntryEntity): String {
+    val dep = entry.depressed >= 2
+    val elev = entry.elevated >= 2
+    return when {
+        dep && elev -> "С"
+        dep -> "Д${entry.depressed}"
+        elev -> "П${entry.elevated}"
+        entry.anxious >= 3 -> "Т${entry.anxious}"
+        entry.irritable >= 3 -> "Р${entry.irritable}"
+        entry.depressed == 0 && entry.elevated == 0 -> "·"
+        else -> "·"
     }
 }
 
-/** "День 13 из 28 · Овуляция (оценка) · месячные через ~15 дн." for today. */
+/** Cycle phase icons used in the cells. */
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun CycleTodayLine(state: CalendarUiState, modifier: Modifier = Modifier) {
-    val today = cycleMarkersFor(state.todayIso, state) ?: return
-    val info = CycleUtils.PHASE_INFO[today.phase]
-    Surface(modifier.fillMaxWidth(), shape = RoundedCornerShape(10.dp), color = MaterialTheme.colorScheme.surfaceVariant) {
-        Row(Modifier.padding(horizontal = 12.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
-            Box(Modifier.size(10.dp).clip(CircleShape).background(info?.color ?: CYCLE_PERIOD))
+private fun CyclePhaseIconLegend(modifier: Modifier = Modifier) {
+    FlowRow(
+        modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+        verticalArrangement = Arrangement.spacedBy(4.dp),
+    ) {
+        CycleUtils.PHASE_INFO.values.forEach { info ->
             Text(
-                buildString {
-                    append("Цикл: день ${today.dayOfCycle} из ${state.period?.cycleLength ?: 28}")
-                    info?.let { append(" · ").append(it.label) }
-                    if (!today.isPeriod && today.daysUntilNext > 0) append(" · месячные через ~${today.daysUntilNext} дн.")
-                },
-                style = MaterialTheme.typography.bodyMedium,
-                modifier = Modifier.padding(start = 10.dp),
+                "${info.emoji} ${info.label}",
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
     }
