@@ -146,16 +146,23 @@ fun BodyMeasurementsSection(
             var asList by rememberSaveable { mutableStateOf(false) }
             ListToggleRow(stringResource(R.string.physical_list_toggle), asList, { asList = it }, Modifier.padding(top = 8.dp))
             if (asList) {
-                val rows = bodyReadingsByDate(history, hcDays)
-                if (rows.isEmpty()) {
+                val groups = bodyReadingsByField(history, hcDays)
+                if (groups.isEmpty()) {
                     Text(
                         stringResource(R.string.physical_labs_no_data_yet),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
-                rows.forEach { (date, reading) ->
-                    DateReadingRow(isoDate = date, reading = reading, onClick = { formDate = date })
+                groups.forEach { group ->
+                    Row(Modifier.padding(top = 10.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Box(Modifier.size(8.dp).clip(CircleShape).background(group.color))
+                        Box(Modifier.width(6.dp))
+                        Text(group.title, style = MaterialTheme.typography.titleSmall)
+                    }
+                    group.readings.forEach { r ->
+                        DateReadingRow(isoDate = r.date, reading = r.value, note = r.note, onClick = { formDate = r.date })
+                    }
                 }
             }
             Row(
@@ -240,24 +247,29 @@ private fun filterDecimal(raw: String): String {
 /** Empty field = clear that measurement for the date. */
 private fun String?.parseNumber(): Float? = this?.trim()?.takeIf { it.isNotEmpty() }?.toFloatOrNull()
 
+private data class BodyReading(val date: String, val value: String, val note: String? = null)
+private data class BodyReadingGroup(val title: String, val color: androidx.compose.ui.graphics.Color, val readings: List<BodyReading>)
+
 /**
- * "Вес 77,5 кг · Талия 70 см" per date, newest first. Health Connect weight is listed for days
- * without a manual weight and marked as synced.
+ * One column per parameter: a heading, then "date — value" rows, newest first. Weight comes
+ * first and also lists Health Connect readings for days without a manual weight.
  */
-private fun bodyReadingsByDate(
+private fun bodyReadingsByField(
     history: List<BodyMeasurementEntity>,
     hcDays: List<ExternalHealthDayEntity>,
-): List<Pair<String, String>> {
-    val byDate = linkedMapOf<String, MutableList<String>>()
-    history.forEach { row ->
-        // Weight first: it is the reading people look for.
-        BodyMeasurementCatalog.fields.sortedBy { if (it.labelRu.startsWith("Вес")) 0 else 1 }.forEach { f ->
-            f.read(row)?.let { v -> byDate.getOrPut(row.date) { mutableListOf() } += "${f.labelRu} ${formatDraft(v).replace('.', ',')} ${f.unit}" }
+): List<BodyReadingGroup> =
+    BodyMeasurementCatalog.fields
+        .sortedBy { if (it.labelRu.startsWith("Вес")) 0 else 1 }
+        .mapNotNull { f ->
+            val readings = history.mapNotNull { row ->
+                f.read(row)?.let { BodyReading(row.date, "${formatDraft(it).replace('.', ',')} ${f.unit}") }
+            }.toMutableList()
+            if (f.labelRu.startsWith("Вес")) {
+                val manualDates = readings.map { it.date }.toSet()
+                hcDays.filter { it.kind == "weight" && it.weightKg != null && it.date !in manualDates }.forEach { d ->
+                    readings += BodyReading(d.date, "${formatDraft(d.weightKg!!).replace('.', ',')} кг", "Health Connect")
+                }
+            }
+            readings.takeIf { it.isNotEmpty() }
+                ?.let { BodyReadingGroup("${f.labelRu}, ${f.unit}", f.chartColor, it.sortedByDescending { r -> r.date }) }
         }
-    }
-    hcDays.filter { it.kind == "weight" && it.weightKg != null }.forEach { d ->
-        val manual = history.any { it.date == d.date && it.weightKg != null }
-        if (!manual) byDate.getOrPut(d.date) { mutableListOf() } += "Вес ${formatDraft(d.weightKg!!).replace('.', ',')} кг (Health Connect)"
-    }
-    return byDate.entries.sortedByDescending { it.key }.map { (date, parts) -> date to parts.joinToString(" · ") }
-}
