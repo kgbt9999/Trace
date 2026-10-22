@@ -29,6 +29,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -113,13 +114,33 @@ fun LabResultsSection(
             if (history.isEmpty()) {
                 EmptyStateCard(message = stringResource(R.string.physical_labs_no_data_yet))
             } else {
-                Text(
-                    stringResource(R.string.physical_labs_history_title),
-                    style = MaterialTheme.typography.titleSmall,
-                    modifier = Modifier.padding(top = 4.dp),
-                )
-                history.sortedByDescending { it.date }.take(40).forEach { row ->
-                    LabEntryRow(row = row, onClick = { openEdit(row) })
+                // Off: latest value per analysis. On: every reading, grouped by analysis, date — value.
+                var asList by rememberSaveable { mutableStateOf(false) }
+                ListToggleRow(stringResource(R.string.physical_list_toggle), asList, { asList = it }, Modifier.padding(top = 4.dp))
+                val groups = history.groupBy { it.name.trim().lowercase() }
+                    .values
+                    .sortedBy { it.first().name.lowercase() }
+                if (!asList) {
+                    groups.forEach { rows ->
+                        val latest = rows.maxBy { it.date }
+                        LabEntryRow(row = latest, onClick = { openEdit(latest) })
+                    }
+                } else {
+                    groups.forEach { rows ->
+                        Text(
+                            rows.first().name,
+                            style = MaterialTheme.typography.titleSmall,
+                            modifier = Modifier.padding(top = 10.dp),
+                        )
+                        rows.sortedByDescending { it.date }.forEach { row ->
+                            DateReadingRow(
+                                isoDate = row.date,
+                                reading = row.valueText + (row.unit?.takeIf { it.isNotBlank() }?.let { " $it" } ?: ""),
+                                note = row.clinic?.takeIf { it.isNotBlank() },
+                                onClick = { openEdit(row) },
+                            )
+                        }
+                    }
                 }
             }
 
