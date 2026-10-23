@@ -79,27 +79,21 @@ fun CollapsibleSection(
                     .padding(horizontal = 12.dp, vertical = 12.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                Box(
-                    Modifier
-                        .padding(end = 10.dp)
-                        .size(32.dp)
-                        .clip(RoundedCornerShape(8.dp))
-                        .background(accent.copy(alpha = 0.18f)),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    if (leadingIcon != null) {
+                // Icon tile only when there is an icon; an empty tile with a bar carried no meaning.
+                if (leadingIcon != null) {
+                    Box(
+                        Modifier
+                            .padding(end = 10.dp)
+                            .size(32.dp)
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(accent.copy(alpha = 0.18f)),
+                        contentAlignment = Alignment.Center,
+                    ) {
                         Icon(
                             leadingIcon,
                             contentDescription = null,
                             tint = accent,
                             modifier = Modifier.size(18.dp),
-                        )
-                    } else {
-                        Box(
-                            Modifier
-                                .size(width = 4.dp, height = 14.dp)
-                                .clip(RoundedCornerShape(2.dp))
-                                .background(accent),
                         )
                     }
                 }

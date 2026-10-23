@@ -57,7 +57,7 @@ fun SettingsCard(
         elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
         border = androidx.compose.foundation.BorderStroke(
             1.dp,
-            MaterialTheme.colorScheme.outline.copy(alpha = 0.42f),
+            MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.42f),
         ),
         shape = MaterialTheme.shapes.large,
     ) {
@@ -131,8 +131,8 @@ fun SettingsMessageBanner(message: String, onDismiss: () -> Unit, modifier: Modi
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Text(message, style = MaterialTheme.typography.bodySmall, modifier = Modifier.weight(1f))
-            IconButton(onClick = onDismiss, modifier = Modifier.size(32.dp)) {
-                Icon(Icons.Default.Close, contentDescription = null, modifier = Modifier.size(18.dp))
+            IconButton(onClick = onDismiss, modifier = Modifier.size(48.dp)) {
+                Icon(Icons.Default.Close, contentDescription = stringResource(R.string.action_dismiss_message), modifier = Modifier.size(18.dp))
             }
         }
     }
@@ -151,7 +151,7 @@ fun SettingsNavChips(
         elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
         border = androidx.compose.foundation.BorderStroke(
             1.dp,
-            MaterialTheme.colorScheme.outline.copy(alpha = 0.42f),
+            MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.42f),
         ),
     ) {
         FlowRow(
@@ -183,7 +183,7 @@ fun SettingsNavRail(
         elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
         border = androidx.compose.foundation.BorderStroke(
             1.dp,
-            MaterialTheme.colorScheme.outline.copy(alpha = 0.42f),
+            MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.42f),
         ),
     ) {
         Column(Modifier.padding(8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
@@ -257,7 +257,7 @@ fun SettingsColorPicker(
                         if (selected.equals(hex, ignoreCase = true)) {
                             Modifier.border(2.dp, MaterialTheme.colorScheme.onSurface, RoundedCornerShape(10.dp))
                         } else {
-                            Modifier.border(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.4f), RoundedCornerShape(10.dp))
+                            Modifier.border(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f), RoundedCornerShape(10.dp))
                         },
                     )
                     .clickable { onSelect(hex) },

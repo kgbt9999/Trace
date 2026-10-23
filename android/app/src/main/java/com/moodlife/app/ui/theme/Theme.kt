@@ -2,6 +2,7 @@ package com.moodlife.app.ui.theme
 
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.ColorScheme
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Shapes
 import androidx.compose.material3.darkColorScheme
@@ -10,6 +11,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -55,7 +57,7 @@ fun MoodLifeTheme(
                 surfaceVariant = Color(0xFF222831),
                 outline = Color(0xFF3A4250),
                 error = mood.safety,
-            )
+            ).complete(dark = true, outline = Color(0xFF66748C))
         } else {
             lightColorScheme(
                 primary = Color(0xFF1A2B3C),
@@ -72,7 +74,7 @@ fun MoodLifeTheme(
                 surfaceVariant = Color(0xFFEEF1F4),
                 outline = Color(0xFFC5CCD4),
                 error = mood.safety,
-            )
+            ).complete(dark = false, outline = Color(0xFF7A8A9C))
         }
         AppearanceId.NEUTRAL -> if (dark) {
             darkColorScheme(
@@ -90,7 +92,7 @@ fun MoodLifeTheme(
                 surfaceVariant = Color(0xFF1C2C48),
                 outline = BrandColors.DarkOutline,
                 error = mood.safety,
-            )
+            ).complete(dark = true, outline = Color(0xFF5978AD))
         } else {
             lightColorScheme(
                 primary = BrandColors.Navy,
@@ -107,7 +109,7 @@ fun MoodLifeTheme(
                 surfaceVariant = Color(0xFFE8EEF4),
                 outline = BrandColors.LightOutline,
                 error = mood.safety,
-            )
+            ).complete(dark = false, outline = Color(0xFF7188A7))
         }
         AppearanceId.COLORFUL -> if (dark) {
             darkColorScheme(
@@ -126,7 +128,7 @@ fun MoodLifeTheme(
                 surfaceVariant = Color(0xFF1E3A5F),
                 outline = Color(0xFF3B6B8C),
                 error = mood.safety,
-            )
+            ).complete(dark = true, outline = Color(0xFF4E8BB4), keepTertiary = true)
         } else {
             lightColorScheme(
                 primary = Color(0xFF0D7377),
@@ -144,7 +146,7 @@ fun MoodLifeTheme(
                 surfaceVariant = Color(0xFFCFFAFE),
                 outline = Color(0xFF7DD3D8),
                 error = mood.safety,
-            )
+            ).complete(dark = false, outline = Color(0xFF2F979D), keepTertiary = true)
         }
     }
     val typography = when (appearance) {
@@ -190,4 +192,34 @@ fun MoodLifeTheme(
             content = content,
         )
     }
+}
+
+/**
+ * Fills the roles each scheme leaves out, so Material components never fall back to the
+ * baseline purple (tonal buttons, switch tracks, dialogs, menus).
+ *
+ * [outline] is the component-boundary color and reaches 3:1 against background, surface and
+ * surfaceVariant of its scheme (WCAG 1.4.11). The scheme's softer border becomes
+ * [ColorScheme.outlineVariant], used for decorative card edges and dividers.
+ */
+private fun ColorScheme.complete(dark: Boolean, outline: Color, keepTertiary: Boolean = false): ColorScheme {
+    val container = if (dark) lerp(surface, surfaceVariant, 0.5f) else background
+    return copy(
+        outline = outline,
+        outlineVariant = this.outline,
+        secondaryContainer = surfaceVariant,
+        onSecondaryContainer = onSurface,
+        tertiary = if (keepTertiary) tertiary else primary,
+        onTertiary = if (keepTertiary) onTertiary else onPrimary,
+        tertiaryContainer = if (keepTertiary) tertiaryContainer else primaryContainer,
+        onTertiaryContainer = if (keepTertiary) onTertiaryContainer else onPrimaryContainer,
+        surfaceTint = primary,
+        surfaceDim = if (dark) background else lerp(background, surfaceVariant, 0.5f),
+        surfaceBright = if (dark) surfaceVariant else surface,
+        surfaceContainerLowest = if (dark) background else surface,
+        surfaceContainerLow = if (dark) surface else lerp(surface, background, 0.5f),
+        surfaceContainer = container,
+        surfaceContainerHigh = surfaceVariant,
+        surfaceContainerHighest = lerp(surfaceVariant, onSurface, if (dark) 0.08f else 0.05f),
+    )
 }

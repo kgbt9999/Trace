@@ -289,7 +289,7 @@
     <string name="reports_heatmap_title">Тепловая карта настроения</string>
     <string name="reports_heatmap_hint">Интенсивность спада/подъёма по дням месяца (как вклад GitHub).</string>
     <string name="reports_heatmap_no_data">нет данных</string>
-    <string name="reports_dashboard_title">Сводка месяца</string>
+    <string name="reports_dashboard_title">Сводка за период</string>
     <string name="reports_dashboard_hint">Средние по дневнику: полярность, сон, приём.</string>
     <string name="reports_kpi_avg_mood">Среднее настроение</string>
     <string name="reports_kpi_avg_sleep">Сон (ср. ч)</string>
@@ -610,7 +610,7 @@
     <string name="reports_avg_functioning_empty">Дела: —</string>
     <string name="reports_no_data">Нет записей за месяц</string>
     <string name="reports_export_title">Экспорт и отчёт для врача</string>
-    <string name="reports_subtitle">Сводка месяца · данные JSON/CSV · читаемый отчёт (пациент / врач).</string>
+    <string name="reports_subtitle">Графики за выбранный период и отчёт для врача.</string>
     <string name="reports_burden_title">Дни месяца</string>
     <string name="reports_burden_hint">Спад — дни, когда подавленность была «заметно» и выше; подъём — то же по шкале подъёма; смешанные — оба сразу. Спад обычно занимает больше дней, чем подъём.</string>
     <string name="reports_days_depressed">Спад: %1$d</string>
@@ -1095,5 +1095,6 @@
     <string name="warning_add_direction_mania">Мания / гипомания</string>
     <string name="warning_add_direction_depression">Депрессия</string>
     <string name="warning_add_direction_mixed">Смешанное</string>
+    <string name="action_dismiss_message">Закрыть сообщение</string>
 </resources>
 

@@ -113,7 +113,7 @@ fun ForecastScreen(viewModel: ForecastViewModel = hiltViewModel()) {
 /** 1 / 3 / 7 / 14 days as one flat segmented line. */
 @Composable
 private fun HorizonSelector(selected: Int, onSelect: (Int) -> Unit, modifier: Modifier = Modifier) {
-    val outline = MaterialTheme.colorScheme.outline.copy(alpha = 0.6f)
+    val outline = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f)
     val shape = RoundedCornerShape(8.dp)
     Row(modifier.height(IntrinsicSize.Min).clip(shape).border(1.dp, outline, shape)) {
         val options = listOf(1 to "1 день", 3 to "3 дня", 7 to "Неделя", 14 to "2 недели")

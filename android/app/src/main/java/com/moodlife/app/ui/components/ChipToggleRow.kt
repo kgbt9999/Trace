@@ -65,7 +65,7 @@ fun ChipToggleRow(
             val border = if (item.active) {
                 item.color ?: MaterialTheme.colorScheme.primary
             } else {
-                MaterialTheme.colorScheme.outline.copy(alpha = 0.55f)
+                MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.55f)
             }
             Row(
                 modifier = Modifier

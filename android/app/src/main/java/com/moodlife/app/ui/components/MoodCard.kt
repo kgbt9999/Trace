@@ -30,7 +30,7 @@ fun MoodCard(
         shadowElevation = 0.dp,
         border = BorderStroke(
             1.dp,
-            (tint ?: MaterialTheme.colorScheme.outline).copy(alpha = if (tint != null) 0.28f else 0.42f),
+            (tint ?: MaterialTheme.colorScheme.outlineVariant).copy(alpha = if (tint != null) 0.28f else 0.42f),
         ),
     ) {
         Column(Modifier.then(if (contentPadding) Modifier.padding(16.dp) else Modifier)) {

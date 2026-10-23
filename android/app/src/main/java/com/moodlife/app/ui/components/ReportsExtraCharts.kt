@@ -215,7 +215,6 @@ fun ReportsDashboardCard(
     modifier: Modifier = Modifier,
 ) {
     Column(modifier.fillMaxWidth()) {
-        Text(stringResource(R.string.reports_dashboard_title), style = MaterialTheme.typography.titleMedium)
         Text(
             stringResource(R.string.reports_dashboard_hint),
             style = MaterialTheme.typography.bodySmall,

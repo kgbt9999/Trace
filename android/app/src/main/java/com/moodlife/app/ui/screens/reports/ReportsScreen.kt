@@ -611,7 +611,7 @@ private fun ReportPeriodSelector(
     Column(Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, top = 12.dp)) {
         Text(stringResource(R.string.reports_period_title), style = MaterialTheme.typography.titleSmall)
         // One line: equal flat segments (wrapping chips took two rows on a phone).
-        val outline = MaterialTheme.colorScheme.outline.copy(alpha = 0.6f)
+        val outline = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f)
         val shape = RoundedCornerShape(4.dp)
         Row(
             Modifier

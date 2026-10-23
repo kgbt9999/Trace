@@ -87,7 +87,7 @@ fun ScaleInput(
         shadowElevation = 0.dp,
         border = androidx.compose.foundation.BorderStroke(
             1.dp,
-            MaterialTheme.colorScheme.outline.copy(alpha = 0.35f),
+            MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f),
         ),
     ) {
         Column(Modifier.padding(14.dp)) {
@@ -284,7 +284,7 @@ private fun ScaleStep(
     contentDescription: String,
     content: @Composable (Color) -> Unit,
 ) {
-    val border = MaterialTheme.colorScheme.outline.copy(alpha = 0.7f)
+    val border = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.7f)
     val bg = when {
         active -> color
         else -> color.copy(alpha = tintAmount.coerceIn(0.04f, 0.32f))
@@ -426,7 +426,7 @@ private fun QuestionScale(
             }
         }
         val shape = RoundedCornerShape(4.dp)
-        val outline = MaterialTheme.colorScheme.outline.copy(alpha = 0.6f)
+        val outline = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f)
         Row(
             Modifier
                 .padding(top = 6.dp)
