@@ -83,6 +83,8 @@ android {
             initWith(getByName("release"))
             signingConfig = signingConfigs.getByName("debug")
             matchingFallbacks += listOf("release")
+            // Also runs on the x86_64 emulator, so release optimizations can be checked there.
+            ndk { abiFilters += listOf("x86_64") }
         }
     }
 
