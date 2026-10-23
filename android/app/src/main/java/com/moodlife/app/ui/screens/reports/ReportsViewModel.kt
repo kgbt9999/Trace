@@ -254,11 +254,24 @@ class ReportsViewModel @Inject constructor(
         it.copy(kind = ReportPeriod.Kind.CUSTOM, customFrom = from ?: it.customFrom, customTo = to ?: it.customTo)
     }
 
+    private val _reportHeader = MutableStateFlow(com.moodlife.app.domain.ReportHeader())
+    val reportHeader: StateFlow<com.moodlife.app.domain.ReportHeader> = _reportHeader
+
+    init {
+        viewModelScope.launch { _reportHeader.value = com.moodlife.app.domain.ReportHeader.load(settingsRepository) }
+    }
+
+    fun saveReportHeader(header: com.moodlife.app.domain.ReportHeader) {
+        _reportHeader.value = header
+        viewModelScope.launch { com.moodlife.app.domain.ReportHeader.save(settingsRepository, header) }
+    }
+
+    /** Exports exactly the period selected on the screen. */
     fun exportMonth(format: ExportFormat, onReady: (Intent) -> Unit) {
-        val ym = _period.value.exportMonth(LocalDate.now())
+        val (from, to) = _period.value.range(LocalDate.now())
         viewModelScope.launch {
             try {
-                val file = exportManager.exportMonth(ym.first, ym.second, format)
+                val file = exportManager.exportPeriod(from, to, format)
                 onReady(exportManager.shareIntent(file.file, file.format))
                 _exportMessage.value = "exported"
             } catch (_: Exception) {

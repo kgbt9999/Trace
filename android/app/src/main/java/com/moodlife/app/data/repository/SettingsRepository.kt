@@ -38,6 +38,16 @@ class SettingsRepository @Inject constructor(private val settingDao: SettingDao)
         const val KEY_APPEARANCE = "appearance_style"
         const val KEY_THEME_MODE = "theme_mode"
         const val KEY_CRISIS_DOCTOR = "crisis_doctor"
+
+        /** Report header («шапка» of exported reports), filled by the user in Reports. */
+        const val KEY_REPORT_TITLE = "report_title"
+        const val KEY_REPORT_PATIENT = "report_patient"
+        const val KEY_REPORT_DOB = "report_dob"
+        const val KEY_REPORT_DIAGNOSIS = "report_diagnosis"
+        const val KEY_REPORT_DOCTOR = "report_doctor"
+        const val KEY_REPORT_CLINIC = "report_clinic"
+        const val KEY_REPORT_NEXT_VISIT = "report_next_visit"
+        const val KEY_REPORT_COMMENT = "report_comment"
         const val KEY_CRISIS_SUPPORT = "crisis_support"
         const val KEY_CRISIS_NOTES = "crisis_notes"
         const val KEY_CRISIS_WISHES = "crisis_wishes"

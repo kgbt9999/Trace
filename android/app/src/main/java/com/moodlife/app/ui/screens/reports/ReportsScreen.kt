@@ -93,6 +93,8 @@ fun ReportsScreen(viewModel: ReportsViewModel = hiltViewModel()) {
     var dataFormatDialog by remember { mutableStateOf(false) }
     var doctorFormatDialog by remember { mutableStateOf(false) }
     var showExport by rememberSaveable { mutableStateOf(false) }
+    var headerDialog by remember { mutableStateOf(false) }
+    val reportHeader by viewModel.reportHeader.collectAsStateWithLifecycle()
     var zoomChartId by remember { mutableStateOf<ReportsCharts.Id?>(null) }
 
     fun launchExport(format: ExportFormat) {
@@ -143,16 +145,28 @@ fun ReportsScreen(viewModel: ReportsViewModel = hiltViewModel()) {
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 4.dp),
             )
-            if (state.period.kind != ReportPeriod.Kind.MONTH) {
-                Text(
-                    stringResource(
-                        R.string.reports_export_month_note,
-                        "${DateUtils.MONTH_NAMES_RU[state.month]} ${state.year}",
-                    ),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 4.dp),
-                )
+            Text(
+                "Период отчёта: " + state.period.label(java.time.LocalDate.now()),
+                style = MaterialTheme.typography.bodyMedium,
+                modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 8.dp),
+            )
+            Row(
+                Modifier
+                    .fillMaxWidth()
+                    .clickable { headerDialog = true }
+                    .padding(start = 16.dp, end = 8.dp, top = 4.dp)
+                    .heightIn(min = 48.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Column(Modifier.weight(1f)) {
+                    Text("Шапка отчёта", style = MaterialTheme.typography.titleSmall)
+                    Text(
+                        reportHeaderSummary(reportHeader),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                TextButton(onClick = { headerDialog = true }) { Text("Изменить") }
             }
             Column(
                 Modifier.padding(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 16.dp),
@@ -174,6 +188,13 @@ fun ReportsScreen(viewModel: ReportsViewModel = hiltViewModel()) {
             }
         }
 
+        if (headerDialog) {
+            ReportHeaderDialog(
+                initial = reportHeader,
+                onSave = { viewModel.saveReportHeader(it); headerDialog = false },
+                onDismiss = { headerDialog = false },
+            )
+        }
         if (dataFormatDialog) {
             AlertDialog(
                 onDismissRequest = { dataFormatDialog = false },

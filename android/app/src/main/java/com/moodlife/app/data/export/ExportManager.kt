@@ -31,8 +31,32 @@ class ExportManager @Inject constructor(
         return ExportFile(exported.file, ExportFormat.JSON)
     }
 
+    /**
+     * Readable reports (HTML, PDF, CSV) cover exactly [from]..[to]; the month JSON uses the month
+     * that contains [to].
+     */
+    suspend fun exportPeriod(from: String, to: String, format: ExportFormat): ExportFile {
+        val label = if (from == to) from else "${from}_$to"
+        val end = java.time.LocalDate.parse(to)
+        return when (format) {
+            ExportFormat.HTML -> writeCache("Trace-doctor-$label.html", doctorExportGenerator.generateHtml(from, to), format)
+            ExportFormat.PATIENT_HTML -> writeCache("Trace-patient-$label.html", doctorExportGenerator.generatePatientHtml(from, to), format)
+            ExportFormat.CSV -> writeCache("Trace-report-$label.csv", buildCsv(doctorExportGenerator.loadEntries(from, to)), format)
+            ExportFormat.PDF -> {
+                val file = File(ExportCache.dir(context), "Trace-doctor-$label.pdf")
+                // Same layout as the HTML report; the hand-drawn PDF stays as a fallback.
+                val printed = runCatching {
+                    android.print.HtmlPdfWriter.write(context, doctorExportGenerator.generateHtml(from, to), file)
+                }.isSuccess && file.length() > 0
+                if (printed) ExportFile(file, ExportFormat.PDF) else exportMonth(end.year, end.monthValue - 1, format)
+            }
+            ExportFormat.JSON -> exportMonth(end.year, end.monthValue - 1, format)
+        }
+    }
+
     suspend fun exportMonth(year: Int, month: Int, format: ExportFormat): ExportFile {
         val label = "${year}-${(month + 1).toString().padStart(2, '0')}"
+        val (from, to) = com.moodlife.app.util.DateUtils.monthRange(year, month)
         return when (format) {
             // Month JSON must stay month-scoped — never dump the full diary DB.
             ExportFormat.JSON -> {
@@ -40,11 +64,11 @@ class ExportManager @Inject constructor(
                 ExportFile(exported.file, ExportFormat.JSON)
             }
             ExportFormat.HTML -> {
-                val html = doctorExportGenerator.generateHtml(year, month)
+                val html = doctorExportGenerator.generateHtml(from, to)
                 writeCache("Trace-doctor-$label.html", html, ExportFormat.HTML)
             }
             ExportFormat.PATIENT_HTML -> {
-                val html = doctorExportGenerator.generatePatientHtml(year, month)
+                val html = doctorExportGenerator.generatePatientHtml(from, to)
                 writeCache("Trace-patient-$label.html", html, ExportFormat.PATIENT_HTML)
             }
             ExportFormat.CSV -> {

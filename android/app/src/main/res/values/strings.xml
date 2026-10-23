@@ -609,7 +609,7 @@
     <string name="reports_avg_sleep_empty">Сон: —</string>
     <string name="reports_avg_functioning_empty">Дела: —</string>
     <string name="reports_no_data">Нет записей за месяц</string>
-    <string name="reports_export_title">Экспорт за месяц</string>
+    <string name="reports_export_title">Экспорт и отчёт для врача</string>
     <string name="reports_subtitle">Сводка месяца · данные JSON/CSV · читаемый отчёт (пациент / врач).</string>
     <string name="reports_burden_title">Дни месяца</string>
     <string name="reports_burden_hint">Спад — дни, когда подавленность была «заметно» и выше; подъём — то же по шкале подъёма; смешанные — оба сразу. Спад обычно занимает больше дней, чем подъём.</string>
@@ -921,7 +921,7 @@
     <string name="forecast_share_subject">Прогноз Trace</string>
     <string name="forecast_symbols_hint">Символы как в календаре: луна, фаза цикла, риски погоды.</string>
 
-    <string name="reports_export_hint">Два действия: данные (JSON/CSV) или читаемый отчёт (пациент HTML / врач PDF·HTML).</string>
+    <string name="reports_export_hint">Отчёт строится за период, выбранный выше. Данные — JSON/CSV; читаемый отчёт — для вас (HTML) или для врача (PDF/HTML).</string>
     <string name="reports_export_data">Данные JSON/CSV</string>
     <string name="reports_export_data_hint">Архив записей или таблица для Excel</string>
     <string name="reports_export_readable">Читаемый отчёт</string>
@@ -929,9 +929,9 @@
     <string name="reports_export_doctor_report">Читаемый отчёт</string>
     <string name="reports_export_doctor_hint">Пациент HTML или врач PDF/HTML</string>
     <string name="reports_export_json_hint">Полный архив записей за месяц</string>
-    <string name="reports_export_html_hint">Для врача: оси, сон, лекарства, частота ранних признаков (без ПАВ)</string>
-    <string name="reports_export_patient_html_hint">Для вас: что отследили и что можно обсудить с врачом</string>
-    <string name="reports_export_pdf_hint">Для врача: PDF с KPI, журналом, лекарствами и анализами</string>
+    <string name="reports_export_html_hint">Для врача: настроение, сон, лекарства, вес и замеры, анализы, дневник по дням (без ПАВ)</string>
+    <string name="reports_export_patient_html_hint">Для вас: что отследили, физические показатели, дневник и что обсудить с врачом</string>
+    <string name="reports_export_pdf_hint">Для врача: тот же отчёт, что HTML, в PDF для печати</string>
     <string name="reports_export_csv_hint">Таблица для Excel</string>
     <string name="reports_open_forecast">Открыть прогноз</string>
     <string name="reports_forecast_tip">Прогноз дня больше не в нижней панели — откройте его здесь.</string>
