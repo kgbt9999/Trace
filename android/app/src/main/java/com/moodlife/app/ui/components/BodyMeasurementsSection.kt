@@ -12,6 +12,9 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
@@ -57,12 +60,15 @@ fun BodyMeasurementsSection(
     onChartsVisibleChange: (Boolean) -> Unit,
     onSaveField: (date: String, fieldId: String, value: Float?) -> Unit,
     modifier: Modifier = Modifier,
+    onDeleteDate: (date: String) -> Unit = {},
 ) {
     var formDate by rememberSaveable(entryDate) { mutableStateOf(entryDate) }
     val rowForDate = if (formDate == entryDate) current else history.find { it.date == formDate }
     val drafts = remember(formDate) { mutableStateMapOf<String, String>() }
     val edited = remember(formDate) { mutableStateMapOf<String, Boolean>() }
     var savedNote by remember(formDate) { mutableStateOf(false) }
+    var confirmDelete by remember(formDate) { mutableStateOf(false) }
+    val hasSaved = rowForDate != null && BodyMeasurementCatalog.fields.any { it.read(rowForDate) != null }
 
     // Refresh from the DB row, but never overwrite a field the user is typing in.
     LaunchedEffect(formDate, rowForDate?.updatedAt) {
@@ -134,6 +140,32 @@ fun BodyMeasurementsSection(
             ) {
                 Text(stringResource(R.string.physical_body_measures_save))
             }
+            if (hasSaved) {
+                // Wrong values are removed here: the whole date at once, or a single field by clearing it and saving.
+                TextButton(
+                    onClick = { confirmDelete = true },
+                    colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error),
+                    modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp),
+                ) {
+                    Text(stringResource(R.string.physical_body_delete_date, DateUtils.formatRu(DateUtils.parseIso(formDate))))
+                }
+            }
+            if (confirmDelete) {
+                AlertDialog(
+                    onDismissRequest = { confirmDelete = false },
+                    title = { Text(stringResource(R.string.physical_body_delete_title, DateUtils.formatRu(DateUtils.parseIso(formDate)))) },
+                    text = { Text(stringResource(R.string.physical_body_delete_text)) },
+                    confirmButton = {
+                        TextButton(onClick = {
+                            onDeleteDate(formDate)
+                            edited.clear()
+                            BodyMeasurementCatalog.fields.forEach { drafts[it.id] = "" }
+                            confirmDelete = false
+                        }) { Text(stringResource(R.string.physical_body_delete_confirm), color = MaterialTheme.colorScheme.error) }
+                    },
+                    dismissButton = { TextButton(onClick = { confirmDelete = false }) { Text(stringResource(android.R.string.cancel)) } },
+                )
+            }
             if (savedNote) {
                 Text(
                     stringResource(R.string.physical_body_saved),
@@ -146,6 +178,11 @@ fun BodyMeasurementsSection(
             var asList by rememberSaveable { mutableStateOf(false) }
             ListToggleRow(stringResource(R.string.physical_list_toggle), asList, { asList = it }, Modifier.padding(top = 8.dp))
             if (asList) {
+                Text(
+                    stringResource(R.string.physical_list_edit_hint),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
                 val groups = bodyReadingsByField(history, hcDays)
                 if (groups.isEmpty()) {
                     Text(

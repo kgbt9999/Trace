@@ -101,7 +101,22 @@ class MedicationRepository @Inject constructor(
 
     suspend fun deactivate(med: MedicationEntity) {
         medicationDao.upsert(med.copy(isActive = false, updatedAt = System.currentTimeMillis()))
-        // Keep historical logs; do not delete rows on hide/rename.
+        // Keep history, but drop the pre-planned future days: a hidden medication must not show
+        // up as "missed" tomorrow.
+        medicationLogDao.deleteFutureUnmarked(med.id, java.time.LocalDate.now().toString())
+    }
+
+    /** Days with a journal row up to today — shown in the delete confirmation. */
+    suspend fun pastLogCount(medicationId: String): Int =
+        medicationLogDao.countPastForMed(medicationId, java.time.LocalDate.now().toString())
+
+    /**
+     * Removes a medication added by mistake together with every journal row, so it disappears
+     * from the calendar and reports. Hiding ([deactivate]) is the choice when history matters.
+     */
+    suspend fun deleteCompletely(medicationId: String) {
+        medicationLogDao.deleteAllForMed(medicationId)
+        medicationDao.deleteById(medicationId)
     }
 
     suspend fun toggleSlot(

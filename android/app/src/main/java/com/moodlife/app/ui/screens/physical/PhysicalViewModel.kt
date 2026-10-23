@@ -322,6 +322,10 @@ class PhysicalViewModel @Inject constructor(
         }
     }
 
+    fun deleteBodyMeasurementDate(date: String) {
+        viewModelScope.launch { bodyMeasurementRepository.deleteDate(date) }
+    }
+
     fun refreshHcStatus() {
         viewModelScope.launch { refreshHcStatusInternal() }
     }

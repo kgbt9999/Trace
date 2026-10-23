@@ -111,7 +111,7 @@ class JsonBackupImporter @Inject constructor(
                         episodePhase, routineScore, note, createdAt, updatedAt
                     ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
                     """.trimIndent(),
-                    arrayOf(
+                    arrayOf<Any?>(
                         id, date,
                         intAt("depressed", "д"),
                         intAt("elevated", "п"),
@@ -223,7 +223,7 @@ class JsonBackupImporter @Inject constructor(
                 (id, name, valueText, valueNumeric, unit, date, clinic, createdAt, updatedAt)
                 VALUES (?, ?, ?, ?, ?, ?, NULL, ?, ?)
                 """.trimIndent(),
-                arrayOf(id, name, valueText, value, unit, date, createdAt, updatedAt),
+                arrayOf<Any?>(id, name, valueText, value, unit, date, createdAt, updatedAt),
             )
             n++
         }

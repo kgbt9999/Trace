@@ -286,7 +286,7 @@ abstract class MoodLifeDatabase : RoomDatabase() {
                             (id, name, valueText, valueNumeric, unit, date, clinic, createdAt, updatedAt)
                             VALUES (?, ?, ?, ?, ?, ?, NULL, ?, ?)
                             """.trimIndent(),
-                            arrayOf(
+                            arrayOf<Any?>(
                                 "$idBase-$suffix",
                                 name,
                                 vText,
@@ -320,7 +320,7 @@ abstract class MoodLifeDatabase : RoomDatabase() {
                                 (id, name, valueText, valueNumeric, unit, date, clinic, createdAt, updatedAt)
                                 VALUES (?, ?, ?, NULL, '', ?, NULL, ?, ?)
                                 """.trimIndent(),
-                                arrayOf(
+                                arrayOf<Any?>(
                                     "$idBase-oam",
                                     "Общий анализ мочи",
                                     urine,
@@ -341,7 +341,7 @@ abstract class MoodLifeDatabase : RoomDatabase() {
                                 (id, name, valueText, valueNumeric, unit, date, clinic, createdAt, updatedAt)
                                 VALUES (?, ?, ?, NULL, '', ?, NULL, ?, ?)
                                 """.trimIndent(),
-                                arrayOf(
+                                arrayOf<Any?>(
                                     "$idBase-note",
                                     "Заметка к анализам",
                                     note,

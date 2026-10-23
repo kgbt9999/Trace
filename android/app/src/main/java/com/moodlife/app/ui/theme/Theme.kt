@@ -207,7 +207,9 @@ private fun ColorScheme.complete(dark: Boolean, outline: Color, keepTertiary: Bo
     return copy(
         outline = outline,
         outlineVariant = this.outline,
-        secondaryContainer = surfaceVariant,
+        // Selected chips and tonal buttons: tinted toward primary so they never match the
+        // dialog/card surface they sit on.
+        secondaryContainer = lerp(surfaceVariant, primary, if (dark) 0.28f else 0.16f),
         onSecondaryContainer = onSurface,
         tertiary = if (keepTertiary) tertiary else primary,
         onTertiary = if (keepTertiary) onTertiary else onPrimary,

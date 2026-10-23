@@ -42,6 +42,9 @@ interface MedicationDao {
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun upsert(medication: MedicationEntity)
+
+    @Query("DELETE FROM medications WHERE id = :id")
+    suspend fun deleteById(id: String)
 }
 
 @Dao
@@ -65,6 +68,19 @@ interface MedicationLogDao {
 
     @Query("DELETE FROM medication_logs WHERE medicationId = :medId AND date = :date")
     suspend fun deleteByMedAndDate(medId: String, date: String)
+
+    @Query("DELETE FROM medication_logs WHERE medicationId = :medId")
+    suspend fun deleteAllForMed(medId: String)
+
+    @Query("SELECT COUNT(*) FROM medication_logs WHERE medicationId = :medId AND date <= :today")
+    suspend fun countPastForMed(medId: String, today: String): Int
+
+    /** Pre-planned future days nobody has marked yet (no slot taken). */
+    @Query(
+        "DELETE FROM medication_logs WHERE medicationId = :medId AND date > :today " +
+            "AND taken = 0 AND slotsTaken NOT LIKE '%true%'",
+    )
+    suspend fun deleteFutureUnmarked(medId: String, today: String)
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun upsert(log: MedicationLogEntity)

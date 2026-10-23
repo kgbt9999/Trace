@@ -34,6 +34,9 @@ fun GuideScreen() {
         GuideSection(R.string.guide_calendar_legend_title, R.string.guide_calendar_legend_body)
         GuideSection(R.string.guide_reports_title, R.string.guide_reports_body)
         GuideSection(R.string.guide_forecast_title, R.string.guide_forecast_body)
+        CollapsibleSection(title = MIXED_STATES_TITLE, initiallyExpanded = false, modifier = Modifier.padding(bottom = 8.dp)) {
+            MixedStatesGuide()
+        }
         GuideSection(R.string.guide_settings_title, R.string.guide_settings_body)
         GuideSection(R.string.guide_sources_title, R.string.guide_sources_body)
         GuideSection(R.string.guide_security_title, R.string.guide_security_body)

@@ -1,5 +1,9 @@
 package com.moodlife.app.ui.screens.settings
 
+import androidx.compose.material.icons.outlined.Delete
+import androidx.compose.material.icons.Icons
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import android.content.ActivityNotFoundException
 import android.content.Intent
 import android.net.Uri
@@ -714,11 +718,49 @@ private fun MedsSettingsSection(state: SettingsUiState, viewModel: SettingsViewM
                     SettingsListRow(
                         title = med.name,
                         subtitle = med.dosage,
-                        trailing = { SettingsItemActions(onRestore = { viewModel.restoreMedication(med) }) },
+                        trailing = {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                DeleteMedicationButton(med, viewModel)
+                                SettingsItemActions(onRestore = { viewModel.restoreMedication(med) })
+                            }
+                        },
                     )
                 }
             }
         }
+    }
+}
+
+/** Deletes a medication added by mistake, with all its days, after a confirmation that names it. */
+@Composable
+private fun DeleteMedicationButton(med: MedicationEntity, viewModel: SettingsViewModel) {
+    var confirm by remember { mutableStateOf(false) }
+    var days by remember { mutableStateOf<Int?>(null) }
+    LaunchedEffect(confirm) { if (confirm) days = viewModel.medicationLogDays(med) }
+    IconButton(onClick = { confirm = true }) {
+        Icon(
+            Icons.Outlined.Delete,
+            contentDescription = stringResource(R.string.settings_med_delete_cd, med.name),
+            tint = MaterialTheme.colorScheme.error,
+        )
+    }
+    if (confirm) {
+        AlertDialog(
+            onDismissRequest = { confirm = false },
+            title = { Text(stringResource(R.string.settings_med_delete_title, med.name)) },
+            text = {
+                Text(
+                    stringResource(R.string.settings_med_delete_text, days ?: 0) + "\n\n" +
+                        stringResource(R.string.settings_med_delete_hint),
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = { viewModel.deleteMedication(med); confirm = false }) {
+                    Text(stringResource(R.string.settings_med_delete_confirm), color = MaterialTheme.colorScheme.error)
+                }
+            },
+            dismissButton = { TextButton(onClick = { confirm = false }) { Text(stringResource(android.R.string.cancel)) } },
+        )
     }
 }
 
@@ -743,10 +785,13 @@ private fun MedRow(med: MedicationEntity, viewModel: SettingsViewModel) {
             }
         },
         trailing = {
-            SettingsItemActions(
-                onEdit = { showEdit = true },
-                onHide = { viewModel.deactivateMedication(med) },
-            )
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                DeleteMedicationButton(med, viewModel)
+                SettingsItemActions(
+                    onEdit = { showEdit = true },
+                    onHide = { viewModel.deactivateMedication(med) },
+                )
+            }
         },
     )
     if (showEdit) {

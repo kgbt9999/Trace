@@ -152,6 +152,7 @@ fun PhysicalScreen(
                 chartsVisible = bodyChartsVisible,
                 onChartsVisibleChange = viewModel::setBodyChartsVisible,
                 onSaveField = viewModel::saveBodyMeasurementField,
+                onDeleteDate = viewModel::deleteBodyMeasurementDate,
             )
         }
 

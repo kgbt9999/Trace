@@ -410,6 +410,12 @@ class SettingsViewModel @Inject constructor(
         medicationRepository.deactivate(med)
     }
 
+    suspend fun medicationLogDays(med: MedicationEntity): Int = medicationRepository.pastLogCount(med.id)
+
+    fun deleteMedication(med: MedicationEntity) = viewModelScope.launch {
+        medicationRepository.deleteCompletely(med.id)
+    }
+
     fun restoreMedication(med: MedicationEntity) = viewModelScope.launch {
         medicationRepository.updateMedication(med.copy(isActive = true))
     }

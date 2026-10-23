@@ -3,7 +3,6 @@
     <string name="app_name">Trace</string>
     <string name="hc_privacy_title">Trace и Health Connect</string>
     <string name="hc_privacy_body">Trace читает из Health Connect только те типы данных, которые вы явно разрешите (шаги, сон, вес, активность, питание, цикл и связанные показатели).\n\nДанные сохраняются локально на устройстве и используются для сводок в разделах «Календарь» и «Сегодня». Trace не ставит диагнозов и не меняет лечение.\n\nВы можете отозвать разрешения в настройках Health Connect в любой момент. Экспорт и удаление данных — по вашему действию в настройках Trace.</string>
-    <string name="app_tagline">ДНЕВНИК СОСТОЯНИЯ</string>
     <string name="disclaimer">Trace — инструмент самонаблюдения, не медицинская диагностика и не замена врачу. При ухудшении состояния или суицидальных мыслях обратитесь к специалисту или в службу экстренной помощи.</string>
 
     <!-- Navigation tabs -->
@@ -24,8 +23,6 @@
     <string name="weekday_fri">Пт</string>
     <string name="weekday_sat">Сб</string>
     <string name="weekday_sun">Вс</string>
-    <string name="calendar_mood_summary">Подавл. %1$d · Подъём %2$d · Тревога %3$d</string>
-    <string name="calendar_axes_detail">Д %1$d · П %2$d · Т %3$d · Р %4$d</string>
     <string name="calendar_prev_month">Предыдущий месяц</string>
     <string name="calendar_next_month">Следующий месяц</string>
     <string name="forecast_empty">Недостаточно истории для прогноза. Ведите дневник несколько дней.</string>
@@ -38,7 +35,6 @@
     <string name="reports_period_custom">Свой</string>
     <string name="reports_period_from">С</string>
     <string name="reports_period_to">По</string>
-    <string name="reports_export_month_note">Экспорт формируется за календарный месяц: %1$s</string>
     <string name="reports_next_month">Следующий месяц</string>
 
     <!-- Today screen -->
@@ -48,7 +44,6 @@
     <string name="today_mood_section">Основные оси (0–5)</string>
     <string name="today_extra_section">Дополнительно</string>
     <string name="today_clinical_section">Сон и дела</string>
-    <string name="today_substance_section">Алкоголь и вещества</string>
     <string name="today_sleep_details">Сколько спали</string>
     <string name="today_episode_phase">По шкалам: %1$s</string>
     <string name="today_last_saved">Сохранено в %1$s</string>
@@ -59,7 +54,6 @@
     <string name="crisis_dialog_body">Это важный сигнал — вы не одни.\n\nЕсли вам нужна поддержка прямо сейчас:\n\n📞 Телефон доверия: 8-800-2000-122\n(бесплатно, круглосуточно)\n\nПозвоните психиатру или близкому человеку, если чувствуете, что ситуация ухудшается. Безопасность — прежде всего.</string>
     <string name="crisis_dialog_close">Понятно</string>
     <string name="crisis_dialog_call">Позвонить 8-800-2000-122</string>
-    <string name="day_progress_label">Заполнено: %1$d из %2$d разделов</string>
     <string name="today_delete_confirm_title">Удалить запись дня?</string>
     <string name="today_delete_confirm_body">Все данные за этот день (настроение, симптомы, факторы) будут удалены без возможности восстановления.</string>
     <string name="today_delete_success">Запись удалена</string>
@@ -71,7 +65,6 @@
     <string name="today_pick_date_cancel">Отмена</string>
     <string name="today_meds_section">Лекарства</string>
     <string name="today_meds_empty">Нажмите «Добавить препарат»</string>
-    <string name="today_med_name_hint">Название препарата</string>
     <string name="today_add_med">Добавить препарат</string>
     <string name="today_med_added">Препарат добавлен</string>
     <string name="today_symptoms_section">Симптомы</string>
@@ -79,9 +72,6 @@
     <string name="today_seed_symptoms">Подставить базовые симптомы</string>
     <string name="today_symptoms_seeded">Базовые симптомы добавлены</string>
     <string name="today_factors_section">Триггеры и факторы</string>
-    <string name="today_factors_substance_title">Алкоголь и вещества</string>
-    <string name="today_substance_moved">Алкоголь и вещества отмечаются чипами в разделе «Триггеры и факторы». Отдельные шкалы убраны, чтобы не дублировать.</string>
-    <string name="today_factors_triggers_title">Триггеры дня</string>
     <string name="today_prodrome_inferred_detail">Отмечено: %1$s. Это наблюдение по симптомам, не диагноз. Ручной список продромов можно включить в настройках экрана.</string>
     <string name="today_factors_empty">Нет факторов в списке</string>
     <string name="today_seed_factors">Подставить базовые факторы</string>
@@ -108,11 +98,9 @@
     <string name="catalog_add_warning">Новый ранний признак</string>
     <string name="catalog_manage_settings">Управление списком в настройках</string>
     <string name="catalog_edit_action">Изменить</string>
-    <string name="catalog_longpress_hint">Карандаш на чипе — изменить название</string>
     <string name="catalog_edit_name">Название</string>
     <string name="catalog_edit_save">Сохранить</string>
     <string name="catalog_edit_hide">Скрыть из списка</string>
-    <string name="catalog_edit_med">Изменить препарат</string>
     <string name="catalog_edit_symptom">Изменить симптом</string>
     <string name="catalog_edit_factor">Изменить фактор</string>
     <string name="catalog_edit_warning">Изменить ранний признак</string>
@@ -143,14 +131,10 @@
     <string name="axis_sleep_quality">Сон ночью</string>
     <string name="axis_functioning">Дела</string>
     <string name="axis_safety">Тяжёлые мысли</string>
-    <string name="axis_alcohol">Алкоголь</string>
-    <string name="axis_substance">Другие вещества</string>
     <string name="axis_routine">Режим</string>
-    <string name="elevated_hint">Подъём настроения ≠ «хорошо» — отслеживаем отдельно от подавленности.</string>
 
     <!-- Crisis -->
     <string name="crisis_plan_title">Кризисный план</string>
-    <string name="crisis_plan_empty">Заполните кризисный план в настройках</string>
     <string name="crisis_plan_reason">Сегодня тяжелее, чем вчера — вот ваш план.</string>
     <string name="crisis_plan_reason_always">План на случай острого состояния. Доступен всегда из верхней панели.</string>
     <string name="crisis_plan_empty_hint">План пока пустой. Запишите врача, человека поддержки, чего вы хотите и чего избегать — в остром состоянии искать это сложнее.</string>
@@ -182,7 +166,6 @@
     <string name="meds_tab_manage">Управление списком</string>
     <string name="physical_tab_subtitle">Сводка физического состояния: питание, тело, цикл, активность и сон.</string>
     <string name="physical_tab_hint">Данные с устройства и приложений через Health Connect, плюс записи дневника. Не диагноз.</string>
-    <string name="physical_range">Период: %1$s</string>
     <string name="physical_hc_missing">Health Connect не установлен.</string>
     <string name="physical_hc_need_perm">Нужны разрешения на чтение данных.</string>
     <string name="physical_open_hc">Открыть Health Connect</string>
@@ -201,20 +184,16 @@
     <string name="physical_period_quarter">Квартал</string>
     <string name="physical_prev_period">Предыдущий период</string>
     <string name="physical_next_period">Следующий период</string>
-    <string name="physical_nutrition_title">Питание (КБЖУ)</string>
-    <string name="physical_nutrition_hint">Белки, жиры, углеводы и калории из Health Connect. Нормы — только если вы задали цели ниже.</string>
     <string name="physical_nutrition_empty">Нет данных о питании за период.</string>
     <string name="physical_nutrition_avg_note">За неделю / месяц / квартал — средние за день с данными.</string>
     <string name="physical_macro_protein">Белки</string>
     <string name="physical_macro_fat">Жиры</string>
     <string name="physical_macro_carbs">Углеводы</string>
-    <string name="physical_kcal_norm">норма</string>
     <string name="physical_kcal_eaten">съедено</string>
     <string name="physical_kcal_burned">сожжено</string>
     <string name="physical_kcal_unit">ккал</string>
     <string name="physical_macro_unit_g">г</string>
     <string name="physical_body_title">Тело</string>
-    <string name="physical_height">Рост</string>
     <string name="physical_weight">Вес</string>
     <string name="physical_cycle_title">Женский календарь</string>
     <string name="physical_cycle_empty">Нет настроек цикла. Укажите дату начала в настройках.</string>
@@ -225,22 +204,9 @@
     <string name="physical_steps">Шаги</string>
     <string name="physical_activity_sum_note">За неделю / месяц / квартал — средние за день с данными.</string>
     <string name="physical_sleep_title">Сон</string>
-    <string name="physical_sleep_duration">Длительность: %1$s ч</string>
-    <string name="physical_sleep_bedtime">Отбой: %1$s</string>
-    <string name="physical_sleep_wake">Подъём: %1$s</string>
-    <string name="physical_sleep_quality">Качество: %1$s</string>
     <string name="physical_metric_bedtime">Отбой</string>
     <string name="physical_metric_wake">Подъём</string>
     <string name="physical_metric_quality">Качество</string>
-    <string name="physical_goals_title">Цели КБЖУ (необязательно)</string>
-    <string name="physical_goals_hint">Простые пользовательские цели для прогресс-баров. Не медицинская норма и не рекомендация.</string>
-    <string name="physical_goal_kcal">Норма ккал</string>
-    <string name="physical_goal_protein">Белки, г</string>
-    <string name="physical_goal_fat">Жиры, г</string>
-    <string name="physical_goal_carbs">Углеводы, г</string>
-    <string name="physical_goals_save">Сохранить цели</string>
-    <string name="physical_height_edit_title">Рост</string>
-    <string name="physical_height_save">Сохранить рост</string>
     <string name="physical_body_measures_title">Замеры тела</string>
     <string name="physical_body_measures_subtitle">Дата: %1$s</string>
     <string name="physical_body_measures_disclaimer">Ваши записи в сантиметрах и килограммах. Не медицинская оценка и не рекомендация.</string>
@@ -249,22 +215,14 @@
     <string name="physical_body_measures_charts_hint">Точки по датам ваших записей (до 90 дней). Не норма и не диагноз.</string>
     <string name="physical_body_measures_weight_chart">Вес (кг) — ручной ввод и Health Connect; при совпадении даты приоритет у ручного</string>
     <string name="physical_labs_title">Анализы</string>
-    <string name="physical_labs_subtitle">Дата: %1$s</string>
     <string name="physical_labs_disclaimer">Значения внесены вами. Не заменяет консультацию врача и не является диагнозом.</string>
-    <string name="physical_labs_oam">Результат ОАМ</string>
-    <string name="physical_labs_oam_hint">Текст по вашему бланку. Без автоматической интерпретации.</string>
     <string name="physical_labs_save">Сохранить анализы</string>
     <string name="physical_labs_charts_title">Динамика маркеров</string>
     <string name="physical_labs_charts_hint">Числовые показатели по датам ваших записей. ОАМ — только текстом, без графика.</string>
     <string name="physical_labs_catalog_subtitle">Каталог показателей и динамика</string>
-    <string name="physical_labs_catalog_title">Показатели</string>
     <string name="physical_labs_add_result">Добавить результат</string>
-    <string name="physical_labs_history_title">История записей</string>
     <string name="physical_labs_no_data_yet">Пока нет записей</string>
     <string name="physical_labs_sheet_date">Дата анализа</string>
-    <string name="physical_labs_sheet_marker">Показатель</string>
-    <string name="physical_labs_sheet_value">%1$s</string>
-    <string name="physical_labs_oam_short">ОАМ</string>
     <string name="physical_labs_suggestions">Быстрый выбор названия</string>
     <string name="physical_labs_field_name">Название анализа</string>
     <string name="physical_labs_field_value">Значение</string>
@@ -272,8 +230,6 @@
     <string name="physical_labs_field_date">Дата анализа</string>
     <string name="physical_labs_field_clinic">Клиника</string>
     <string name="physical_labs_delete">Удалить запись</string>
-    <string name="physical_body_add_measure">Добавить замер</string>
-    <string name="physical_body_day_form_title">Все поля за %1$s</string>
     <string name="settings_physical_tracking_title">Замеры и анализы</string>
     <string name="settings_physical_tracking_desc">Опциональные блоки на вкладке «Физическое». Данные хранятся локально.</string>
     <string name="settings_body_measurements_enable">Показывать замеры тела</string>
@@ -282,8 +238,6 @@
     <string name="physical_tracking_card_title">Замеры и анализы</string>
     <string name="physical_tracking_card_hint">Включите переключатель — блок появится сразу ниже. То же в Настройки → Интеграции.</string>
     <string name="calendar_meds_legend_title">Цвета препаратов</string>
-    <string name="reports_med_intake_title">Приём лекарств</string>
-    <string name="reports_med_intake_hint">Имя, доза и слоты по дням журнала.</string>
     <string name="reports_med_dose_title">Дозы лекарств</string>
     <string name="reports_med_dose_hint">Числовая доза по дням месяца (из текста дозировки) — отдельная линия на каждый препарат.</string>
     <string name="reports_heatmap_title">Тепловая карта настроения</string>
@@ -304,7 +258,6 @@
     <string name="reports_mood_sleep_title">Настроение и сон</string>
     <string name="reports_mood_sleep_hint">Столбцы — часы сна (слева); линия — полярность настроения (справа). Полоса 7–9 ч — ориентир длительности, не норма терапии.</string>
     <string name="reports_mood_sleep_mood">Настроение</string>
-    <string name="reports_mood_sleep_sleep">Сон (ч/2)</string>
     <string name="reports_mood_sleep_sleep_bars">Сон (часы)</string>
     <string name="reports_mood_line_title">Полярность настроения</string>
     <string name="reports_mood_line_hint">Шкала подъём − спад (−5…+5). Зоны — только визуализация шкалы дневника, не диагноз.</string>
@@ -313,13 +266,11 @@
     <string name="reports_axis_polarity">полярность (−5…+5)</string>
     <string name="reports_axis_score">шкала</string>
     <string name="reports_axis_sleep">сон, ч</string>
-    <string name="reports_polarity_short">Полярность</string>
     <string name="reports_chart_zoom_hint">Щипок — масштаб делений · перетаскивание — сдвиг окна</string>
     <string name="reports_chart_zoom_action">Увеличить</string>
     <string name="reports_chart_close">Закрыть</string>
     <string name="reports_chart_rotate">Повернуть график на 90°</string>
     <string name="reports_chart_tap_zoom">Нажмите график, чтобы увеличить</string>
-    <string name="reports_charts_order_title">Порядок графиков</string>
     <string name="reports_charts_order_hint">Вверх/вниз меняет порядок на вкладке «Отчёты».</string>
     <string name="reports_charts_move_up">Выше</string>
     <string name="reports_charts_move_down">Ниже</string>
@@ -337,19 +288,8 @@
     <string name="today_summary_count">Отмечено: %1$d</string>
     <string name="today_summary_meds_taken">Принято %1$d из %2$d</string>
     <string name="today_summary_sleep_hours">%1$s ч</string>
-    <string name="today_autosave_hint">Изменения сохраняются автоматически</string>
     <string name="today_med_more">Действия: %1$s</string>
     <string name="today_help_graph_params">Ответьте на вопросы про сегодняшний день — это основа графиков и прогноза. Спад — депрессивная сторона: подавленность, нет сил и интереса. Подъём — маниакальная/гипоманиакальная: ускорение, мало сна, много планов, импульсивность. Повторный тап по ответу снимает отметку. Какие вопросы показывать — в Настройках → «Шкалы дня».</string>
-    <string name="today_chart_params">Параметры графиков</string>
-    <string name="today_chart_params_title">Параметры графиков</string>
-    <string name="today_chart_params_intro">Эти показатели дневника влияют на графики во вкладке «Отчёты». Образовательная иерархия, не клинический приказ.</string>
-    <string name="today_chart_params_pick">Шкалы: 0–5 · да/нет · варианты (с подписями). Включённые параметры идут в «Отчёты».</string>
-    <string name="today_chart_params_mood">Полярность (спад/подъём) — линейный график и тепловая карта</string>
-    <string name="today_chart_params_symptoms">Тревога, раздражение, энергия, концентрация, аппетит — радар и доп. оси</string>
-    <string name="today_chart_params_sleep">Сон (часы и качество) — график сон+настроение</string>
-    <string name="today_chart_params_meds">Приём лекарств — дозы (мг) по дням и сетка приёма</string>
-    <string name="today_chart_params_warnings">Отмеченные признаки — блок «Внимание к изменениям»</string>
-    <string name="today_chart_params_close">Понятно</string>
     <string name="reports_radar_axis_hint">Оси профиля (0…макс)</string>
     <string name="reports_radar_legend_today">Сегодня / среднее</string>
     <string name="reports_radar_legend_baseline">Ориентир (уровень 1)</string>
@@ -357,15 +297,10 @@
     <string name="reports_history_phase_high">Подъём (дневник)</string>
     <string name="reports_history_phase_mild_high">Лёгкий подъём</string>
     <string name="reports_history_phase_balanced">Около нуля</string>
-    <string name="reports_history_phase_mixed">Смешанные дни</string>
     <string name="reports_history_severity_severe">Сильнее</string>
     <string name="reports_history_severity_moderate">Умеренно</string>
     <string name="reports_history_severity_mild">Слабее</string>
     <string name="reports_history_severity_none">—</string>
-    <string name="reports_history_col_period">Период</string>
-    <string name="reports_history_col_phase">По шкале</string>
-    <string name="reports_history_col_severity">Величина</string>
-    <string name="reports_history_col_meds">Лекарства</string>
     <string name="reports_history_disclaimer">Метки — агрегаты ваших шкал, не диагноз эпизода.</string>
     <string name="reports_attention_title">Внимание к изменениям</string>
     <string name="reports_attention_hint">Сводка по дневнику: настроение, частота отмеченных признаков, сон. Не прогноз эпизода.</string>
@@ -378,11 +313,9 @@
     <string name="reports_zone_elevated">зона подъёма</string>
     <string name="reports_zone_low">зона спада</string>
     <string name="reports_warnings_title">Частота отмеченных признаков</string>
-    <string name="reports_warnings_hint">Сколько раз и с какой средней интенсивностью вы отмечали ранние признаки. Не «прогресс эпизода».</string>
     <string name="reports_warnings_empty">За этот месяц отмеченных признаков нет.</string>
     <string name="reports_warnings_stat">%1$d× · ср. %2$.1f</string>
     <string name="reports_history_title">Сводка записей</string>
-    <string name="reports_history_hint">Средние по вашим записям за месяцы. Без типа эпизода — только факты дневника.</string>
     <string name="reports_history_row">Записей: %1$d · полярность: %2$s · сон: %3$s ч</string>
     <string name="reports_history_meds">Лекарства: %1$s</string>
     <string name="reports_med_adherence_title">Приём по дням</string>
@@ -400,14 +333,9 @@
     <string name="calendar_day_meds_edit_hint">Править приём и дозу — в разделе «Лекарства» ниже или на экране «Сегодня».</string>
     <string name="calendar_day_meds_empty">На этот день нет препаратов в журнале.</string>
     <string name="calendar_day_meds_edit_dose">Доза дня</string>
-    <string name="calendar_day_meds_mark">Отметить приём</string>
     <string name="calendar_day_meds_slots">Слоты</string>
     <string name="calendar_meds_section_title">Лекарства</string>
     <string name="calendar_meds_section_hint">%1$s — компактно: название и доза (нажмите день для деталей). Точка: принят / частично / пропуск. Не оценка терапии.</string>
-    <string name="calendar_physical_section_title">Физическое состояние</string>
-    <string name="calendar_physical_teaser_hint">Замеры, анализы, КБЖУ — во вкладке «Физическое» внутри календаря</string>
-    <string name="calendar_open_physical">Открыть физическое</string>
-    <string name="calendar_configure_cycle">Настроить цикл</string>
     <string name="backup_monthly_channel">Резервные копии</string>
     <string name="backup_monthly_title">Резервная копия сохранена</string>
     <string name="backup_monthly_text">Файл: Documents/Trace/backups/</string>
@@ -466,29 +394,15 @@
     <string name="calendar_subtab_overview">Обзор</string>
     <string name="calendar_subtab_meds">Лекарства</string>
     <string name="calendar_subtab_physical">Физическое</string>
-    <string name="calendar_legend_title">Как читать календарь</string>
-    <string name="calendar_legend_low">спад</string>
-    <string name="calendar_legend_high">подъём</string>
-    <string name="calendar_legend_period">цикл</string>
     <string name="calendar_last_period">Последняя менструация (ГГГГ-ММ-ДД)</string>
     <string name="calendar_cycle_length">Длина цикла (дней)</string>
     <string name="calendar_period_length">Длина менструации (дней)</string>
     <string name="calendar_no_entry">Запись не заполнена</string>
     <string name="calendar_open_today">Открыть в Сегодня</string>
     <string name="reports_entries_count">Записей: %1$d</string>
-    <string name="reports_avg_sleep">Сон: %1$.1f ч</string>
-    <string name="reports_avg_functioning">Дела: %1$.1f/10</string>
-    <string name="reports_mood_chart_title">Оси настроения за месяц</string>
-    <string name="reports_insights_title">Ваши паттерны</string>
-    <string name="reports_insights_need_data">Нужно минимум 14 дней записей для паттернов.</string>
     <string name="forecast_disclaimer">Вероятности по вашей истории. Подъём ≠ хороший день. Не заменяет врача.</string>
-    <string name="forecast_score">Оценка дня: %1$.1f / 10</string>
-    <string name="forecast_score_short">%1$.1f / 10</string>
     <string name="forecast_basis_title">Как считается прогноз</string>
     <string name="forecast_basis_legend">Круг дня — вероятность каждой фазы: депрессия (подавленность «заметно» и выше), гипомания (подъём «заметно» и выше), смешанное (оба сразу) и ровное состояние. Смешанные дни считаются один раз, поэтому сумма всегда 100%. Оценка дня: 10 — риск низкий.</string>
-    <string name="forecast_cell_dep">Депрессия</string>
-    <string name="forecast_cell_elev">Гипомания</string>
-    <string name="forecast_cell_mixed">Смешанное</string>
     <string name="forecast_overview_hint">Оценка дня из 10: зелёный — спокойно, жёлтый — внимание, красный — риск выше.</string>
     <string name="forecast_common_title">На эти дни</string>
     <string name="forecast_check_title">Точность прогноза на ваших данных: %1$d%%</string>
@@ -497,8 +411,6 @@
     <string name="forecast_check_episodes">Из %2$d дней с депрессией/гипоманией прогноз заранее предупредил о %1$d (%3$d%%).</string>
     <string name="forecast_check_weak">Пока прогноз не лучше простого угадывания — опирайтесь на него осторожно; точность вырастет с историей.</string>
     <string name="forecast_check_none">Точность прогноза появится, когда в дневнике будет больше 8 дней.</string>
-    <string name="forecast_prob_elev">Вероятность подъёма (подъём «заметно» и выше): ~%1$d%%</string>
-    <string name="forecast_prob_dep">Вероятность спада (подавленность «заметно» и выше): ~%1$d%%</string>
     <string name="settings_symptoms">Симптомы</string>
     <string name="settings_symptoms_desc">Дополнительные признаки — не вместо подавленности и подъёма. У каждого своя шкала.</string>
     <string name="settings_symptoms_empty">Симптомов пока нет. Подставьте базовый набор или добавьте свои.</string>
@@ -509,21 +421,15 @@
     <string name="settings_symptom_added">Симптом добавлен</string>
     <string name="settings_color">Цвет</string>
     <string name="settings_warning_direction">Направление</string>
-    <string name="settings_scale_qual4_i">0–3 интенсивность</string>
-    <string name="settings_scale_qual4_lmh">Меньше / как обычно / больше</string>
     <string name="settings_scale_yesno">Нет / Да</string>
     <string name="settings_scale_0_5">Шкала 0–5</string>
-    <string name="settings_scale_0_10">Шкала 0–10</string>
     <string name="settings_scale_options">Варианты (Нет / Слабо / Умеренно / Сильно)</string>
     <string name="settings_scale_options_short">Варианты</string>
-    <string name="today_graph_params_on_charts">На графиках</string>
-    <string name="today_graph_params_hidden">Скрытые параметры</string>
     <string name="settings_seed_all">Подставить базовый набор</string>
     <string name="settings_seed_all_hint">Симптомы, продромы и триггеры по Colom &amp; Vieta — без дублей и без затирания ваших.</string>
     <string name="settings_seed_all_ok">Базовый набор обновлён</string>
     <string name="settings_archived">Скрытые</string>
     <string name="settings_archived_hint">Не показываются на «Сегодня». Оценки за прошлые дни сохранены.</string>
-    <string name="settings_restore">Вернуть</string>
     <string name="settings_factors">Триггеры и факторы</string>
     <string name="settings_factors_hint">События, влияющие на настроение: стрессоры, активности, напитки, погода.</string>
     <string name="settings_factor_name">Название фактора</string>
@@ -552,7 +458,6 @@
     <string name="settings_weather_show_coords">Другой город — координаты</string>
     <string name="settings_weather_hide_coords">Скрыть координаты</string>
     <string name="settings_crisis_call">Позвонить на телефон доверия</string>
-    <string name="settings_hide">Скрыть</string>
     <string name="settings_show_item">Показывать</string>
     <string name="settings_meds">Лекарства</string>
     <string name="settings_meds_desc">Постоянный приём — чекбоксы на неделю вперёд. Смена схемы — только ваши ручные отметки; история не затирается.</string>
@@ -563,7 +468,6 @@
     <string name="settings_crisis">Кризисный план</string>
     <string name="settings_crisis_desc">Заполните заранее, включая что делать близким. В остром состоянии искать номера сложнее.</string>
     <string name="settings_crisis_on_worsening_hint">Если сегодня тяжелее вчера — иконка кризисного плана в верхней панели подсветится. Подъём тоже считается ухудшением. Сам план доступен всегда.</string>
-    <string name="settings_crisis_helpline">Телефон доверия (Россия): 8-800-333-44-34 (бесплатно, 24/7) или 112.</string>
     <string name="settings_crisis_save">Сохранить план</string>
     <string name="settings_crisis_saved">Кризисный план сохранён</string>
     <string name="settings_crisis_on_worsening">Подсвечивать иконку при ухудшении</string>
@@ -580,7 +484,6 @@
     <string name="settings_med_updated">Препарат обновлён</string>
     <string name="settings_cycle">Менструальный цикл</string>
     <string name="settings_cycle_desc">Для меток на календаре и прогноза. Не отображается на вкладке «Сегодня».</string>
-    <string name="settings_cycle_date_hint">Формат ГГГГ-ММ-ДД. Можно оставить пустым.</string>
     <string name="settings_cycle_date_empty">Дата не указана</string>
     <string name="settings_cycle_date_clear">Сбросить</string>
     <string name="settings_cycle_irregular">Нерегулярный цикл</string>
@@ -593,52 +496,20 @@
     <string name="backup_share_subject">Trace — резервная копия</string>
     <string name="export_share_subject">Trace — отчёт</string>
     <string name="export_share_chooser">Отправить отчёт Trace</string>
-    <string name="export_pdf_title">Trace — отчёт за %1$s %2$d</string>
-    <string name="export_html_title">Trace — отчёт для врача, %1$s</string>
-    <string name="export_html_heading">Trace — отчёт для врача</string>
     <string name="export_patient_html_title">Trace — отчёт за %1$s</string>
     <string name="export_patient_html_heading">Trace — ваш отчёт за месяц</string>
     <string name="export_format_patient_html">Пациент (HTML)</string>
-    <string name="export_html_burden">Дни месяца</string>
-    <string name="export_html_days_depressed">Спад</string>
-    <string name="export_html_days_elevated">Подъём</string>
-    <string name="export_html_days_mixed">Смешанные</string>
-    <string name="export_html_days_other">Без выраженного спада или подъёма</string>
-    <string name="export_html_adherence">Приём по слотам</string>
-    <string name="export_html_bedtime">Разброс отхода ко сну</string>
     <string name="today_context_section">Контекст дня</string>
-    <string name="reports_avg_sleep_empty">Сон: —</string>
-    <string name="reports_avg_functioning_empty">Дела: —</string>
     <string name="reports_no_data">Нет записей за месяц</string>
     <string name="reports_export_title">Экспорт и отчёт для врача</string>
     <string name="reports_subtitle">Графики за выбранный период и отчёт для врача.</string>
-    <string name="reports_burden_title">Дни месяца</string>
-    <string name="reports_burden_hint">Спад — дни, когда подавленность была «заметно» и выше; подъём — то же по шкале подъёма; смешанные — оба сразу. Спад обычно занимает больше дней, чем подъём.</string>
-    <string name="reports_days_depressed">Спад: %1$d</string>
-    <string name="reports_days_elevated">Подъём: %1$d</string>
-    <string name="reports_days_mixed">Смешанные: %1$d</string>
-    <string name="reports_days_other">Без спада/подъёма: %1$d</string>
     <string name="reports_adherence">Приём по слотам: %1$d%%</string>
-    <string name="reports_adherence_hint">Доля отмеченных слотов в журнале.</string>
-    <string name="reports_bedtime_spread">Разброс отхода ко сну: ~%1$d мин</string>
     <string name="export_format_json">JSON</string>
     <string name="export_format_html">Врач (HTML)</string>
     <string name="export_format_csv">CSV</string>
     <string name="export_format_pdf">Врач (PDF)</string>
-    <string name="forecast_loading">Загрузка прогноза…</string>
-    <string name="forecast_score_empty">Оценка дня: —</string>
-    <string name="forecast_phase_empty">Фаза цикла: не настроена</string>
-    <string name="forecast_prob_elev_empty">P(подъём): —</string>
-    <string name="forecast_prob_dep_empty">P(спад): —</string>
-    <string name="forecast_prob_mixed">Вероятность смешанного (оба «заметно» и выше): ~%1$d%%</string>
-    <string name="forecast_prob_mixed_empty">P(смешанное): —</string>
-    <string name="forecast_sample">Дней в выборке: %1$d</string>
-    <string name="forecast_risks_empty">Погодные риски: нет данных</string>
-    <string name="forecast_recommendations_empty">Рекомендации появятся при накоплении истории</string>
     <string name="guide_title">Инструкция</string>
     <string name="guide_intro">Краткий обзор вкладок и функций. Не заменяет врача.</string>
-    <string name="guide_open">Открыть инструкцию</string>
-    <string name="guide_settings_short">Пошаговое знакомство с приложением.</string>
     <string name="guide_today_title">Вкладка «Сегодня»</string>
     <string name="guide_today_body">Ежедневная запись: оси настроения, сон, лекарства, симптомы, триггеры и продромы. Разделы можно сворачивать. Автосохранение при нажатии «Сохранить».</string>
     <string name="guide_calendar_title">Календарь</string>
@@ -663,29 +534,13 @@
     <string name="checkins_saved">Чек-ин сохранён</string>
 
     <!-- Weather -->
-    <string name="weather_title">Погода</string>
-    <string name="weather_empty">Укажите координаты в настройках и обновите прогноз</string>
-    <string name="weather_temp_line">%1$.0f…%2$.0f °C · влажность %3$d%%</string>
-    <string name="weather_pressure">Давление</string>
-    <string name="weather_humidity">Влажность</string>
-    <string name="weather_wind">Ветер</string>
-    <string name="weather_uv">УФ</string>
-    <string name="weather_precip">Осадки</string>
-    <string name="weather_visibility">Видимость</string>
-    <string name="weather_cloudness">Облачность</string>
-    <string name="weather_fetched">Данные за %1$s · обновлено %2$s</string>
 
     <!-- Reports -->
     <string name="reports_radar_title">Профиль состояния (среднее за месяц)</string>
-    <string name="reports_export_doctor">Для врача (HTML)</string>
 
     <!-- Settings integrations -->
-    <string name="settings_integrations">Интеграции</string>
     <string name="settings_subtitle">Справочники, безопасность, синхронизация и данные на устройстве.</string>
     <string name="settings_weather_desc">Город для вкладки «Сегодня» и календаря. Open-Meteo — основной источник.</string>
-    <string name="settings_hc_desc">Шаги, сон, вес, питание и цикл через Health Connect. Дневник настроения не перезаписывается.</string>
-    <string name="settings_hc_hub_title">Источники данных</string>
-    <string name="settings_hc_hub_desc">Как в Guava: одно подключение Health Connect — данные приходят из других приложений</string>
     <string name="settings_hc_hub_model">Trace не подключается к Fitbit, Samsung Health и т.п. напрямую. Эти приложения пишут в Health Connect, а Trace читает оттуда.</string>
     <string name="settings_hc_step_1">1. Установите Health Connect (если ещё нет).</string>
     <string name="settings_hc_step_2">2. В приложениях-источниках разрешите запись в Health Connect.</string>
@@ -706,8 +561,6 @@
     <string name="settings_weather_save">Сохранить и загрузить</string>
     <string name="settings_weather_ok">Погода обновлена</string>
     <string name="settings_weather_fail">Не удалось загрузить погоду</string>
-    <string name="settings_health_connect">Health Connect</string>
-    <string name="settings_hc_granted">Разрешения выданы</string>
     <string name="settings_hc_need_perm">Нужны разрешения на чтение</string>
     <string name="settings_hc_unavailable">Health Connect не установлен</string>
     <string name="settings_hc_request">Запросить разрешения</string>
@@ -715,7 +568,6 @@
     <string name="settings_hc_sync_ok">Health Connect синхронизирован</string>
     <string name="settings_hc_sync_skip">Синхронизация пропущена — проверьте разрешения и запись приложений в HC</string>
     <string name="settings_backup">Резервная копия (JSON → Drive/Files)</string>
-    <string name="settings_backup_export">Экспорт JSON</string>
     <string name="settings_backup_ok">Файл готов — выберите Google Drive или другое хранилище</string>
     <string name="settings_backup_fail">Ошибка экспорта</string>
     <string name="settings_backup_import">Импорт резервной копии или файла другого приложения</string>
@@ -732,8 +584,6 @@
     <string name="settings_clear_fail">Не удалось удалить данные</string>
     <string name="settings_yandex_key">Ключ Yandex Weather (запасной)</string>
     <string name="settings_yandex_key_hint">Если Open-Meteo недоступен — опционально</string>
-    <string name="settings_flo">Синхронизация с Flo</string>
-    <string name="settings_flo_hint">Импорт выгрузки Flo: ZIP-архив из письма Flo или JSON-файл из него. Дополняет дни, ручные записи цикла не стирает.</string>
     <string name="settings_flo_import">Выбрать файл (ZIP, JSON или CSV)</string>
     <string name="settings_flo_count">Импортировано дней: %1$d</string>
     <string name="settings_flo_ok">Импортировано записей Flo: %1$s</string>
@@ -750,7 +600,6 @@
     <string name="settings_nav_crisis">Кризисный план</string>
     <string name="settings_nav_cycle">Менструация</string>
     <string name="settings_nav_weather">Погода</string>
-    <string name="settings_nav_flo">Flo синхр.</string>
     <string name="settings_nav_appearance">Оформление</string>
     <string name="settings_nav_data">Данные</string>
     <string name="settings_appearance">Оформление</string>
@@ -778,8 +627,6 @@
     <string name="hint_functioning">0 — ничего не получилось. 10 — день на месте: работа, дом, люди.</string>
     <string name="hint_safety">Риск есть не только в явной мании. Отметьте, даже если день «не самый плохой», и скажите врачу.</string>
     <string name="hint_routine">Встали, ели и легли в привычное время? 0 — день плыл. 10 — как всегда.</string>
-    <string name="hint_alcohol">От «не пил(а)» до «с последствиями» — для отслеживания триггеров рецидива.</string>
-    <string name="hint_substance">Таблетки не по назначению, каннабис, стимуляторы, депрессанты.</string>
     <string name="sleep_hours">Сколько спали (часов)</string>
     <string name="sleep_hours_hint">Например 7.5</string>
     <string name="sleep_bedtime">Легли (ЧЧ:ММ)</string>
@@ -794,22 +641,11 @@
     <string name="alert_safety_crisis">КРИЗИС: Активные суицидальные мысли с планом. НЕМЕДЛЕННО: Телефон доверия 8-800-333-44-34 (бесплатно, 24/7) или 112.</string>
     <string name="alert_safety_warning">ПРЕДУПРЕЖДЕНИЕ: Активные суицидальные мысли. Пожалуйста, свяжитесь со своим врачом или позвоните 8-800-333-44-34.</string>
     <string name="alert_safety_caution">Есть пассивные мысли. Это часть заболевания. Расскажите своему врачу на следующем приёме.</string>
-    <string name="health_sleep">Сон · %1$s</string>
-    <string name="health_activity">Активность · %1$s</string>
-    <string name="health_nutrition">Питание · %1$s</string>
-    <string name="health_weight">Вес · %1$s</string>
-    <string name="health_other">%1$s · %2$s</string>
 
     <string name="sources_focused_title">Источник</string>
     <string name="sources_focused_subtitle">Цитата к шкале. Полный список — по кнопке ниже.</string>
     <string name="sources_show_all">Все источники</string>
 
-    <string name="forecast_horizon_title">Горизонт</string>
-    <string name="forecast_horizon_1">1 день</string>
-    <string name="forecast_horizon_3">3 дня</string>
-    <string name="forecast_horizon_7">Неделя</string>
-    <string name="forecast_horizon_14">2 недели</string>
-    <string name="forecast_feed_hint">Лента на %1$d дн. — листайте вниз</string>
 
     <string name="section_help_cd">Зачем нужен раздел «%1$s»</string>
     <string name="section_help_close">Понятно</string>
@@ -822,14 +658,12 @@
     <string name="checkins_editing_slot">Редактирование: %1$s</string>
     <string name="checkins_new_slot">Новый чек-ин: %1$s</string>
     <string name="checkins_update">Обновить чек-ин</string>
-    <string name="today_factors_chips_hint">Отметьте факторы дня. Долгое нажатие — переименовать. Алкоголь и вещества также со шкалами выше.</string>
 
     <string name="today_help_mood">Спад — депрессивная сторона: подавленность, нет сил и интереса, всё в тягость. Подъём — маниакальная/гипоманиакальная сторона: ускорение, мало сна, много планов, импульсивность, раздражение. Смешанное — оба одновременно. Тревога и раздражение отмечаются отдельно.</string>
     <string name="today_help_extra">Силы, внимание, аппетит, общительность — дополнительный контекст к основным осям.</string>
     <string name="today_help_clinical">Качество сна, дела дня, безопасность и регулярность режима — то, что часто меняется раньше заметных сдвигов по шкалам.</string>
     <string name="today_help_context">Погода и данные Health Connect за выбранный день. Не причинность, а ваш контекст.</string>
     <string name="today_help_checkins">Необязательно. Снимки утром/днём/вечером по другим осям (напряжение, усталость). Основной дневник — «Параметры графиков». Включите в настройках экрана «Сегодня», если нужно.</string>
-    <string name="today_help_substance">Отдельный блок алкоголя и веществ. По умолчанию скрыт — те же шкалы есть в «Триггеры и факторы».</string>
     <string name="today_help_sleep">Во сколько легли и встали. Регулярность важнее «идеальных» часов.</string>
     <string name="today_help_meds">Отметки приёма по слотам. Постоянные препараты заранее появляются на неделю вперёд.</string>
     <string name="today_help_symptoms">Симптомы, которые вы сами ведёте в справочнике. Можно скрыть раздел в настройках экрана.</string>
@@ -837,11 +671,7 @@
     <string name="today_help_warnings">Ручной список ранних признаков. По умолчанию скрыт: продромы считаются по отмеченным симптомам.</string>
     <string name="today_help_notes">Свободный текст: что важно запомнить себе или врачу.</string>
 
-    <string name="calendar_legend_glyphs">В клетке: Д — спад, П — подъём, С — смешанный, Т/Р — тревога/раздражение, · — без выраженного спада или подъёма. Внизу клетки — фаза луны (все восемь). Полоска — дни цикла.</string>
 
-    <string name="reports_sleep_chart">Сон (часы)</string>
-    <string name="reports_energy_chart">Силы и дела</string>
-    <string name="reports_alcohol_chart">Алкоголь и режим</string>
 
     <string name="settings_layout">Шторки на «Сегодня»</string>
     <string name="settings_layout_desc">Показать или скрыть блоки и изменить порядок. Знак «?» на шторке объясняет, зачем она.</string>
@@ -858,7 +688,6 @@
     <string name="settings_med_scope_day_hint">Имя, доза и слоты сохраняются в журнале дня. Каталог (схема по умолчанию) не меняется.</string>
     <string name="settings_med_scope_scheme">Схема с этой даты</string>
     <string name="settings_med_scope_scheme_hint">Обновляет каталог и будущие дни. Прошлые записи в журнале не переписываются. Напоминания следуют текущей схеме каталога.</string>
-    <string name="settings_med_reminders_note">Напоминания о приёме используют время из настроек уведомлений и текущую схему каталога — не разовые правки «только этот день».</string>
     <string name="settings_crisis_contacts_title">Быстрый набор</string>
     <string name="settings_crisis_contacts_desc">Имя и телефон. По нажатию откроется набор номера (без автозвонка).</string>
     <string name="settings_crisis_contact_label">Как назвать</string>
@@ -880,7 +709,6 @@
     <string name="settings_weather_city_search_hint">Начните вводить название. Для мелких населённых пунктов — координаты ниже.</string>
     <string name="settings_weather_coords_hint">Если города нет в поиске — введите широту и долготу вручную (например из Google Maps / OpenStreetMap: долгое нажатие на точку → координаты в карточке места).</string>
 
-    <string name="settings_hc_apps_note">Trace читает данные через Health Connect. Подключите в HC приложения вроде Google Fit / шагомеры, Sleep as Android / Sleep Cycle, весы Unique Health, Flo/Clue и трекеры питания — затем выдайте разрешения здесь. Прямого доступа к чужим приложениям Android не даёт.</string>
     <string name="settings_hc_install">Установить / открыть Health Connect</string>
     <string name="settings_hc_open_settings">Открыть настройки Health Connect</string>
 
@@ -889,7 +717,6 @@
 
     <!-- Feature pass: TRACE / Today / import / self-help -->
     <string name="today_add_med_settings">Добавить в Настройках → Препараты</string>
-    <string name="today_context_cycle_note">Фаза цикла — коррелят пользователя, не причинность. Настраивается в Календаре.</string>
     <string name="today_factors_unified_hint">Отметьте триггеры дня (включая алкоголь и вещества). После отметки откроется шкала интенсивности; без отметки интенсивность не пишется.</string>
     <string name="today_factor_intensity">Интенсивность: %1$s</string>
     <string name="today_factor_intensity_hint">1 — слабо, 3 — заметно (базовый уровень по литературе при первой отметке), 5 — сильно.</string>
@@ -897,16 +724,6 @@
     <string name="today_sleep_apply_synced">Подставить синхронизированный сон</string>
     <string name="today_context_hint">Погода, луна, цикл (если настроен) и Health Connect</string>
 
-    <string name="checkins_scheme_title">Периоды чек-инов</string>
-    <string name="checkins_scheme_mdn">Утро / день / вечер</string>
-    <string name="checkins_scheme_halves">1-я / 2-я половина дня</string>
-    <string name="checkins_scheme_hours">По часам (утро 6–12, день 12–18, вечер 18–24)</string>
-    <string name="checkins_axes_title">Оси чек-ина (проявления)</string>
-    <string name="checkins_slot_first_half">1-я половина</string>
-    <string name="checkins_slot_second_half">2-я половина</string>
-    <string name="checkins_slot_hours_am">6–12</string>
-    <string name="checkins_slot_hours_mid">12–18</string>
-    <string name="checkins_slot_hours_pm">18–24</string>
 
     <string name="tab_selfhelp">Упражнения</string>
     <string name="selfhelp_title">Упражнения самопомощи</string>
@@ -919,59 +736,41 @@
     <string name="selfhelp_enable_hint">Иконка упражнений всегда в верхней панели (слева от «?»). Нижнюю вкладку можно включить отдельно.</string>
 
     <string name="forecast_share">Поделиться прогнозом</string>
-    <string name="forecast_share_subject">Прогноз Trace</string>
-    <string name="forecast_symbols_hint">Символы как в календаре: луна, фаза цикла, риски погоды.</string>
 
     <string name="reports_export_hint">Отчёт строится за период, выбранный выше. Данные — JSON/CSV; читаемый отчёт — для вас (HTML) или для врача (PDF/HTML).</string>
     <string name="reports_export_data">Данные JSON/CSV</string>
     <string name="reports_export_data_hint">Архив записей или таблица для Excel</string>
     <string name="reports_export_readable">Читаемый отчёт</string>
     <string name="reports_export_readable_hint">Пациент (простым языком) или врач (PDF/HTML)</string>
-    <string name="reports_export_doctor_report">Читаемый отчёт</string>
-    <string name="reports_export_doctor_hint">Пациент HTML или врач PDF/HTML</string>
     <string name="reports_export_json_hint">Полный архив записей за месяц</string>
     <string name="reports_export_html_hint">Для врача: настроение, сон, лекарства, вес и замеры, анализы, дневник по дням (без ПАВ)</string>
     <string name="reports_export_patient_html_hint">Для вас: что отследили, физические показатели, дневник и что обсудить с врачом</string>
     <string name="reports_export_pdf_hint">Для врача: тот же отчёт, что HTML, в PDF для печати</string>
     <string name="reports_export_csv_hint">Таблица для Excel</string>
-    <string name="reports_open_forecast">Открыть прогноз</string>
-    <string name="reports_forecast_tip">Прогноз дня больше не в нижней панели — откройте его здесь.</string>
-    <string name="reports_anxiety_chart">Тревога и раздражение</string>
-    <string name="reports_safety_chart">Безопасность</string>
-    <string name="reports_safety_chart_hint">Шкала 0-3 по дням. Наблюдение, не оценка риска врачом.</string>
-    <string name="reports_functioning_chart">Функционирование</string>
 
     <string name="settings_nav_integrations">Импорт данных</string>
     <string name="settings_import_hub_title">Импорт данных</string>
     <string name="settings_import_hub_desc">Как Guava: Health Connect — основной канал. Где HC нет — открыть приложение и импорт файла с инструкцией. Без выдуманной «прямой» синхронизации.</string>
     <string name="settings_import_file_title">Импорт из других приложений</string>
     <string name="settings_import_file_hint">Flo, eMoods, Daylio, Bearable, резервная копия Trace или любой CSV/JSON с датами — формат определяется сам, ZIP-архивы распаковываются. Импорт только дополняет: то, что вы уже отметили, не перезаписывается; всё, что нельзя положить в шкалы, сохраняется заметкой дня.</string>
-    <string name="settings_import_file_btn">Выбрать файл</string>
     <string name="settings_import_open_app">Открыть приложение</string>
-    <string name="settings_import_manual">Инструкция вручную</string>
     <string name="settings_seed_top_hint">Базовый набор — сверху, как у симптомов.</string>
 
     <string name="settings_prodrome_hints_title">Подсказки по недавним дням</string>
     <string name="settings_prodrome_hints_desc">Наблюдательные совпадения симптомов с ранними признаками за последние записи. Не диагноз.</string>
     <string name="settings_prodrome_hints_empty">Пока нет отмеченных симптомов в недавних днях — подсказки появятся после заполнения «Сегодня».</string>
-    <string name="calendar_user_icon_hint">Значок ставится только на выбранный день в карточке дня — не на весь календарь сразу.</string>
     <string name="calendar_user_icon_title">Личный значок дня</string>
-    <string name="calendar_user_icon_pick">Личный значок: %1$s</string>
     <string name="calendar_user_icon_how">Что это: ваш короткий маркер дня (событие, «я», настроение). Как: откройте день → «Поставить значок». Когда: только на те дни, которые хотите отметить. Сброс: «Убрать».</string>
-    <string name="calendar_user_icon_legend">Личный значок появляется только на днях, где вы его сами поставили (откройте день).</string>
     <string name="calendar_user_icon_set">Поставить значок</string>
     <string name="calendar_user_icon_change">Сменить значок</string>
     <string name="calendar_user_icon_clear">Убрать</string>
     <string name="calendar_user_icon_pick_day">Выберите значок для этого дня</string>
-    <string name="calendar_detail_symbols">Символы дня</string>
     <string name="calendar_day_summary_title">Сводка дня</string>
     <string name="calendar_sleep_line">Сон: %1$.1f ч</string>
     <string name="calendar_notes_title">Заметки</string>
 
     <string name="settings_scale">Шкала интенсивности</string>
-    <string name="today_trackables_hint">Выберите пункт — затем оцените интенсивность. Список и тип шкалы настраиваются в «Экран Сегодня».</string>
     <string name="today_trackables_empty">Нет включённых пунктов. Добавьте их в настройках экрана «Сегодня».</string>
-    <string name="today_trackables_configure">Настроить пункты</string>
     <string name="today_trackables_settings_title">Шкалы дня</string>
     <string name="settings_hc_diagnostics">Диагностика последней синхронизации</string>
     <string name="physical_body_previous">Было %1$s %2$s · %3$s</string>
@@ -980,19 +779,7 @@
     <string name="today_trackables_settings_desc">Какие шкалы показывать на «Сегодня» и какой шкалой оценивать (0–5, да/нет, варианты). Изменения применяются сразу.</string>
 
     <string name="settings_nav_other">Другие настройки</string>
-    <string name="checkins_full_title">Чек-ины: полная настройка</string>
-    <string name="checkins_full_desc">Слоты периодов и параметры среза (да/нет, 0–5 или готовые варианты). Без дубля осей настроения из параметров графиков.</string>
-    <string name="checkins_slots_edit">Периоды (слоты)</string>
-    <string name="checkins_axes_edit">Оси и шкалы</string>
-    <string name="checkins_slot_label">Название слота</string>
-    <string name="checkins_axis_label">Название оси</string>
-    <string name="checkins_step_labels">Подписи ступеней через запятую</string>
-    <string name="checkins_step_labels_hint">Например: нет, чуть, заметно, мешает, сильно, срыв</string>
-    <string name="checkins_add_slot">Добавить слот</string>
-    <string name="checkins_add_axis">Добавить ось</string>
     <string name="checkins_remove">Удалить</string>
-    <string name="checkins_save_config">Сохранить конфигурацию чек-инов</string>
-    <string name="checkins_presets_title">Быстрые пресеты периодов</string>
 
     <string name="notif_channel_diary">Напоминания дневника</string>
     <string name="notif_channel_diary_desc">Общие напоминания заполнить день. Без деталей настроения.</string>
@@ -1013,8 +800,6 @@
     <string name="notif_request_permission">Разрешить уведомления</string>
     <string name="notif_meds_section_title">Напоминания о приёме</string>
     <string name="notif_meds_section_desc">Когда можно получать общие напоминания (без названий препаратов).</string>
-    <string name="notif_meds_section_hint">Времена и включение настраиваются в «Другие настройки».</string>
-    <string name="notif_open_other">Открыть напоминания</string>
 
     <string name="notif_channel_nudge">Мягкие подсказки</string>
     <string name="notif_channel_nudge_desc">Редкие напоминания заполнить необязательные шаги. Без медицинских деталей.</string>
@@ -1069,13 +854,8 @@
     <string name="tip_basic_mode">Режим «Базовый / расширенный» можно сменить в Настройки → Оформление.</string>
 
     <string name="reports_radar_hint">Средние значения осей за месяц по дневным записям (не диагноз). Подписи — полные названия осей.</string>
-    <string name="reports_mood_chart_hint">Ось X — день месяца, Y — оценка из дневника (0–5). Данные только с устройства.</string>
-    <string name="reports_sleep_chart_hint">Часы сна по дням из ваших записей «Сегодня».</string>
-    <string name="reports_energy_chart_hint">Энергия и функционирование по шкалам дневника.</string>
-    <string name="reports_alcohol_chart_hint">Алкоголь и режим дня — пользовательские шкалы, не клиническая оценка.</string>
     <string name="reports_charts_settings_title">Какие графики показывать</string>
     <string name="reports_charts_settings_desc">Включите только нужные блоки на вкладке «Отчёты».</string>
-    <string name="reports_charts_settings_hint">Состав графиков можно изменить в Настройки → Другие настройки.</string>
 
     <!-- Warning sign directions (BUG-007) -->
     <string name="warning_direction_mania">Продром мании / гипомании</string>
@@ -1097,5 +877,15 @@
     <string name="warning_add_direction_depression">Депрессия</string>
     <string name="warning_add_direction_mixed">Смешанное</string>
     <string name="action_dismiss_message">Закрыть сообщение</string>
+    <string name="physical_body_delete_date">Удалить замеры за %1$s</string>
+    <string name="physical_body_delete_title">Удалить замеры за %1$s?</string>
+    <string name="physical_body_delete_text">Будут удалены все значения этой даты: вес и обхваты. Вес из Health Connect останется — его удаляют в приложении, которое его записало. Отменить нельзя.</string>
+    <string name="physical_body_delete_confirm">Удалить замеры</string>
+    <string name="physical_list_edit_hint">Нажмите дату, чтобы исправить значение или удалить замеры за этот день. Одно значение убирается, если стереть поле и сохранить.</string>
+    <string name="settings_med_delete_cd">Удалить «%1$s»</string>
+    <string name="settings_med_delete_title">Удалить «%1$s»?</string>
+    <string name="settings_med_delete_text">Препарат и все отметки приёма (дней с записями: %1$d) будут удалены из календаря и отчётов. Отменить нельзя.</string>
+    <string name="settings_med_delete_hint">Если препарат просто больше не принимаете — выключите «Показывать»: история сохранится.</string>
+    <string name="settings_med_delete_confirm">Удалить препарат</string>
 </resources>
 
