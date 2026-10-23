@@ -4,6 +4,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
@@ -27,11 +28,16 @@ import com.moodlife.app.ui.screens.settings.SETTINGS_COLOR_PALETTE
 import com.moodlife.app.ui.screens.settings.SettingsColorPicker
 
 val SYMPTOM_SCALE_OPTIONS = listOf(
-    "qual4-i" to R.string.settings_scale_qual4_i,
-    "qual4-lmh" to R.string.settings_scale_qual4_lmh,
     "yesno" to R.string.settings_scale_yesno,
     "0-5" to R.string.settings_scale_0_5,
-    "0-10" to R.string.settings_scale_0_10,
+    "options" to R.string.settings_scale_options_short,
+)
+
+/** Trackable / graph-params scales: 0–5, variants, yes/no only. */
+val TRACKABLE_SCALE_OPTIONS = listOf(
+    "0-5" to R.string.settings_scale_0_5,
+    "options" to R.string.settings_scale_options_short,
+    "yesno" to R.string.settings_scale_yesno,
 )
 
 private val FACTOR_CATEGORIES = listOf("Триггеры", "Напитки", "Активность", "Стрессоры", "Позитив", "Погода")
@@ -95,22 +101,48 @@ fun ScaleTypeChips(
     selected: String,
     onSelect: (String) -> Unit,
     modifier: Modifier = Modifier,
+    options: List<Pair<String, Int>> = SYMPTOM_SCALE_OPTIONS,
+    showTitle: Boolean = true,
 ) {
     Column(modifier.fillMaxWidth()) {
-        Text(
-            stringResource(R.string.settings_symptom_scale),
-            modifier = Modifier.padding(bottom = 4.dp),
-        )
-        FlowRow(
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-            verticalArrangement = Arrangement.spacedBy(4.dp),
-        ) {
-            SYMPTOM_SCALE_OPTIONS.forEach { (id, labelRes) ->
-                FilterChip(
-                    selected = selected == id,
-                    onClick = { onSelect(id) },
-                    label = { Text(stringResource(labelRes), maxLines = 1) },
-                )
+        if (showTitle) {
+            Text(
+                stringResource(R.string.settings_symptom_scale),
+                modifier = Modifier.padding(bottom = 4.dp),
+            )
+        }
+        if (options.size in 2..4) {
+            Row(
+                Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                options.forEach { (id, labelRes) ->
+                    FilterChip(
+                        selected = selected == id,
+                        onClick = { onSelect(id) },
+                        label = {
+                            Text(
+                                stringResource(labelRes),
+                                maxLines = 1,
+                                overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                            )
+                        },
+                        modifier = Modifier.weight(1f),
+                    )
+                }
+            }
+        } else {
+            FlowRow(
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalArrangement = Arrangement.spacedBy(4.dp),
+            ) {
+                options.forEach { (id, labelRes) ->
+                    FilterChip(
+                        selected = selected == id,
+                        onClick = { onSelect(id) },
+                        label = { Text(stringResource(labelRes), maxLines = 1) },
+                    )
+                }
             }
         }
     }

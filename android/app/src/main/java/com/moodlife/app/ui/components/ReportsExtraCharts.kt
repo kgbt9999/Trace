@@ -28,6 +28,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.moodlife.app.R
 import com.moodlife.app.ui.theme.LocalMoodColors
+import com.moodlife.app.ui.components.ChartAxis.drawXLabels
 import kotlin.math.roundToInt
 
 /** Month adherence cells: taken / missed / no data (neutral KPI, not therapy advice). */
@@ -46,8 +47,8 @@ fun MedAdherenceGrid(
             ) {
                 week.forEach { (label, frac) ->
                     val color = when {
-                        frac == null -> Color(0xFF3A3F46)
-                        frac >= 0.99f -> Color(0xFF2BBFA0)
+                        frac == null -> Color(0xFFE2E6ED)
+                        frac >= 0.99f -> Color(0xFF1A9E6E)
                         else -> Color(0xFFE57373)
                     }
                     Box(
@@ -58,7 +59,12 @@ fun MedAdherenceGrid(
                             .background(color),
                         contentAlignment = Alignment.Center,
                     ) {
-                        Text(label, style = MaterialTheme.typography.labelSmall, color = Color.White.copy(alpha = 0.9f))
+                        Text(
+                            if (ChartAxis.isIso(label)) label.substring(8).trimStart('0') else label,
+                            style = MaterialTheme.typography.labelSmall,
+                            color = if (frac == null) Color(0xFF5A6070) else Color.White,
+                            maxLines = 1,
+                        )
                     }
                 }
                 repeat(7 - week.size) {
@@ -70,9 +76,9 @@ fun MedAdherenceGrid(
             Modifier.fillMaxWidth().padding(top = 8.dp),
             horizontalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            LegendSwatch(Color(0xFF2BBFA0), stringResource(R.string.reports_med_legend_taken))
+            LegendSwatch(Color(0xFF1A9E6E), stringResource(R.string.reports_med_legend_taken))
             LegendSwatch(Color(0xFFE57373), stringResource(R.string.reports_med_legend_missed))
-            LegendSwatch(Color(0xFF3A3F46), stringResource(R.string.reports_med_legend_none))
+            LegendSwatch(Color(0xFFE2E6ED), stringResource(R.string.reports_med_legend_none))
         }
     }
 }
@@ -121,7 +127,7 @@ fun MoodHeatmapChart(
                     val cell = cells.find { it.weekIndex == w && it.weekday == d }
                     val tint = when {
                         cell == null -> Color.Transparent
-                        cell.empty || cell.polarity == null -> Color(0xFF2A2F36)
+                        cell.empty || cell.polarity == null -> Color(0xFFE8EBEF)
                         else -> polarityHeatColor(cell.polarity)
                     }
                     Box(
@@ -161,7 +167,7 @@ fun MoodHeatmapChart(
                 Modifier
                     .size(14.dp)
                     .clip(RoundedCornerShape(3.dp))
-                    .background(Color(0xFF2A2F36)),
+                    .background(Color(0xFFE8EBEF)),
             )
             Text(
                 stringResource(R.string.reports_heatmap_no_data),
@@ -209,7 +215,6 @@ fun ReportsDashboardCard(
     modifier: Modifier = Modifier,
 ) {
     Column(modifier.fillMaxWidth()) {
-        Text(stringResource(R.string.reports_dashboard_title), style = MaterialTheme.typography.titleMedium)
         Text(
             stringResource(R.string.reports_dashboard_hint),
             style = MaterialTheme.typography.bodySmall,
@@ -226,7 +231,7 @@ fun ReportsDashboardCard(
             } ?: "—"
             DashKpi(
                 stringResource(R.string.reports_kpi_avg_mood),
-                avgPolarity?.let { String.format("%+.1f", it) } ?: "—",
+                avgPolarity?.let { String.format(java.util.Locale("ru"), "%+.1f", it) } ?: "—",
                 polarityLabel,
                 Modifier.weight(1f),
             )
@@ -247,7 +252,7 @@ fun ReportsDashboardCard(
             } ?: "—"
             DashKpi(
                 stringResource(R.string.reports_kpi_avg_sleep),
-                avgSleep?.let { String.format("%.1f", it) } ?: "—",
+                avgSleep?.let { String.format(java.util.Locale("ru"), "%.1f", it) } ?: "—",
                 sleepHint,
                 Modifier.weight(1f),
             )
@@ -331,17 +336,17 @@ fun MoodPolarityZoneChart(
         )
         Box(
             Modifier
-                .fillMaxWidth()
-                .aspectRatio(1.45f)
+                .chartArea(1.45f)
                 .clip(RoundedCornerShape(12.dp))
                 .background(Color.White),
         ) {
             Canvas(Modifier.fillMaxSize().padding(start = 8.dp, end = 8.dp, top = 8.dp, bottom = 4.dp)) {
                 val leftPad = 28.dp.toPx()
-                val bottomPad = 18.dp.toPx()
+                val rightPad = 14.dp.toPx()
+                val bottomPad = 20.dp.toPx()
                 val minY = -5f
                 val maxY = 5f
-                val w = size.width - leftPad
+                val w = size.width - leftPad - rightPad
                 val h = size.height - bottomPad
                 val n = labels.size.coerceAtLeast(1)
                 fun xAt(i: Int) = leftPad + if (n <= 1) w / 2f else i * w / (n - 1)
@@ -374,22 +379,8 @@ fun MoodPolarityZoneChart(
                 drawLine(Color(0xFF1A1D23).copy(alpha = 0.85f), Offset(leftPad, 0f), Offset(leftPad, h), 2f)
                 drawLine(Color(0xFF1A1D23).copy(alpha = 0.85f), Offset(leftPad, h), Offset(leftPad + w, h), 2f)
 
+                drawXLabels(labels, ::xAt, size.height - 2f, paint)
                 paint.textAlign = android.graphics.Paint.Align.CENTER
-                val step = when {
-                    n <= 8 -> 1
-                    n <= 16 -> 2
-                    else -> 3
-                }
-                labels.forEachIndexed { i, lab ->
-                    if (i % step == 0 || i == n - 1) {
-                        drawContext.canvas.nativeCanvas.drawText(
-                            "$lab дн.",
-                            xAt(i),
-                            size.height - 2f,
-                            paint,
-                        )
-                    }
-                }
 
                 val pts = window.mapIndexed { i, p -> Offset(xAt(i), yAt(p.second)) to p.second }
                 for (i in 1 until pts.size) {
@@ -424,7 +415,9 @@ fun MoodPolarityZoneChart(
 }
 
 /**
- * Dual-axis: sleep hours (bars, left 0–12) + mood polarity (line, right −5…+5).
+ * Dual-axis: sleep hours (soft bars, left 0–12) + mood polarity (line, right −5…+5).
+ * Visual: sleep as muted rounded columns, mood as foreground polyline with polarity-tinted dots.
+ * Association view only — not a clinical interpretation.
  */
 @Composable
 fun MoodSleepPolarityChart(
@@ -435,14 +428,20 @@ fun MoodSleepPolarityChart(
 ) {
     if (moodPoints.isEmpty() && sleepPoints.isEmpty()) return
     val moodColor = Color(0xFFEB6834)
-    val sleepOk = Color(0xFF1BAF7A).copy(alpha = 0.55f)
-    val sleepBad = Color(0xFFE34948).copy(alpha = 0.5f)
-    val sleepBand = Color(0xFF1BAF7A).copy(alpha = 0.12f)
+    val sleepInk = Color(0xFF1BAF7A)
+    val sleepOk = sleepInk.copy(alpha = 0.42f)
+    val sleepWarn = Color(0xFFE8A838).copy(alpha = 0.45f)
+    val sleepBad = Color(0xFFE34948).copy(alpha = 0.40f)
+    val sleepBand = sleepInk.copy(alpha = 0.10f)
+    val elevTint = Color(0xFFE34948)
+    val lowTint = Color(0xFF1A4F8A)
+    val midTint = Color(0xFF7EB3E8)
     val grid = Color(0xFFE2E6ED)
     val tickColor = Color(0xFF5A6070)
+    val axisInk = Color(0xFF1A1D23)
     val density = LocalDensity.current
     val allLabels = (moodPoints.map { it.first } + sleepPoints.map { it.first }).distinct()
-        .sortedWith(compareBy({ it.toIntOrNull() ?: Int.MAX_VALUE }, { it }))
+        .sortedWith(ChartAxis.keyOrder)
     val total = allLabels.size
     val scale = zoom.scale.coerceAtLeast(1f)
     val visibleCount = (total / scale).roundToInt().coerceIn(2, total.coerceAtLeast(2))
@@ -455,22 +454,31 @@ fun MoodSleepPolarityChart(
     val endIdx = (startIdx + visibleCount).coerceAtMost(total)
     val labels = allLabels.subList(startIdx, endIdx)
     Column(modifier.fillMaxWidth()) {
-        Text(
-            stringResource(R.string.reports_axis_sleep) + " / " + stringResource(R.string.reports_axis_polarity),
-            style = MaterialTheme.typography.labelSmall,
-            color = tickColor,
-        )
+        Row(
+            Modifier.fillMaxWidth().padding(bottom = 2.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+        ) {
+            Text(
+                stringResource(R.string.reports_axis_sleep),
+                style = MaterialTheme.typography.labelSmall,
+                color = sleepInk,
+            )
+            Text(
+                stringResource(R.string.reports_axis_polarity),
+                style = MaterialTheme.typography.labelSmall,
+                color = moodColor,
+            )
+        }
         Box(
             Modifier
-                .fillMaxWidth()
-                .aspectRatio(1.45f)
+                .chartArea(1.55f)
                 .clip(RoundedCornerShape(12.dp))
                 .background(Color.White),
         ) {
-            Canvas(Modifier.fillMaxSize().padding(8.dp)) {
-                val leftPad = 30.dp.toPx()
-                val rightPad = 28.dp.toPx()
-                val bottomPad = 18.dp.toPx()
+            Canvas(Modifier.fillMaxSize().padding(start = 6.dp, end = 6.dp, top = 8.dp, bottom = 4.dp)) {
+                val leftPad = 32.dp.toPx()
+                val rightPad = 30.dp.toPx()
+                val bottomPad = 20.dp.toPx()
                 val w = size.width - leftPad - rightPad
                 val h = size.height - bottomPad
                 val n = labels.size.coerceAtLeast(1)
@@ -478,87 +486,121 @@ fun MoodSleepPolarityChart(
                 fun ySleep(hours: Float) = h - (hours.coerceIn(0f, 12f) / 12f) * h
                 fun yMood(v: Float) = h - ((v.coerceIn(-5f, 5f) + 5f) / 10f) * h
 
-                // Sleep normal band 7–9h
+                // Sleep 7–9h reference band (visual guide, not a prescription).
+                val bandTop = ySleep(9f)
+                val bandBot = ySleep(7f)
                 drawRect(
                     sleepBand,
-                    topLeft = Offset(leftPad, ySleep(9f)),
-                    size = androidx.compose.ui.geometry.Size(w, ySleep(7f) - ySleep(9f)),
+                    topLeft = Offset(leftPad, bandTop),
+                    size = androidx.compose.ui.geometry.Size(w, (bandBot - bandTop).coerceAtLeast(1f)),
+                )
+                val dash = androidx.compose.ui.graphics.PathEffect.dashPathEffect(floatArrayOf(6f, 5f))
+                drawLine(
+                    sleepInk.copy(alpha = 0.45f),
+                    Offset(leftPad, bandTop),
+                    Offset(leftPad + w, bandTop),
+                    strokeWidth = 1.25f,
+                    pathEffect = dash,
+                )
+                drawLine(
+                    sleepInk.copy(alpha = 0.45f),
+                    Offset(leftPad, bandBot),
+                    Offset(leftPad + w, bandBot),
+                    strokeWidth = 1.25f,
+                    pathEffect = dash,
                 )
 
                 val paint = android.graphics.Paint().apply {
-                    color = android.graphics.Color.argb(
-                        (tickColor.alpha * 255).toInt(),
-                        (tickColor.red * 255).toInt(),
-                        (tickColor.green * 255).toInt(),
-                        (tickColor.blue * 255).toInt(),
-                    )
+                    color = android.graphics.Color.parseColor("#5A6070")
                     textSize = with(density) { 10.sp.toPx() }
                     isAntiAlias = true
                     textAlign = android.graphics.Paint.Align.RIGHT
                 }
-                for (hours in listOf(0, 2, 4, 6, 8, 10, 12)) {
+                // Sparse sleep ticks (left).
+                for (hours in listOf(0, 6, 8, 12)) {
                     val y = ySleep(hours.toFloat())
-                    drawLine(grid, Offset(leftPad, y), Offset(leftPad + w, y), 1f)
-                    drawContext.canvas.nativeCanvas.drawText("$hours ч", leftPad - 4f, y + 4f, paint)
+                    if (hours != 7 && hours != 9) {
+                        drawLine(grid, Offset(leftPad, y), Offset(leftPad + w, y), 1f)
+                    }
+                    drawContext.canvas.nativeCanvas.drawText("$hours", leftPad - 5f, y + 4f, paint)
                 }
+                // Mood ticks (right) + zero emphasis.
                 paint.textAlign = android.graphics.Paint.Align.LEFT
                 for (m in listOf(-5, 0, 5)) {
                     val y = yMood(m.toFloat())
+                    if (m == 0) {
+                        drawLine(
+                            axisInk.copy(alpha = 0.35f),
+                            Offset(leftPad, y),
+                            Offset(leftPad + w, y),
+                            strokeWidth = 1.5f,
+                            pathEffect = dash,
+                        )
+                    }
                     val lab = if (m > 0) "+$m" else "$m"
-                    drawContext.canvas.nativeCanvas.drawText(lab, leftPad + w + 4f, y + 4f, paint)
+                    drawContext.canvas.nativeCanvas.drawText(lab, leftPad + w + 5f, y + 4f, paint)
                 }
+
+                drawLine(sleepInk.copy(alpha = 0.75f), Offset(leftPad, 0f), Offset(leftPad, h), 2f)
+                drawLine(moodColor.copy(alpha = 0.75f), Offset(leftPad + w, 0f), Offset(leftPad + w, h), 2f)
+                drawLine(axisInk.copy(alpha = 0.55f), Offset(leftPad, h), Offset(leftPad + w, h), 1.5f)
 
                 val moodIdx = moodPoints.associate { it.first to it.second }
                 val sleepIdx = sleepPoints.associate { it.first to it.second }
-                val barW = (w / n.coerceAtLeast(1)) * 0.4f
+                val slot = w / n.coerceAtLeast(1)
+                val barW = (slot * 0.38f).coerceIn(6.dp.toPx(), 18.dp.toPx())
+                val corner = androidx.compose.ui.geometry.CornerRadius(4.dp.toPx(), 4.dp.toPx())
                 labels.forEachIndexed { i, key ->
                     val hours = sleepIdx[key] ?: return@forEachIndexed
                     val barColor = when {
                         hours in 7f..9f -> sleepOk
-                        hours < 6f || hours > 9f -> sleepBad
-                        else -> sleepOk.copy(alpha = 0.35f)
+                        hours < 6f || hours > 10f -> sleepBad
+                        else -> sleepWarn
                     }
                     val top = ySleep(hours)
-                    val barH = h - top
-                    drawRect(
-                        barColor,
+                    val barH = (h - top).coerceAtLeast(2.dp.toPx())
+                    drawRoundRect(
+                        color = barColor,
                         topLeft = Offset(xAt(i) - barW / 2f, top),
-                        size = androidx.compose.ui.geometry.Size(barW, barH.coerceAtLeast(0f)),
+                        size = androidx.compose.ui.geometry.Size(barW, barH),
+                        cornerRadius = corner,
                     )
                 }
-                val moodPts = labels.mapIndexedNotNull { i, key ->
-                    moodIdx[key]?.let { Offset(xAt(i), yMood(it)) }
-                }
-                for (i in 1 until moodPts.size) {
-                    drawLine(moodColor, moodPts[i - 1], moodPts[i], strokeWidth = 2.5f)
-                }
-                moodPts.forEach { drawCircle(moodColor, radius = 4.5.dp.toPx(), center = it) }
 
-                paint.textAlign = android.graphics.Paint.Align.CENTER
-                val step = when {
-                    n <= 8 -> 1
-                    n <= 16 -> 2
-                    else -> 3
+                val moodSeries = labels.mapIndexedNotNull { i, key ->
+                    val v = moodIdx[key] ?: return@mapIndexedNotNull null
+                    Triple(Offset(xAt(i), yMood(v)), v, i)
                 }
-                labels.forEachIndexed { i, lab ->
-                    if (i % step == 0 || i == n - 1) {
-                        drawContext.canvas.nativeCanvas.drawText(
-                            "$lab дн.",
-                            xAt(i),
-                            size.height - 2f,
-                            paint,
-                        )
+                for (i in 1 until moodSeries.size) {
+                    drawLine(moodColor, moodSeries[i - 1].first, moodSeries[i].first, strokeWidth = 3f)
+                }
+                moodSeries.forEach { (pt, v, _) ->
+                    val dot = when {
+                        v >= 2f -> elevTint
+                        v <= -2f -> lowTint
+                        else -> midTint
                     }
+                    drawCircle(Color.White, radius = 5.5.dp.toPx(), center = pt)
+                    drawCircle(dot, radius = 4.dp.toPx(), center = pt)
+                    drawCircle(moodColor.copy(alpha = 0.35f), radius = 5.5.dp.toPx(), center = pt, style = androidx.compose.ui.graphics.drawscope.Stroke(width = 1.5f))
                 }
+
+                drawXLabels(labels, ::xAt, size.height - 2f, paint)
             }
         }
+        Text(
+            stringResource(R.string.reports_axis_days),
+            style = MaterialTheme.typography.labelSmall,
+            color = tickColor,
+            modifier = Modifier.align(Alignment.CenterHorizontally).padding(top = 4.dp),
+        )
         Row(
             Modifier.fillMaxWidth().padding(top = 8.dp),
-            horizontalArrangement = Arrangement.spacedBy(14.dp),
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            LegendSwatch(Color(0xFF1BAF7A), stringResource(R.string.reports_mood_sleep_sleep_bars))
+            LegendSwatch(sleepInk, stringResource(R.string.reports_mood_sleep_sleep_bars))
             LegendSwatch(moodColor, stringResource(R.string.reports_mood_sleep_mood))
-            LegendSwatch(Color(0xFF1BAF7A).copy(alpha = 0.5f), stringResource(R.string.reports_sleep_norm_band))
+            LegendSwatch(sleepInk.copy(alpha = 0.45f), stringResource(R.string.reports_sleep_norm_band))
         }
     }
 }
@@ -586,7 +628,7 @@ fun WarningSignsDashboard(
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             DashKpi(
                 stringResource(R.string.reports_kpi_avg_mood),
-                avgPolarity?.let { String.format("%+.1f", it) } ?: "—",
+                avgPolarity?.let { String.format(java.util.Locale("ru"), "%+.1f", it) } ?: "—",
                 avgPolarity?.let {
                     when {
                         it >= 1f -> stringResource(R.string.reports_kpi_mood_elevated)
@@ -618,7 +660,7 @@ fun WarningSignsDashboard(
             }
             DashKpi(
                 stringResource(R.string.reports_kpi_avg_sleep),
-                avgSleep?.let { String.format("%.1f ч", it) } ?: "—",
+                avgSleep?.let { String.format(java.util.Locale("ru"), "%.1f ч", it) } ?: "—",
                 avgSleep?.let {
                     if (it < 6f) stringResource(R.string.reports_kpi_sleep_low)
                     else stringResource(R.string.reports_kpi_sleep_ok)
@@ -730,8 +772,8 @@ fun MonthHistoryTable(
                     stringResource(
                         R.string.reports_history_row,
                         row.entryCount,
-                        row.avgPolarity?.let { String.format("%+.1f", it) } ?: "—",
-                        row.avgSleepHours?.let { String.format("%.1f", it) } ?: "—",
+                        row.avgPolarity?.let { String.format(java.util.Locale("ru"), "%+.1f", it) } ?: "—",
+                        row.avgSleepHours?.let { String.format(java.util.Locale("ru"), "%.1f", it) } ?: "—",
                     ),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -766,7 +808,7 @@ fun GroupedBarChart(
     modifier: Modifier = Modifier,
 ) {
     val allLabels = (seriesA.map { it.first } + seriesB.map { it.first }).distinct()
-        .sortedWith(compareBy({ it.toIntOrNull() ?: Int.MAX_VALUE }, { it }))
+        .sortedWith(ChartAxis.keyOrder)
     if (allLabels.isEmpty()) return
     val total = allLabels.size
     val scale = zoom.scale.coerceAtLeast(1f)
@@ -790,8 +832,7 @@ fun GroupedBarChart(
         }
         Box(
             Modifier
-                .fillMaxWidth()
-                .aspectRatio(1.6f)
+                .chartArea(1.6f)
                 .clip(RoundedCornerShape(12.dp))
                 .background(Color.White),
         ) {
@@ -840,22 +881,7 @@ fun GroupedBarChart(
                         size = androidx.compose.ui.geometry.Size(barW, hb),
                     )
                 }
-                paint.textAlign = android.graphics.Paint.Align.CENTER
-                val step = when {
-                    scale >= 2f || n <= 10 -> 1
-                    n <= 20 -> 2
-                    else -> 3
-                }
-                labels.forEachIndexed { i, lab ->
-                    if (i % step == 0 || i == n - 1) {
-                        drawContext.canvas.nativeCanvas.drawText(
-                            lab,
-                            leftPad + i * groupW + groupW / 2f,
-                            size.height - 2f,
-                            paint,
-                        )
-                    }
-                }
+                drawXLabels(labels, { i -> leftPad + i * groupW + groupW / 2f }, size.height - 2f, paint)
             }
         }
         if (xAxisLabel != null) {
@@ -885,10 +911,12 @@ data class SleepMoodPoint(
 /**
  * Scatter: X = sleep hours, Y = mood polarity (-3..+3).
  * Neutral labels only — association, not diagnosis.
+ * Semantic zoom: pinch narrows the visible X/Y window (same as line charts).
  */
 @Composable
 fun SleepMoodScatterChart(
     points: List<SleepMoodPoint>,
+    zoom: ChartZoomState = ChartZoomState(),
     modifier: Modifier = Modifier,
 ) {
     if (points.isEmpty()) return
@@ -899,6 +927,19 @@ fun SleepMoodScatterChart(
     val dep = mood.depressed
     val mid = mood.anxious.copy(alpha = 0.85f)
     val density = LocalDensity.current
+    val scale = zoom.scale.coerceAtLeast(1f)
+    val fullMinX = 2f
+    val fullMaxX = 12f
+    val fullMinY = -5.5f
+    val fullMaxY = 5.5f
+    val spanX = ((fullMaxX - fullMinX) / scale).coerceAtLeast(2f)
+    val spanY = ((fullMaxY - fullMinY) / scale).coerceAtLeast(2f)
+    val maxStartX = (fullMaxX - fullMinX - spanX).coerceAtLeast(0f)
+    val maxStartY = (fullMaxY - fullMinY - spanY).coerceAtLeast(0f)
+    val minX = fullMinX + zoom.panFraction.coerceIn(0f, 1f) * maxStartX
+    val maxX = minX + spanX
+    val minY = fullMinY + (1f - zoom.panFraction.coerceIn(0f, 1f)) * maxStartY
+    val maxY = minY + spanY
     Column(modifier.fillMaxWidth()) {
         Text(
             stringResource(R.string.reports_axis_polarity),
@@ -907,19 +948,15 @@ fun SleepMoodScatterChart(
         )
         Box(
             Modifier
-                .fillMaxWidth()
-                .aspectRatio(1.35f)
+                .chartArea(1.35f)
                 .clip(RoundedCornerShape(12.dp))
                 .background(Color.White),
         ) {
             Canvas(Modifier.fillMaxSize().padding(12.dp)) {
-                val minX = 2f
-                val maxX = 12f
-                val minY = -5.5f
-                val maxY = 5.5f
                 val leftPad = 28.dp.toPx()
-                val bottomPad = 18.dp.toPx()
-                val w = size.width - leftPad
+                val rightPad = 12.dp.toPx()
+                val bottomPad = 20.dp.toPx()
+                val w = size.width - leftPad - rightPad
                 val h = size.height - bottomPad
                 val paint = android.graphics.Paint().apply {
                     color = android.graphics.Color.parseColor("#5A6070")
@@ -927,44 +964,77 @@ fun SleepMoodScatterChart(
                     isAntiAlias = true
                     textAlign = android.graphics.Paint.Align.RIGHT
                 }
-                for (xTick in listOf(2f, 4f, 6f, 8f, 10f, 12f)) {
-                    val x = leftPad + ((xTick - minX) / (maxX - minX)).coerceIn(0f, 1f) * w
-                    drawLine(grid, Offset(x, 0f), Offset(x, h), strokeWidth = 1f)
+                fun xAt(v: Float) = leftPad + ((v - minX) / (maxX - minX).coerceAtLeast(0.001f)).coerceIn(0f, 1f) * w
+                fun yAt(v: Float) = h - ((v - minY) / (maxY - minY).coerceAtLeast(0.001f)).coerceIn(0f, 1f) * h
+                val xTicks = buildList {
+                    val step = when {
+                        spanX <= 3f -> 0.5f
+                        spanX <= 6f -> 1f
+                        else -> 2f
+                    }
+                    var t = (minX / step).toInt() * step
+                    if (t < minX) t += step
+                    while (t <= maxX + 0.001f) {
+                        add(t)
+                        t += step
+                    }
                 }
-                for (yTick in listOf(-5f, -2f, 0f, 2f, 5f)) {
-                    val y = h - ((yTick - minY) / (maxY - minY)).coerceIn(0f, 1f) * h
+                val yTicks = buildList {
+                    val step = when {
+                        spanY <= 3f -> 0.5f
+                        spanY <= 6f -> 1f
+                        else -> 1f
+                    }
+                    var t = kotlin.math.floor(minY / step) * step
+                    if (t < minY) t += step
+                    while (t <= maxY + 0.001f) {
+                        add(t)
+                        t += step
+                    }
+                }
+                xTicks.forEach { xTick ->
+                    drawLine(grid, Offset(xAt(xTick), 0f), Offset(xAt(xTick), h), strokeWidth = 1f)
+                }
+                yTicks.forEach { yTick ->
+                    val y = yAt(yTick)
                     drawLine(grid, Offset(leftPad, y), Offset(leftPad + w, y), strokeWidth = 1f)
-                    drawContext.canvas.nativeCanvas.drawText(
-                        if (yTick > 0) "+${yTick.toInt()}" else "${yTick.toInt()}",
-                        leftPad - 4f,
-                        y + 4f,
-                        paint,
-                    )
+                    val lab = when {
+                        kotlin.math.abs(yTick) < 0.05f -> "0"
+                        yTick > 0f && yTick == yTick.toInt().toFloat() -> "+${yTick.toInt()}"
+                        yTick == yTick.toInt().toFloat() -> "${yTick.toInt()}"
+                        yTick > 0f -> "+%.1f".format(yTick)
+                        else -> "%.1f".format(yTick)
+                    }
+                    drawContext.canvas.nativeCanvas.drawText(lab, leftPad - 4f, y + 4f, paint)
                 }
-                val zeroY = h - ((0f - minY) / (maxY - minY)) * h
-                drawLine(labelColor.copy(alpha = 0.55f), Offset(leftPad, zeroY), Offset(leftPad + w, zeroY), strokeWidth = 2f)
+                if (0f in minY..maxY) {
+                    drawLine(labelColor.copy(alpha = 0.55f), Offset(leftPad, yAt(0f)), Offset(leftPad + w, yAt(0f)), strokeWidth = 2f)
+                }
                 drawLine(Color(0xFF1A1D23).copy(alpha = 0.85f), Offset(leftPad, 0f), Offset(leftPad, h), 2f)
                 drawLine(Color(0xFF1A1D23).copy(alpha = 0.85f), Offset(leftPad, h), Offset(leftPad + w, h), 2f)
                 paint.textAlign = android.graphics.Paint.Align.CENTER
-                for (xTick in listOf(2f, 4f, 6f, 8f, 10f, 12f)) {
-                    val x = leftPad + ((xTick - minX) / (maxX - minX)).coerceIn(0f, 1f) * w
-                    drawContext.canvas.nativeCanvas.drawText(
-                        "${xTick.toInt()}ч",
-                        x,
-                        size.height - 2f,
-                        paint,
-                    )
+                xTicks.forEachIndexed { i, xTick ->
+                    paint.textAlign = when (i) {
+                        0 -> android.graphics.Paint.Align.LEFT
+                        xTicks.lastIndex -> android.graphics.Paint.Align.RIGHT
+                        else -> android.graphics.Paint.Align.CENTER
+                    }
+                    val lab = if (xTick == xTick.toInt().toFloat()) "${xTick.toInt()}ч" else "%.1fч".format(xTick)
+                    drawContext.canvas.nativeCanvas.drawText(lab, xAt(xTick), size.height - 2f, paint)
                 }
-                val r = 7.dp.toPx()
+                val r = (7.dp.toPx() * (1f + 0.15f * (scale - 1f).coerceAtMost(2f))).coerceAtMost(12.dp.toPx())
                 points.forEach { p ->
+                    if (p.sleepHours !in minX..maxX || p.moodPolarity !in minY..maxY) return@forEach
                     val color = when {
                         p.moodPolarity > 0.4f -> elev
                         p.moodPolarity < -0.4f -> dep
                         else -> mid
                     }
-                    val x = leftPad + ((p.sleepHours.coerceIn(minX, maxX) - minX) / (maxX - minX)) * w
-                    val y = h - ((p.moodPolarity.coerceIn(minY, maxY) - minY) / (maxY - minY)) * h
-                    drawCircle(color = color.copy(alpha = 0.72f), radius = r, center = Offset(x, y))
+                    drawCircle(
+                        color = color.copy(alpha = 0.72f),
+                        radius = r,
+                        center = Offset(xAt(p.sleepHours), yAt(p.moodPolarity)),
+                    )
                 }
             }
         }

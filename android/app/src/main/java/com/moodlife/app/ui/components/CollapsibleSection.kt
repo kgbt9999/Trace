@@ -37,6 +37,7 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.moodlife.app.R
 
@@ -78,37 +79,38 @@ fun CollapsibleSection(
                     .padding(horizontal = 12.dp, vertical = 12.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                Box(
-                    Modifier
-                        .padding(end = 10.dp)
-                        .size(32.dp)
-                        .clip(RoundedCornerShape(8.dp))
-                        .background(accent.copy(alpha = 0.18f)),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    if (leadingIcon != null) {
+                // Icon tile only when there is an icon; an empty tile with a bar carried no meaning.
+                if (leadingIcon != null) {
+                    Box(
+                        Modifier
+                            .padding(end = 10.dp)
+                            .size(32.dp)
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(accent.copy(alpha = 0.18f)),
+                        contentAlignment = Alignment.Center,
+                    ) {
                         Icon(
                             leadingIcon,
                             contentDescription = null,
                             tint = accent,
                             modifier = Modifier.size(18.dp),
                         )
-                    } else {
-                        Box(
-                            Modifier
-                                .size(width = 4.dp, height = 14.dp)
-                                .clip(RoundedCornerShape(2.dp))
-                                .background(accent),
-                        )
                     }
                 }
                 Column(Modifier.weight(1f)) {
-                    Text(title, style = MaterialTheme.typography.titleMedium)
+                    Text(
+                        title,
+                        style = MaterialTheme.typography.titleMedium,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis,
+                    )
                     if (!expanded && !subtitle.isNullOrBlank()) {
                         Text(
                             subtitle,
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = 2,
+                            overflow = TextOverflow.Ellipsis,
                             modifier = Modifier.padding(top = 2.dp),
                         )
                     }
@@ -117,6 +119,7 @@ fun CollapsibleSection(
                     if (expanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
                     contentDescription = null,
                     tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.size(24.dp),
                 )
             }
             if (onEdit != null) {

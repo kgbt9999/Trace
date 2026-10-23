@@ -21,7 +21,7 @@ object CycleUtils {
     )
 
     val PHASE_INFO = mapOf(
-        CyclePhase.MENSTRUAL to PhaseInfo("Менструация", "🌙", "Дни кровотечения. Энергия может быть снижена.", Color(0xFFEC4899)),
+        CyclePhase.MENSTRUAL to PhaseInfo("Менструация", "🩸", "Дни кровотечения. Энергия может быть снижена.", Color(0xFFEC4899)),
         CyclePhase.FOLLICULAR to PhaseInfo("Фолликулярная", "🌱", "После менструации до окна фертильности.", Color(0xFF10B981)),
         CyclePhase.OVULATION to PhaseInfo("Овуляция (оценка)", "✨", "Оценка вокруг середины цикла.", Color(0xFFF59E0B)),
         CyclePhase.LUTEAL to PhaseInfo("Лютеиновая", "🍂", "После овуляции до следующей менструации.", Color(0xFF6366F1)),

@@ -29,6 +29,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -91,9 +92,11 @@ fun LabResultsSection(
 
     CollapsibleSection(
         title = stringResource(R.string.physical_labs_title),
-        subtitle = stringResource(R.string.physical_labs_catalog_subtitle),
+        subtitle = history.maxByOrNull { it.date }?.let { last ->
+            "Последний: ${last.name} ${last.valueText}${last.unit?.takeIf { it.isNotBlank() }?.let { " $it" } ?: ""} · ${DateUtils.formatRu(DateUtils.parseIso(last.date))}"
+        } ?: "Результатов пока нет",
         helpText = stringResource(R.string.physical_labs_disclaimer),
-        initiallyExpanded = true,
+        initiallyExpanded = false,
         modifier = modifier,
     ) {
         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -103,7 +106,7 @@ fun LabResultsSection(
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
             FilledTonalButton(onClick = { openNew() }, modifier = Modifier.fillMaxWidth()) {
-                Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(18.dp))
+                Icon(Icons.Default.Add, contentDescription = stringResource(R.string.physical_labs_add_result), modifier = Modifier.size(18.dp))
                 Text(
                     stringResource(R.string.physical_labs_add_result),
                     modifier = Modifier.padding(start = 6.dp),
@@ -113,13 +116,35 @@ fun LabResultsSection(
             if (history.isEmpty()) {
                 EmptyStateCard(message = stringResource(R.string.physical_labs_no_data_yet))
             } else {
-                Text(
-                    stringResource(R.string.physical_labs_history_title),
-                    style = MaterialTheme.typography.titleSmall,
-                    modifier = Modifier.padding(top = 4.dp),
-                )
-                history.sortedByDescending { it.date }.take(40).forEach { row ->
-                    LabEntryRow(row = row, onClick = { openEdit(row) })
+                // Off: latest value per analysis. On: every reading, grouped by analysis, date — value.
+                var asList by rememberSaveable { mutableStateOf(false) }
+                ListToggleRow(stringResource(R.string.physical_list_toggle), asList, { asList = it }, Modifier.padding(top = 4.dp))
+                val groups = history.groupBy { it.name.trim().lowercase() }
+                    .values
+                    .sortedBy { it.first().name.lowercase() }
+                if (!asList) {
+                    groups.forEach { rows ->
+                        val latest = rows.maxBy { it.date }
+                        LabEntryRow(row = latest, onClick = { openEdit(latest) })
+                    }
+                } else {
+                    groups.forEach { rows ->
+                        Text(
+                            rows.first().name,
+                            style = MaterialTheme.typography.titleSmall,
+                            modifier = Modifier.padding(top = 10.dp),
+                        )
+                        rows.sortedByDescending { it.date }.forEach { row ->
+                            DateReadingRow(
+                                isoDate = row.date,
+                                reading = row.valueText + (row.unit?.takeIf { it.isNotBlank() }?.let { " $it" } ?: ""),
+                                note = row.clinic?.takeIf { it.isNotBlank() },
+                                onClick = { openEdit(row) },
+                                deleteLabel = "${row.name} ${row.valueText}",
+                                onDelete = { onDeleteEntry(row.id) },
+                            )
+                        }
+                    }
                 }
             }
 
@@ -146,16 +171,16 @@ fun LabResultsSection(
                             .sortedBy { it.date }
                             .mapNotNull { r ->
                                 val v = r.valueNumeric ?: return@mapNotNull null
-                                labDayLabel(r.date) to v
+                                r.date to v
                             }
                         if (points.isEmpty()) return@forEach
+                        val title = if (unit.isNotEmpty()) "$label ($unit)" else label
                         Text(
-                            if (unit.isNotEmpty()) "$label ($unit)" else label,
+                            title,
                             style = MaterialTheme.typography.labelMedium,
                             modifier = Modifier.padding(top = 8.dp),
                         )
-                        val maxY = (points.maxOf { it.second } * 1.15f).coerceAtLeast(0.1f)
-                        SimpleLineChart(series = points, maxY = maxY)
+                        ZoomableMeasurementChart(title = title, series = points, yAxisLabel = unit.ifEmpty { label })
                     }
             }
         }
@@ -303,5 +328,3 @@ private fun LabEntryRow(row: LabResultEntity, onClick: () -> Unit) {
     }
 }
 
-private fun labDayLabel(iso: String): String =
-    iso.takeLast(2).trimStart('0').ifEmpty { iso.takeLast(2) }

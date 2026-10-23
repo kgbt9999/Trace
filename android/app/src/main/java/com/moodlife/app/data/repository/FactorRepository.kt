@@ -138,4 +138,13 @@ class FactorRepository @Inject constructor(
     }
 
     suspend fun deleteLogsForEntry(moodEntryId: String) = factorLogDao.deleteForEntry(moodEntryId)
+
+    /** Days on which this factor was marked — shown before deleting it. */
+    suspend fun markCount(factorId: String): Int = factorLogDao.countForFactor(factorId)
+
+    /** Removes a factor and its marks from every day. Hiding keeps them instead. */
+    suspend fun deleteCompletely(factorId: String) {
+        factorLogDao.deleteAllForFactor(factorId)
+        factorDao.deleteById(factorId)
+    }
 }

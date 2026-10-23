@@ -31,17 +31,27 @@ internal object DoctorClinicalReportHtml {
           -webkit-font-smoothing: antialiased;
         }
         .report-header {
-          background: var(--surface); border-bottom: 2px solid var(--border);
-          padding: 24px 40px 20px; display: grid; grid-template-columns: 1fr auto; gap: 16px; align-items: start;
+          background: var(--surface); border-top: 4px solid var(--blue); border-bottom: 1px solid var(--border);
+          padding: 22px 40px 18px; display: grid; grid-template-columns: 1fr auto; gap: 16px; align-items: start;
         }
-        .report-header h1 { font-size: 17px; font-weight: 600; letter-spacing: -.2px; margin-bottom: 2px; }
-        .report-header .subtitle { font-size: 12px; color: var(--text-2); font-weight: 400; }
+        .eyebrow { font-size: 10.5px; letter-spacing: .6px; text-transform: uppercase; color: var(--blue); font-weight: 600; margin-bottom: 4px; }
+        .report-header h1 { font-size: 20px; font-weight: 650; letter-spacing: -.3px; margin-bottom: 2px; }
+        .report-header .patient { font-size: 15px; font-weight: 500; margin-top: 2px; }
+        .report-header .subtitle { font-size: 12px; color: var(--text-2); font-weight: 400; margin-top: 4px; }
         .report-meta { text-align: right; font-size: 11.5px; color: var(--text-2); line-height: 1.8; }
         .report-meta strong { color: var(--text); font-weight: 500; }
+        .period-chip {
+          display: inline-block; background: #e8f1fc; color: #1a4f8a; border-radius: 20px;
+          padding: 4px 12px; font-size: 13px; font-weight: 600; font-variant-numeric: tabular-nums; margin-bottom: 4px;
+        }
         .patient-row {
           background: var(--surface); border-bottom: 1px solid var(--border);
-          padding: 12px 40px; display: flex; gap: 40px; flex-wrap: wrap;
+          padding: 12px 40px; display: flex; gap: 14px 36px; flex-wrap: wrap;
         }
+        .visit-note {
+          background: #fffaf0; border-bottom: 1px solid #f5d080; padding: 10px 40px; font-size: 12.5px; white-space: pre-line;
+        }
+        .visit-note strong { font-weight: 600; }
         .patient-row .field { display: flex; flex-direction: column; gap: 1px; }
         .patient-row .label { font-size: 10px; color: var(--text-3); text-transform: uppercase; letter-spacing: .5px; }
         .patient-row .value { font-size: 13px; font-weight: 500; }
@@ -145,21 +155,34 @@ internal object DoctorClinicalReportHtml {
           font-size: 11px; color: var(--text-3); display: flex; justify-content: space-between; flex-wrap: wrap; gap: 8px;
         }
         .chart { overflow-x: auto; }
+        .hist-table td.date { white-space: nowrap; font-variant-numeric: tabular-nums; color: var(--text-2); }
+        .hist-table td.note { white-space: pre-line; min-width: 220px; }
+        .hist-table td { font-variant-numeric: tabular-nums; }
+        .muted { color: var(--text-3); }
+        .src { font-size: 9.5px; color: var(--text-3); font-weight: 500; }
         .disclaimer {
           border-left: 3px solid var(--orange); background: var(--surface);
           padding: 12px 16px; margin-bottom: 20px; font-size: 12px; color: var(--text-2); white-space: pre-line;
         }
+        @page { size: A4; margin: 12mm 10mm; }
         @media print {
-          body { background: #fff; }
+          body { background: #fff; font-size: 12px; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
           .card, .metric-card { box-shadow: none; }
-          .page { padding: 0 20px 40px; }
-          .report-header { padding: 16px 20px; }
+          .page { padding: 16px 0 0; max-width: none; }
+          .report-header, .patient-row, .visit-note { padding-left: 0; padding-right: 0; }
+          .card, .metric-card, .risk-card, .crisis-level, tr, .prodrome-item, .trigger-item { break-inside: avoid; }
+          .section:not(.long) { break-inside: avoid; }
+          .section-title { display: block; break-after: avoid; }
+          .section-title .num { display: inline-grid; vertical-align: middle; margin-right: 6px; }
+          .grid-2 .card { height: auto !important; }
+          thead { display: table-header-group; }
         }
-        @media (max-width: 800px) {
+        @media screen and (max-width: 800px) {
           .grid-2, .grid-3, .crisis-levels { grid-template-columns: 1fr; }
           .report-header { grid-template-columns: 1fr; padding: 16px 20px; }
           .report-meta { text-align: left; }
-          .patient-row { padding: 12px 20px; gap: 16px; }
+          .patient-row { padding: 12px 20px; gap: 12px 20px; }
+          .visit-note { padding: 10px 20px; }
           .page { padding: 20px 16px 40px; }
         }
       </style>
@@ -167,24 +190,20 @@ internal object DoctorClinicalReportHtml {
     <body>
       <div class="report-header">
         <div>
-          <h1>Клинический отчёт пациента</h1>
+          <div class="eyebrow">Trace · самоотчёт пациента</div>
+          <h1>${esc(m.title)}</h1>
+          ${if (m.patientName.isNotBlank()) "<div class=\"patient\">${esc(m.patientName)}</div>" else ""}
           <div class="subtitle">${esc(m.subtitle)}</div>
         </div>
         <div class="report-meta">
-          <div>Период отчёта: <strong>${esc(m.periodLabel)}</strong></div>
+          <div class="period-chip">${esc(m.periodLabel)}</div>
+          <div>Дней с записями: <strong>${m.totalDays}</strong></div>
           <div>Сформирован: <strong>${esc(m.exportedAt)}</strong></div>
-          <div>Источник: <strong>Trace (локальный дневник)</strong></div>
         </div>
       </div>
 
-      <div class="patient-row">
-        <div class="field"><span class="label">Пациент</span><span class="value">${esc(m.patientName)}</span></div>
-        <div class="field"><span class="label">Дата рождения</span><span class="value">${esc(m.patientDob)}</span></div>
-        <div class="field"><span class="label">Диагноз</span><span class="value">${esc(m.diagnosis)}</span></div>
-        <div class="field"><span class="label">Лечащий врач</span><span class="value">${esc(m.doctorName)}</span></div>
-        <div class="field"><span class="label">Следующий приём</span><span class="value">${esc(m.nextVisit)}</span></div>
-        <div class="field"><span class="label">Приверженность лечению</span><span class="value" style="color:${m.adherenceColor}">${esc(m.adherenceLabel)}</span></div>
-      </div>
+      <div class="patient-row">${m.headerFieldsHtml}</div>
+      ${if (m.visitComment.isNotBlank()) "<div class=\"visit-note\"><strong>К приёму:</strong> ${esc(m.visitComment)}</div>" else ""}
 
       <div class="page">
         <div class="disclaimer">${esc(m.disclaimer)}</div>
@@ -298,15 +317,22 @@ internal object DoctorClinicalReportHtml {
           """ else ""}
         </div>
 
+        ${if (m.physicalHtml.isNotBlank()) """
+        <div class="section long">
+          <div class="section-title"><span class="num">7</span> Физические показатели</div>
+          ${m.physicalHtml}
+        </div>
+        """ else ""}
+
         ${if (m.historyRows.isNotBlank()) """
-        <div class="section">
-          <div class="section-title"><span class="num">7</span> Таблица истории по шкалам</div>
+        <div class="section long">
+          <div class="section-title"><span class="num">8</span> Таблица истории по шкалам</div>
           <div class="card">
             <div class="card-title">Агрегаты дневника (не типы эпизодов)</div>
             <table class="hist-table">
               <thead><tr>
                 <th>Период</th><th>По шкале</th><th>Величина</th>
-                <th>Лекарства</th><th>Режим</th><th>Ключевые события</th>
+                <th>Лекарства</th><th>Режим</th><th>Заметки (дата: текст)</th>
               </tr></thead>
               <tbody>${m.historyRows}</tbody>
             </table>
@@ -315,8 +341,24 @@ internal object DoctorClinicalReportHtml {
         </div>
         """ else ""}
 
+        ${if (m.diaryRows.isNotBlank()) """
+        <div class="section long">
+          <div class="section-title"><span class="num">9</span> Дневник по дням</div>
+          <div class="card">
+            <div class="card-title">
+              <span>Шкалы, сон, вес и заметки — каждая запись со своей датой</span>
+              <span style="font-size:11px;color:var(--text-2);font-weight:400">Настроение = подъём − спад</span>
+            </div>
+            <table class="hist-table">
+              <thead><tr><th>Дата</th><th>Настроение</th><th>Сон, ч</th><th>Тревога</th><th>Вес, кг</th><th>Заметки</th></tr></thead>
+              <tbody>${m.diaryRows}</tbody>
+            </table>
+          </div>
+        </div>
+        """ else ""}
+
         <div class="section">
-          <div class="section-title"><span class="num">8</span> Кризисный план (из настроек)</div>
+          <div class="section-title"><span class="num">10</span> Кризисный план (из настроек)</div>
           <div class="crisis-levels">
             ${m.crisisHtml}
           </div>
@@ -337,10 +379,9 @@ internal object DoctorClinicalReportHtml {
         val periodLabel: String,
         val exportedAt: String,
         val patientName: String,
-        val patientDob: String,
-        val diagnosis: String,
-        val doctorName: String,
-        val nextVisit: String,
+        /** Ready-made header fields (only the ones the user filled in). */
+        val headerFieldsHtml: String,
+        val visitComment: String,
         val adherenceLabel: String,
         val adherenceColor: String,
         val disclaimer: String,
@@ -371,6 +412,8 @@ internal object DoctorClinicalReportHtml {
         val medDoseSvg: String,
         val historyRows: String,
         val crisisHtml: String,
+        val physicalHtml: String,
+        val diaryRows: String,
     )
 
     private fun dayWord(n: Int): String {

@@ -21,8 +21,16 @@ class BodyMeasurementRepository @Inject constructor(
 
     suspend fun upsertSingleField(date: String, fieldId: String, value: Float?) {
         val existing = dao.getByDate(date)
-        dao.upsert(BodyMeasurementCatalog.applyField(existing, date, fieldId, value))
+        val updated = BodyMeasurementCatalog.applyField(existing, date, fieldId, value)
+        // A day with every value cleared is removed, so it no longer shows up in lists and charts.
+        if (BodyMeasurementCatalog.fields.all { it.read(updated) == null } && updated.note.isNullOrBlank()) {
+            dao.deleteByDate(date)
+        } else {
+            dao.upsert(updated)
+        }
     }
+
+    suspend fun deleteDate(date: String) = dao.deleteByDate(date)
 
     /**
      * Upsert by calendar date (one row per day). Empty numeric fields are stored as null.

@@ -281,28 +281,14 @@ class PhysicalViewModel @Inject constructor(
         }
     }
 
-    fun saveBodyMeasurement(
-        shoulderWidthCm: Float?,
-        bicepsCm: Float?,
-        chestCm: Float?,
-        underBustCm: Float?,
-        waistCm: Float?,
-        hipsCm: Float?,
-        thighCm: Float?,
-        weightKg: Float?,
-    ) {
+    val bodyChartsVisible: StateFlow<Boolean> =
+        settingsRepository.observe(SettingsRepository.KEY_BODY_CHARTS_VISIBLE)
+            .map { it != "false" }
+            .stateIn(viewModelScope, SharingStarted.Eagerly, true)
+
+    fun setBodyChartsVisible(visible: Boolean) {
         viewModelScope.launch {
-            bodyMeasurementRepository.upsertForDate(
-                date = _anchor.value,
-                shoulderWidthCm = shoulderWidthCm,
-                bicepsCm = bicepsCm,
-                chestCm = chestCm,
-                underBustCm = underBustCm,
-                waistCm = waistCm,
-                hipsCm = hipsCm,
-                thighCm = thighCm,
-                weightKg = weightKg,
-            )
+            settingsRepository.set(SettingsRepository.KEY_BODY_CHARTS_VISIBLE, visible.toString())
         }
     }
 
@@ -334,6 +320,10 @@ class PhysicalViewModel @Inject constructor(
         viewModelScope.launch {
             bodyMeasurementRepository.upsertSingleField(date, fieldId, value)
         }
+    }
+
+    fun deleteBodyMeasurementDate(date: String) {
+        viewModelScope.launch { bodyMeasurementRepository.deleteDate(date) }
     }
 
     fun refreshHcStatus() {

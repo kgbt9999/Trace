@@ -11,12 +11,15 @@ import com.moodlife.app.domain.ForecastEngine
 import com.moodlife.app.domain.InsightsEngine
 import com.moodlife.app.domain.MedAccentColors
 import com.moodlife.app.domain.MonthBurden
+import com.moodlife.app.domain.markedPolarity
+import com.moodlife.app.domain.markedValue
 import com.moodlife.app.util.DateUtils
 import com.moodlife.app.util.MedsUtils
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.mapLatest
 import java.time.LocalDate
 import javax.inject.Inject
@@ -67,180 +70,102 @@ class ReportsRepository @Inject constructor(
 ) {
     fun observeMonthEntries(year: Int, month: Int): Flow<List<MoodEntryEntity>> {
         val (from, to) = DateUtils.monthRange(year, month)
-        return moodEntryDao.observeRange(from, to)
+        return observeEntries(from, to)
     }
 
-    fun observeMonthAdherence(year: Int, month: Int): Flow<MonthBurden.Adherence> {
-        val (from, to) = DateUtils.monthRange(year, month)
-        return combine(
+    fun observeEntries(from: String, to: String): Flow<List<MoodEntryEntity>> =
+        moodEntryDao.observeRange(from, to)
+
+    fun observeAdherence(from: String, to: String): Flow<MonthBurden.Adherence> =
+        combine(
             medicationLogDao.observeRange(from, to),
             medicationDao.observeVisibleInRange(from, to),
         ) { logs, meds -> MonthBurden.adherence(logs, meds) }
-    }
 
-    /** Per-day adherence fraction for calendar-style med grid (null = no logs that day). */
-    fun observeMonthAdherenceDays(year: Int, month: Int): Flow<List<Pair<String, Float?>>> {
-        val (from, to) = DateUtils.monthRange(year, month)
-        return combine(
+    /** Per-day adherence fraction keyed by ISO date (null = no logs that day). */
+    fun observeAdherenceDays(from: String, to: String): Flow<List<Pair<String, Float?>>> =
+        combine(
             medicationLogDao.observeRange(from, to),
             medicationDao.observeVisibleInRange(from, to),
         ) { logs, meds ->
             val byDate = logs.groupBy { it.date }
             val byId = meds.associateBy { it.id }
-            val start = LocalDate.parse(from)
-            val end = LocalDate.parse(to)
-            buildList {
-                var d = start
-                while (!d.isAfter(end)) {
-                    val iso = d.toString()
-                    val dayLogs = byDate[iso].orEmpty()
-                    if (dayLogs.isEmpty()) {
-                        add(d.dayOfMonth.toString() to null)
-                    } else {
-                        var taken = 0
-                        var scheduled = 0
-                        dayLogs.forEach { log ->
-                            val med = byId[log.medicationId] ?: return@forEach
-                            val raw = log.intakeTimesSnapshot?.takeIf { it.isNotBlank() } ?: med.intakeTimes
-                            val slots = MedsUtils.parseIntakeTimes(raw)
-                            val timed = slots.filter { it != "by-scheme" }
-                            if (timed.isEmpty()) {
-                                scheduled += 1
-                                if (log.taken) taken += 1
-                            } else {
-                                scheduled += timed.size
-                                taken += timed.count { slot ->
-                                    MedsUtils.isSlotTaken(log.taken, log.slotsTaken, slot, timed)
-                                }
-                            }
-                        }
-                        add(
-                            d.dayOfMonth.toString() to
-                                if (scheduled <= 0) null else taken.toFloat() / scheduled,
-                        )
-                    }
-                    d = d.plusDays(1)
+            daysIn(from, to).map { iso ->
+                var taken = 0
+                var scheduled = 0
+                byDate[iso].orEmpty().forEach { log ->
+                    val med = byId[log.medicationId] ?: return@forEach
+                    val day = MedsUtils.daySlots(
+                        log.intakeTimesSnapshot?.takeIf { it.isNotBlank() } ?: med.intakeTimes,
+                        log.taken,
+                        log.slotsTaken,
+                    )
+                    scheduled += day.scheduledCount
+                    taken += day.takenCount
                 }
+                iso to if (scheduled <= 0) null else taken.toFloat() / scheduled
             }
         }
-    }
 
     /**
-     * Per-medication dose series for the month.
+     * Per-medication dose series keyed by ISO date.
      * Same normalized name → one series (points merged).
      */
-    fun observeMonthMedDoseSeries(year: Int, month: Int): Flow<List<MedDoseSeries>> {
-        val (from, to) = DateUtils.monthRange(year, month)
-        return combine(
+    fun observeMedDoseSeries(from: String, to: String): Flow<List<MedDoseSeries>> =
+        combine(
             medicationLogDao.observeRange(from, to),
             medicationDao.observeVisibleInRange(from, to),
         ) { logs, meds ->
             if (meds.isEmpty()) return@combine emptyList()
-            val byDate = logs.groupBy { it.date }
+            val byDateAndMed = logs.associateBy { it.date to it.medicationId }
+            val days = daysIn(from, to)
             val byName = linkedMapOf<String, MedDoseSeries>()
             meds.forEach { med ->
                 val nameKey = MedAccentColors.normalizeName(med.name)
                 if (nameKey.isEmpty()) return@forEach
-                val points = mutableListOf<Pair<String, Float>>()
-                var d = LocalDate.parse(from)
-                val end = LocalDate.parse(to)
-                while (!d.isAfter(end)) {
-                    val iso = d.toString()
-                    val log = byDate[iso].orEmpty().find { it.medicationId == med.id }
-                    val dayLabel = d.dayOfMonth.toString()
-                    if (log != null) {
-                        val raw = log.intakeTimesSnapshot?.takeIf { it.isNotBlank() } ?: med.intakeTimes
-                        val slots = MedsUtils.parseIntakeTimes(raw)
-                        val timed = slots.filter { it != "by-scheme" }
-                        val anyTaken = if (timed.isEmpty()) {
-                            log.taken
-                        } else {
-                            timed.any { slot ->
-                                MedsUtils.isSlotTaken(log.taken, log.slotsTaken, slot, timed)
-                            }
-                        }
-                        if (anyTaken) {
-                            val doseRaw = log.dosageOverride?.takeIf { it.isNotBlank() } ?: med.dosage
-                            parseDoseValue(doseRaw)?.let { dose ->
-                                points.add(dayLabel to dose)
-                            }
-                        }
-                    }
-                    d = d.plusDays(1)
+                val points = days.mapNotNull { iso ->
+                    val log = byDateAndMed[iso to med.id] ?: return@mapNotNull null
+                    val day = MedsUtils.daySlots(
+                        log.intakeTimesSnapshot?.takeIf { it.isNotBlank() } ?: med.intakeTimes,
+                        log.taken,
+                        log.slotsTaken,
+                    )
+                    if (day.takenCount == 0) return@mapNotNull null
+                    val doseRaw = log.dosageOverride?.takeIf { it.isNotBlank() } ?: med.dosage
+                    parseDoseValue(doseRaw)?.let { iso to it }
                 }
                 if (points.isEmpty()) return@forEach
                 val existing = byName[nameKey]
-                if (existing == null) {
-                    byName[nameKey] = MedDoseSeries(
-                        medId = med.id,
-                        name = med.name.trim(),
-                        points = points,
-                    )
+                byName[nameKey] = if (existing == null) {
+                    MedDoseSeries(medId = med.id, name = med.name.trim(), points = points)
                 } else {
-                    val merged = (existing.points + points)
-                        .groupBy({ it.first }, { it.second })
-                        .map { (day, doses) -> day to (doses.maxOrNull() ?: 0f) }
-                        .sortedWith(compareBy({ it.first.toIntOrNull() ?: Int.MAX_VALUE }, { it.first }))
-                    byName[nameKey] = existing.copy(points = merged)
+                    existing.copy(
+                        points = (existing.points + points)
+                            .groupBy({ it.first }, { it.second })
+                            .map { (day, doses) -> day to (doses.maxOrNull() ?: 0f) }
+                            .sortedBy { it.first },
+                    )
                 }
             }
             byName.values.toList()
         }
-    }
 
-    /** Per-day taken lines: "12 мая — Название · доза · слоты". */
-    fun observeMonthMedTakenLines(year: Int, month: Int): Flow<List<String>> {
+    /** Month variant for exports: X labels are day-of-month numbers. */
+    fun observeMonthMedDoseSeries(year: Int, month: Int): Flow<List<MedDoseSeries>> {
         val (from, to) = DateUtils.monthRange(year, month)
-        return combine(
-            medicationLogDao.observeRange(from, to),
-            medicationDao.observeVisibleInRange(from, to),
-        ) { logs, meds ->
-            if (meds.isEmpty()) return@combine emptyList()
-            val byDate = logs.groupBy { it.date }
-            val start = LocalDate.parse(from)
-            val end = LocalDate.parse(to)
-            buildList {
-                var d = start
-                while (!d.isAfter(end)) {
-                    val iso = d.toString()
-                    val dayLogs = byDate[iso].orEmpty()
-                    val dayLabel = "${d.dayOfMonth} ${DateUtils.MONTH_NAMES_RU[d.monthValue - 1].take(3).lowercase()}"
-                    meds.forEach { med ->
-                        val log = dayLogs.find { it.medicationId == med.id } ?: return@forEach
-                        val raw = log.intakeTimesSnapshot?.takeIf { it.isNotBlank() } ?: med.intakeTimes
-                        val slots = MedsUtils.parseIntakeTimes(raw)
-                        val timed = slots.filter { it != "by-scheme" }
-                        val takenLabels = if (timed.isEmpty()) {
-                            if (log.taken) listOf("день") else emptyList()
-                        } else {
-                            timed.filter { slot ->
-                                MedsUtils.isSlotTaken(log.taken, log.slotsTaken, slot, timed)
-                            }
-                        }
-                        if (takenLabels.isEmpty()) return@forEach
-                        val name = log.nameSnapshot?.takeIf { it.isNotBlank() } ?: med.name
-                        val doseStr = (log.dosageOverride ?: med.dosage)?.takeIf { it.isNotBlank() }
-                        add(
-                            buildString {
-                                append(dayLabel).append(" — ").append(name)
-                                if (doseStr != null) append(" · ").append(doseStr)
-                                append(" · ").append(takenLabels.joinToString(", "))
-                            },
-                        )
-                    }
-                    d = d.plusDays(1)
-                }
+        return observeMedDoseSeries(from, to).map { list ->
+            list.map { s ->
+                s.copy(points = s.points.map { (iso, v) -> iso.substring(8).trimStart('0') to v })
             }
         }
     }
 
     /**
-     * Frequency and average intensity of early-warning signs logged this month.
+     * Frequency and average intensity of early-warning signs logged in the period.
      * Counts and intensity only — not progress toward an episode.
      */
-    fun observeMonthWarningStats(year: Int, month: Int): Flow<List<WarningSignStat>> {
-        val (from, to) = DateUtils.monthRange(year, month)
-        return moodEntryDao.observeRange(from, to).mapLatest { entries ->
+    fun observeWarningStats(from: String, to: String): Flow<List<WarningSignStat>> =
+        moodEntryDao.observeRange(from, to).mapLatest { entries ->
             if (entries.isEmpty()) return@mapLatest emptyList()
             val triggers = warningTriggerDao.listForEntries(entries.map { it.id })
                 .filter { it.intensity > 0 }
@@ -255,6 +180,13 @@ class ReportsRepository @Inject constructor(
                 )
             }.sortedByDescending { it.count }
         }
+
+    private fun daysIn(from: String, to: String): List<String> {
+        val end = LocalDate.parse(to)
+        return generateSequence(LocalDate.parse(from)) { it.plusDays(1) }
+            .takeWhile { !it.isAfter(end) }
+            .map { it.toString() }
+            .toList()
     }
 
     /** Last [count] months of diary aggregates — «сводка записей», not episode typing. */
@@ -275,11 +207,8 @@ class ReportsRepository @Inject constructor(
                 val m = ym.monthValue - 1
                 val (mFrom, mTo) = DateUtils.monthRange(y, m)
                 val monthEntries = entries.filter { it.date in mFrom..mTo }
-                val avgPol = monthEntries
-                    .map { (it.elevated - it.depressed).toFloat() }
-                    .average()
-                    .takeIf { monthEntries.isNotEmpty() }
-                    ?.toFloat()
+                val polarities = monthEntries.mapNotNull { it.markedPolarity()?.toFloat() }
+                val avgPol = polarities.average().takeIf { polarities.isNotEmpty() }?.toFloat()
                 val avgSleep = monthEntries.mapNotNull { it.sleepHours?.toFloat() }
                     .average()
                     .takeIf { !it.isNaN() }
@@ -319,33 +248,61 @@ class ReportsRepository @Inject constructor(
     }
 }
 
+@OptIn(ExperimentalCoroutinesApi::class)
 @Singleton
 class ForecastRepository @Inject constructor(
     private val moodEntryDao: MoodEntryDao,
     private val periodRepository: PeriodRepository,
+    private val warningTriggerDao: WarningTriggerDao,
+    private val warningSignDao: WarningSignDao,
 ) {
-    fun observeForecast(dayCount: Int = 7): Flow<List<ForecastEngine.ForecastDay>> {
+    data class ForecastResult(val days: List<ForecastEngine.ForecastDay>, val check: ForecastEngine.Backtest)
+
+    fun observeForecast(dayCount: Int = 7): Flow<ForecastResult> {
         val today = DateUtils.todayIso()
         val from = DateUtils.addDays(today, -180)
         return combine(
             moodEntryDao.observeRange(from, today),
             periodRepository.observe(),
-        ) { entries, period ->
-            val setting = period ?: defaultPeriod()
-            val hist = ForecastEngine.buildHistory(
-                entries.map {
-                    ForecastEngine.HistDayInput(
-                        it.date, it.depressed, it.elevated, it.anxious, it.irritable,
-                        it.sleepQuality, it.sleepHours,
-                    )
-                },
-                setting.lastPeriodStart, setting.cycleLength, setting.periodLength, setting.irregular,
-            )
-            ForecastEngine.buildForecast(
-                today, hist, setting.lastPeriodStart,
-                setting.cycleLength, setting.periodLength, setting.irregular,
-                dayCount = dayCount,
-            )
-        }
+            warningSignDao.observeAll(),
+        ) { entries, period, signs -> Triple(entries, period, signs) }
+            .mapLatest { (entries, period, signs) ->
+                val setting = period ?: defaultPeriod()
+                val directionById = signs.associate { it.id to it.direction }
+                val triggersByEntry = if (entries.isEmpty()) {
+                    emptyMap()
+                } else {
+                    warningTriggerDao.listForEntries(entries.map { it.id })
+                        .filter { it.intensity > 0 }
+                        .groupBy { it.moodEntryId }
+                }
+                val hist = ForecastEngine.buildHistory(
+                    entries.filter { it.markedPolarity() != null }.map {
+                        val directions = triggersByEntry[it.id].orEmpty().mapNotNull { t -> directionById[t.warningSignId] }
+                        ForecastEngine.HistDayInput(
+                            it.date,
+                            it.markedValue("depressed") ?: 0,
+                            it.markedValue("elevated") ?: 0,
+                            it.markedValue("anxious") ?: 0,
+                            it.markedValue("irritable") ?: 0,
+                            it.markedValue("sleepQuality") ?: 0,
+                            it.sleepHours,
+                            warningMania = directions.any { d -> d == "mania" || d == "mixed" },
+                            warningDep = directions.any { d -> d == "depression" || d == "mixed" },
+                        )
+                    },
+                    setting.lastPeriodStart, setting.cycleLength, setting.periodLength, setting.irregular,
+                )
+                ForecastResult(
+                    days = ForecastEngine.buildForecast(
+                        today, hist, setting.lastPeriodStart,
+                        setting.cycleLength, setting.periodLength, setting.irregular,
+                        dayCount = dayCount,
+                    ),
+                    check = ForecastEngine.backtest(
+                        hist, setting.lastPeriodStart, setting.cycleLength, setting.periodLength, setting.irregular,
+                    ),
+                )
+            }
     }
 }

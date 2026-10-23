@@ -17,6 +17,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.Check
 import androidx.compose.material.icons.outlined.Edit
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -64,7 +65,7 @@ fun ChipToggleRow(
             val border = if (item.active) {
                 item.color ?: MaterialTheme.colorScheme.primary
             } else {
-                MaterialTheme.colorScheme.outline.copy(alpha = 0.55f)
+                MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.55f)
             }
             Row(
                 modifier = Modifier
@@ -77,6 +78,16 @@ fun ChipToggleRow(
                     .padding(start = 4.dp, end = if (onEdit != null) 2.dp else 8.dp, top = 4.dp, bottom = 4.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
+                if (item.active) {
+                    Icon(
+                        Icons.Outlined.Check,
+                        contentDescription = null,
+                        tint = ink,
+                        modifier = Modifier
+                            .padding(start = 6.dp)
+                            .size(14.dp),
+                    )
+                }
                 Text(
                     text = item.label,
                     color = ink,

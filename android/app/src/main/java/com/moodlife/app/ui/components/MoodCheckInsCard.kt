@@ -29,6 +29,8 @@ import androidx.compose.ui.unit.dp
 import com.moodlife.app.R
 import com.moodlife.app.data.local.entity.MoodCheckInEntity
 import com.moodlife.app.domain.CheckInConfig
+import com.moodlife.app.domain.DefaultSeedData
+import com.moodlife.app.domain.MoodScales
 import com.moodlife.app.ui.theme.LocalMoodColors
 import org.json.JSONObject
 import java.text.SimpleDateFormat
@@ -37,7 +39,7 @@ import java.util.Locale
 
 object CheckInSchemes {
     fun slots(scheme: String): List<Pair<String, String>> =
-        CheckInConfig.fromScheme(scheme, setOf("depressed", "elevated", "anxious", "irritable"))
+        CheckInConfig.fromScheme(scheme)
             .slots
             .map { it.id to it.label }
 }
@@ -66,7 +68,7 @@ fun MoodCheckInsCard(
         Text(stringResource(R.string.checkins_hint), style = MaterialTheme.typography.bodySmall)
 
         if (slots.isNotEmpty()) {
-            SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {
+            SingleChoiceSegmentedButtonRow(modifier.fillMaxWidth()) {
                 slots.forEachIndexed { index, (id, label) ->
                     val done = checkIns.any { it.timeOfDay == id }
                     SegmentedButton(
@@ -121,23 +123,39 @@ fun MoodCheckInsCard(
         )
 
         config.axes.forEach { axis ->
-            val max = axis.max.coerceAtLeast(axis.min + 1)
-            val value = (values[axis.id] ?: axis.min).coerceIn(axis.min, max)
-            ScaleInput(
-                label = axis.label,
-                value = value - axis.min,
-                onValueChange = { v -> values[axis.id] = (v + axis.min).coerceIn(axis.min, max) },
-                color = scaleColor,
-                max = max - axis.min,
-                anchors = axis.anchors(),
-            )
+            val max = axis.displayMax()
+            val value = (values[axis.id] ?: 0).coerceIn(0, max)
+            when (axis.normalizedScaleType()) {
+                "yesno" -> ScaleInput(
+                    label = axis.label,
+                    value = value,
+                    onValueChange = { v -> values[axis.id] = v.coerceIn(0, 1) },
+                    color = scaleColor,
+                    options = axis.anchors() ?: listOf("Нет", "Да"),
+                )
+                "options" -> ScaleInput(
+                    label = axis.label,
+                    value = value,
+                    onValueChange = { v -> values[axis.id] = v.coerceIn(0, max) },
+                    color = scaleColor,
+                    options = axis.anchors() ?: DefaultSeedData.OPTIONS_SEVERITY_LABELS,
+                )
+                else -> ScaleInput(
+                    label = axis.label,
+                    value = value,
+                    onValueChange = { v -> values[axis.id] = v.coerceIn(0, 5) },
+                    color = scaleColor,
+                    max = 5,
+                    anchors = axis.anchors() ?: MoodScales.INTENSITY_ANCHORS_COMPACT,
+                )
+            }
         }
 
         Button(
             onClick = {
                 val json = JSONObject()
                 config.axes.forEach { axis ->
-                    json.put(axis.id, values[axis.id] ?: axis.min)
+                    json.put(axis.id, values[axis.id] ?: 0)
                 }
                 onSave(
                     activeSlot,

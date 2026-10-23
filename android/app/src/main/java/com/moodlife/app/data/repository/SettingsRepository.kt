@@ -38,6 +38,16 @@ class SettingsRepository @Inject constructor(private val settingDao: SettingDao)
         const val KEY_APPEARANCE = "appearance_style"
         const val KEY_THEME_MODE = "theme_mode"
         const val KEY_CRISIS_DOCTOR = "crisis_doctor"
+
+        /** Report header («шапка» of exported reports), filled by the user in Reports. */
+        const val KEY_REPORT_TITLE = "report_title"
+        const val KEY_REPORT_PATIENT = "report_patient"
+        const val KEY_REPORT_DOB = "report_dob"
+        const val KEY_REPORT_DIAGNOSIS = "report_diagnosis"
+        const val KEY_REPORT_DOCTOR = "report_doctor"
+        const val KEY_REPORT_CLINIC = "report_clinic"
+        const val KEY_REPORT_NEXT_VISIT = "report_next_visit"
+        const val KEY_REPORT_COMMENT = "report_comment"
         const val KEY_CRISIS_SUPPORT = "crisis_support"
         const val KEY_CRISIS_NOTES = "crisis_notes"
         const val KEY_CRISIS_WISHES = "crisis_wishes"
@@ -63,6 +73,8 @@ class SettingsRepository @Inject constructor(private val settingDao: SettingDao)
         const val KEY_HC_LAST_SYNC = "hc_last_sync_at"
         const val KEY_HC_LAST_ROWS = "hc_last_rows"
         const val KEY_HC_LAST_ORIGINS = "hc_last_origins"
+        /** JSON {recordType: count | "ошибка: …"} from the last Health Connect sync. */
+        const val KEY_HC_LAST_DIAGNOSTICS = "hc_last_diagnostics"
         const val KEY_BACKUP_LAST = "backup_last_path"
         /** Weekly auto-backup to user SAF folder — "true" / "false", default off. */
         const val KEY_WEEKLY_BACKUP_ENABLED = "weekly_backup_enabled"
@@ -74,6 +86,8 @@ class SettingsRepository @Inject constructor(private val settingDao: SettingDao)
         const val KEY_BODY_HEIGHT_CM = "body_height_cm"
         /** Show body measurements block on Physical tab — "true" / "false", default off. */
         const val KEY_BODY_MEASUREMENTS_ENABLED = "body_measurements_enabled"
+        /** "false" hides body measurement charts on Physical (default: shown). */
+        const val KEY_BODY_CHARTS_VISIBLE = "body_charts_visible"
         /** Show lab results on Physical — "true"/"false"; absent defaults to on (Ornament-like). */
         const val KEY_LAB_RESULTS_ENABLED = "lab_results_enabled"
         /** Nutrition goals JSON: {"kcal":N,"protein":N,"fat":N,"carbs":N} — optional. */
@@ -94,6 +108,8 @@ class SettingsRepository @Inject constructor(private val settingDao: SettingDao)
         const val KEY_REPORTS_CHART_ORDER = "reports_charts_order"
         /** One-time flag: "1" after merging newly introduced default chart keys. */
         const val KEY_REPORTS_CHARTS_MIGRATED_V2 = "reports_charts_migrated_v2"
+        /** One-time flag: "1" after Today sections were re-sorted into the v3 recommended order. */
+        const val KEY_TODAY_LAYOUT_V3 = "today_layout_v3_applied"
         const val KEY_NOTIF_DIARY_ENABLED = "notif_diary_enabled"
         const val KEY_NOTIF_DIARY_TIME = "notif_diary_time"
         const val KEY_NOTIF_MEDS_ENABLED = "notif_meds_enabled"

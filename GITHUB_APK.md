@@ -80,3 +80,20 @@ APK: `app/build/outputs/apk/release/app-release.apk`
 - `keystore.properties`
 - `local.properties`
 - готовые `*.apk`
+
+
+---
+
+## Подпись релизов: один APK для новой установки и для обновления
+
+Ранние релизы (0.1–0.3) и сборки из Android Studio подписаны **отладочным** ключом, начиная с 0.5 — ключом `release.keystore`.
+Чтобы один APK ставился и с нуля, и поверх любой прошлой версии без потери данных, релиз подписывается
+с **ротацией ключа** (APK Signature Scheme v3): `android/signing/rotation.lineage` подтверждает, что
+релизный ключ — преемник отладочного.
+
+`gradlew assembleRelease` делает это сам (задача `signReleaseWithLineage`) и кладёт готовый файл
+`app/build/outputs/apk/release/Trace-<версия>.apk`. Нужны: `keystore.properties` с `release.keystore`,
+`~/.android/debug.keystore` (тот, которым подписаны старые релизы) и `signing/rotation.lineage`.
+Без них задача пишет предупреждение и оставляет обычную подпись.
+
+Для GitHub выкладывайте именно `Trace-<версия>.apk`.

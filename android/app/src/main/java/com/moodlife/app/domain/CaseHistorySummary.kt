@@ -75,10 +75,16 @@ object CaseHistorySummary {
                 .joinToString(" + ")
                 .ifBlank { "—" }
             val routine = routineLabel(seg)
+            // Each note carries its day, so the table says when it happened.
             val events = seg.asSequence()
-                .mapNotNull { inputs.notesByDate[it.date]?.trim()?.takeIf { t -> t.isNotEmpty() } }
-                .distinct()
-                .take(2)
+                .mapNotNull { e ->
+                    inputs.notesByDate[e.date]?.trim()?.takeIf { t -> t.isNotEmpty() }?.let { t ->
+                        val d = LocalDate.parse(e.date)
+                        "${d.dayOfMonth}.${d.monthValue.toString().padStart(2, '0')}: $t"
+                    }
+                }
+                .distinctBy { it.substringAfter(": ") }
+                .take(3)
                 .joinToString("; ")
                 .ifBlank { "—" }
             Row(
@@ -87,7 +93,7 @@ object CaseHistorySummary {
                 severity = sev,
                 medications = meds.take(80),
                 routine = routine,
-                keyEvents = events.take(80),
+                keyEvents = events.take(240),
             )
         }
     }

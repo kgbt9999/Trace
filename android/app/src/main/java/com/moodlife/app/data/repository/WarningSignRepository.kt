@@ -131,4 +131,12 @@ class WarningSignRepository @Inject constructor(
     }
 
     suspend fun deleteTriggersForEntry(moodEntryId: String) = warningTriggerDao.deleteForEntry(moodEntryId)
+
+    suspend fun markCount(signId: String): Int = warningTriggerDao.countForSign(signId)
+
+    /** Removes an early sign and its marks from every day. Hiding keeps them instead. */
+    suspend fun deleteCompletely(signId: String) {
+        warningTriggerDao.deleteAllForSign(signId)
+        warningSignDao.deleteById(signId)
+    }
 }

@@ -22,8 +22,6 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.outlined.Edit
 import androidx.compose.material.icons.outlined.Remove
-import androidx.compose.material.icons.outlined.Visibility
-import androidx.compose.material.icons.outlined.VisibilityOff
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
@@ -38,6 +36,8 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.material3.Switch
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
@@ -57,7 +57,7 @@ fun SettingsCard(
         elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
         border = androidx.compose.foundation.BorderStroke(
             1.dp,
-            MaterialTheme.colorScheme.outline.copy(alpha = 0.42f),
+            MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.42f),
         ),
         shape = MaterialTheme.shapes.large,
     ) {
@@ -131,8 +131,8 @@ fun SettingsMessageBanner(message: String, onDismiss: () -> Unit, modifier: Modi
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Text(message, style = MaterialTheme.typography.bodySmall, modifier = Modifier.weight(1f))
-            IconButton(onClick = onDismiss, modifier = Modifier.size(32.dp)) {
-                Icon(Icons.Default.Close, contentDescription = null, modifier = Modifier.size(18.dp))
+            IconButton(onClick = onDismiss, modifier = Modifier.size(48.dp)) {
+                Icon(Icons.Default.Close, contentDescription = stringResource(R.string.action_dismiss_message), modifier = Modifier.size(18.dp))
             }
         }
     }
@@ -151,7 +151,7 @@ fun SettingsNavChips(
         elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
         border = androidx.compose.foundation.BorderStroke(
             1.dp,
-            MaterialTheme.colorScheme.outline.copy(alpha = 0.42f),
+            MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.42f),
         ),
     ) {
         FlowRow(
@@ -183,7 +183,7 @@ fun SettingsNavRail(
         elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
         border = androidx.compose.foundation.BorderStroke(
             1.dp,
-            MaterialTheme.colorScheme.outline.copy(alpha = 0.42f),
+            MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.42f),
         ),
     ) {
         Column(Modifier.padding(8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
@@ -257,7 +257,7 @@ fun SettingsColorPicker(
                         if (selected.equals(hex, ignoreCase = true)) {
                             Modifier.border(2.dp, MaterialTheme.colorScheme.onSurface, RoundedCornerShape(10.dp))
                         } else {
-                            Modifier.border(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.4f), RoundedCornerShape(10.dp))
+                            Modifier.border(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f), RoundedCornerShape(10.dp))
                         },
                     )
                     .clickable { onSelect(hex) },
@@ -272,21 +272,23 @@ fun SettingsItemActions(
     onHide: (() -> Unit)? = null,
     onRestore: (() -> Unit)? = null,
 ) {
-    Row {
+    Row(verticalAlignment = Alignment.CenterVertically) {
         if (onEdit != null) {
             IconButton(onClick = onEdit) {
                 Icon(Icons.Outlined.Edit, contentDescription = stringResource(R.string.settings_edit))
             }
         }
-        if (onHide != null) {
-            IconButton(onClick = onHide) {
-                Icon(Icons.Outlined.VisibilityOff, contentDescription = stringResource(R.string.settings_hide))
-            }
-        }
-        if (onRestore != null) {
-            IconButton(onClick = onRestore) {
-                Icon(Icons.Outlined.Visibility, contentDescription = stringResource(R.string.settings_restore))
-            }
+        // A switch shows the current state; an eye icon read as "already hidden".
+        if (onHide != null || onRestore != null) {
+            val shown = onHide != null
+            val label = stringResource(R.string.settings_show_item)
+            Switch(
+                checked = shown,
+                onCheckedChange = { if (shown) onHide?.invoke() else onRestore?.invoke() },
+                modifier = Modifier
+                    .padding(start = 4.dp)
+                    .semantics { contentDescription = label },
+            )
         }
     }
 }

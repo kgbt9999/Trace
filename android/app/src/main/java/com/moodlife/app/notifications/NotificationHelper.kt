@@ -1,5 +1,9 @@
 package com.moodlife.app.notifications
 
+import androidx.core.content.ContextCompat
+import android.os.Build
+import android.content.pm.PackageManager
+import android.Manifest
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
@@ -92,6 +96,10 @@ object NotificationHelper {
             .setAutoCancel(true)
             .setCategory(NotificationCompat.CATEGORY_REMINDER)
             .build()
+        // Android 13+: the user may have denied notifications; skip instead of throwing.
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+            ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
+        ) return
         runCatching {
             NotificationManagerCompat.from(context).notify(requestCode, notification)
         }

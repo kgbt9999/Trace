@@ -51,6 +51,10 @@
   @com.google.gson.annotations.SerializedName <fields>;
 }
 
+# Weather API models are filled by Gson reflection and mostly lack @SerializedName;
+# renamed fields would silently produce empty weather in optimized builds.
+-keep class com.moodlife.app.data.network.** { *; }
+
 # Application models used via reflection / Room
 -keep class com.moodlife.app.data.local.entity.** { *; }
 -keep class com.moodlife.app.data.local.dao.** { *; }

@@ -12,6 +12,11 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.FilterChip
+import androidx.compose.foundation.layout.size
+import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.Icons
+import androidx.compose.material3.FilterChipDefaults
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.RadioButton
@@ -227,6 +232,11 @@ fun IntakeChips(times: Set<String>, onChange: (Set<String>) -> Unit) {
                     FilterChip(
                         selected = id in times,
                         onClick = { onChange(if (id in times) times - id else times + id) },
+                        leadingIcon = if (id in times) {
+                            { Icon(Icons.Filled.Check, contentDescription = null, modifier = Modifier.size(FilterChipDefaults.IconSize)) }
+                        } else {
+                            null
+                        },
                         label = {
                             Text(
                                 label,

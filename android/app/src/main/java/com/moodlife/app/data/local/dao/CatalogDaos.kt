@@ -30,6 +30,9 @@ interface FactorDao {
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun upsert(factor: FactorEntity)
+
+    @Query("DELETE FROM factors WHERE id = :id")
+    suspend fun deleteById(id: String)
 }
 
 @Dao
@@ -51,6 +54,12 @@ interface FactorLogDao {
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun upsert(log: FactorLogEntity)
+
+    @Query("DELETE FROM factor_logs WHERE factorId = :factorId")
+    suspend fun deleteAllForFactor(factorId: String)
+
+    @Query("SELECT COUNT(*) FROM factor_logs WHERE factorId = :factorId")
+    suspend fun countForFactor(factorId: String): Int
 }
 
 @Dao
@@ -75,6 +84,9 @@ interface WarningSignDao {
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun upsert(sign: EarlyWarningSignEntity)
+
+    @Query("DELETE FROM early_warning_signs WHERE id = :id")
+    suspend fun deleteById(id: String)
 }
 
 @Dao
@@ -99,6 +111,12 @@ interface WarningTriggerDao {
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun upsert(trigger: WarningTriggerEntity)
+
+    @Query("DELETE FROM warning_triggers WHERE warningSignId = :signId")
+    suspend fun deleteAllForSign(signId: String)
+
+    @Query("SELECT COUNT(*) FROM warning_triggers WHERE warningSignId = :signId")
+    suspend fun countForSign(signId: String): Int
 }
 
 @Dao

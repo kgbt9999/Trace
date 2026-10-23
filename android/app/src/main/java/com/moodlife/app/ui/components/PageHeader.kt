@@ -16,6 +16,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 
 @Composable
@@ -53,7 +54,11 @@ fun PageHeader(
                 title,
                 style = MaterialTheme.typography.headlineSmall,
                 color = MaterialTheme.colorScheme.onSurface,
-                modifier = Modifier.padding(start = 10.dp),
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier
+                    .padding(start = 10.dp)
+                    .weight(1f),
             )
         }
         if (!subtitle.isNullOrBlank()) {
@@ -61,6 +66,8 @@ fun PageHeader(
                 subtitle,
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 3,
+                overflow = TextOverflow.Ellipsis,
                 modifier = Modifier.padding(start = 14.dp, top = 4.dp),
             )
         }

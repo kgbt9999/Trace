@@ -64,7 +64,7 @@ import com.moodlife.app.data.local.entity.WeatherDayEntity
         BodyMeasurementEntity::class,
         LabResultEntity::class,
     ],
-    version = 7,
+    version = 8,
     exportSchema = true,
 )
 abstract class MoodLifeDatabase : RoomDatabase() {
@@ -227,6 +227,16 @@ abstract class MoodLifeDatabase : RoomDatabase() {
          * (name, value, unit, date, clinic) — many rows per date.
          * Migrates old wide columns into individual rows.
          */
+        /**
+         * v8: `markedAxes` separates "not marked" from 0. Existing rows keep '' and are read via
+         * MarkedAxes.legacy, so no data is rewritten here.
+         */
+        val MIGRATION_7_8: Migration = object : Migration(7, 8) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE mood_entries ADD COLUMN markedAxes TEXT NOT NULL DEFAULT ''")
+            }
+        }
+
         val MIGRATION_6_7: Migration = object : Migration(6, 7) {
             override fun migrate(db: SupportSQLiteDatabase) {
                 db.execSQL(
@@ -276,7 +286,7 @@ abstract class MoodLifeDatabase : RoomDatabase() {
                             (id, name, valueText, valueNumeric, unit, date, clinic, createdAt, updatedAt)
                             VALUES (?, ?, ?, ?, ?, ?, NULL, ?, ?)
                             """.trimIndent(),
-                            arrayOf(
+                            arrayOf<Any?>(
                                 "$idBase-$suffix",
                                 name,
                                 vText,
@@ -310,7 +320,7 @@ abstract class MoodLifeDatabase : RoomDatabase() {
                                 (id, name, valueText, valueNumeric, unit, date, clinic, createdAt, updatedAt)
                                 VALUES (?, ?, ?, NULL, '', ?, NULL, ?, ?)
                                 """.trimIndent(),
-                                arrayOf(
+                                arrayOf<Any?>(
                                     "$idBase-oam",
                                     "Общий анализ мочи",
                                     urine,
@@ -331,7 +341,7 @@ abstract class MoodLifeDatabase : RoomDatabase() {
                                 (id, name, valueText, valueNumeric, unit, date, clinic, createdAt, updatedAt)
                                 VALUES (?, ?, ?, NULL, '', ?, NULL, ?, ?)
                                 """.trimIndent(),
-                                arrayOf(
+                                arrayOf<Any?>(
                                     "$idBase-note",
                                     "Заметка к анализам",
                                     note,

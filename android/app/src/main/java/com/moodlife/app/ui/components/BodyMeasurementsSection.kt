@@ -1,39 +1,39 @@
 package com.moodlife.app.ui.components
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Add
-import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.FilledTonalButton
-import androidx.compose.material3.FilterChip
-import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
-import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import com.moodlife.app.R
 import com.moodlife.app.data.local.entity.BodyMeasurementEntity
@@ -42,231 +42,224 @@ import com.moodlife.app.domain.BodyMeasurementCatalog
 import com.moodlife.app.util.DateUtils
 import java.util.Locale
 
-@OptIn(ExperimentalMaterial3Api::class)
+/**
+ * Body measurements: one form for one date.
+ *
+ * Replaces the earlier pair of a per-field bottom sheet (which reopened on the *previous*
+ * measurement's date with the old value prefilled, so a new value was appended to it and saved
+ * into the past) and a full-day form (whose save wrote every field, wiped the day note, and
+ * whose drafts were reset whenever the sheet saved something). Only edited fields are written.
+ */
 @Composable
 fun BodyMeasurementsSection(
     entryDate: String,
     current: BodyMeasurementEntity?,
     history: List<BodyMeasurementEntity>,
     hcDays: List<ExternalHealthDayEntity>,
-    onSave: (
-        shoulderWidthCm: Float?,
-        bicepsCm: Float?,
-        chestCm: Float?,
-        underBustCm: Float?,
-        waistCm: Float?,
-        hipsCm: Float?,
-        thighCm: Float?,
-        weightKg: Float?,
-    ) -> Unit,
+    chartsVisible: Boolean,
+    onChartsVisibleChange: (Boolean) -> Unit,
     onSaveField: (date: String, fieldId: String, value: Float?) -> Unit,
     modifier: Modifier = Modifier,
+    onDeleteDate: (date: String) -> Unit = {},
 ) {
-    var sheetOpen by remember { mutableStateOf(false) }
-    var sheetFieldId by remember { mutableStateOf(BodyMeasurementCatalog.fields.first().id) }
-    var sheetDate by remember { mutableStateOf(entryDate) }
-    var valueDraft by remember { mutableStateOf("") }
-    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    var formDate by rememberSaveable(entryDate) { mutableStateOf(entryDate) }
+    val rowForDate = if (formDate == entryDate) current else history.find { it.date == formDate }
+    val drafts = remember(formDate) { mutableStateMapOf<String, String>() }
+    val edited = remember(formDate) { mutableStateMapOf<String, Boolean>() }
+    var savedNote by remember(formDate) { mutableStateOf(false) }
+    var confirmDelete by remember(formDate) { mutableStateOf(false) }
+    val hasSaved = rowForDate != null && BodyMeasurementCatalog.fields.any { it.read(rowForDate) != null }
 
-    val drafts = remember { mutableStateMapOf<String, String>() }
-    LaunchedEffect(entryDate, current?.updatedAt) {
-        drafts.clear()
+    // Refresh from the DB row, but never overwrite a field the user is typing in.
+    LaunchedEffect(formDate, rowForDate?.updatedAt) {
         BodyMeasurementCatalog.fields.forEach { field ->
-            val v = current?.let { field.read(it) }
-            drafts[field.id] = v?.let { formatDraft(it) }.orEmpty()
+            if (edited[field.id] == true) return@forEach
+            drafts[field.id] = rowForDate?.let { field.read(it) }?.let(::formatDraft).orEmpty()
         }
     }
 
     CollapsibleSection(
         title = stringResource(R.string.physical_body_measures_title),
-        subtitle = stringResource(R.string.physical_body_measures_subtitle, DateUtils.formatRu(DateUtils.parseIso(entryDate))),
+        // Collapsed by default; the subtitle shows the latest entry so the card is useful closed.
+        subtitle = history.maxByOrNull { it.date }?.let { last ->
+            val parts = BodyMeasurementCatalog.fields.sortedBy { if (it.id == "weight") 0 else 1 }
+                .mapNotNull { f -> f.read(last)?.let { "${f.labelRu.lowercase()} ${formatDraft(it).replace('.', ',')} ${f.unit}" } }
+                .take(2)
+            "Последний замер ${DateUtils.formatRu(DateUtils.parseIso(last.date))}: ${parts.joinToString(", ")}"
+        } ?: "Замеров пока нет",
         helpText = stringResource(R.string.physical_body_measures_disclaimer),
-        initiallyExpanded = true,
+        initiallyExpanded = false,
         modifier = modifier,
     ) {
         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Text(
-                stringResource(R.string.physical_body_measures_disclaimer),
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            IsoDatePickerField(
+                label = stringResource(R.string.physical_labs_sheet_date),
+                value = formDate,
+                onValueChange = { formDate = it },
             )
-            FilledTonalButton(
-                onClick = {
-                    sheetFieldId = BodyMeasurementCatalog.fields.first().id
-                    sheetDate = entryDate
-                    valueDraft = ""
-                    sheetOpen = true
-                },
-                modifier = Modifier.fillMaxWidth(),
-            ) {
-                Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(18.dp))
-                Text(
-                    stringResource(R.string.physical_body_add_measure),
-                    modifier = Modifier.padding(start = 6.dp),
-                )
-            }
             BodyMeasurementCatalog.fields.forEach { field ->
-                val latest = BodyMeasurementCatalog.latest(history, field)
-                Row(
-                    Modifier
-                        .fillMaxWidth()
-                        .clip(RoundedCornerShape(12.dp))
-                        .clickable {
-                            sheetFieldId = field.id
-                            sheetDate = latest?.date ?: entryDate
-                            valueDraft = latest?.displayValue.orEmpty()
-                            sheetOpen = true
-                        }
-                        .padding(vertical = 6.dp, horizontal = 4.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(10.dp),
-                ) {
+                val previous = BodyMeasurementCatalog.latest(history.filter { it.date < formDate }, field)
+                Row(verticalAlignment = Alignment.CenterVertically) {
                     Box(
                         Modifier
                             .size(10.dp)
                             .clip(CircleShape)
                             .background(field.chartColor),
                     )
-                    Column(Modifier.weight(1f)) {
-                        Text(field.labelRu, fontWeight = FontWeight.Medium)
-                        if (latest != null) {
-                            Text(
-                                "${latest.displayValue} ${field.unit} · ${DateUtils.formatRu(DateUtils.parseIso(latest.date))}",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            )
-                        } else {
-                            Text(
-                                stringResource(R.string.physical_labs_no_data_yet),
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            )
-                        }
-                    }
+                    OutlinedTextField(
+                        value = drafts[field.id].orEmpty(),
+                        onValueChange = { raw ->
+                            drafts[field.id] = filterDecimal(raw)
+                            edited[field.id] = true
+                            savedNote = false
+                        },
+                        label = { Text("${field.labelRu}, ${field.unit}") },
+                        supportingText = previous?.let {
+                            {
+                                Text(
+                                    stringResource(
+                                        R.string.physical_body_previous,
+                                        it.displayValue,
+                                        field.unit,
+                                        DateUtils.formatRu(DateUtils.parseIso(it.date)),
+                                    ),
+                                )
+                            }
+                        },
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal, imeAction = ImeAction.Next),
+                        singleLine = true,
+                        modifier = Modifier.weight(1f).padding(start = 8.dp),
+                    )
                 }
             }
-            Text(
-                stringResource(R.string.physical_body_day_form_title, DateUtils.formatRu(DateUtils.parseIso(entryDate))),
-                style = MaterialTheme.typography.titleSmall,
-                modifier = Modifier.padding(top = 8.dp),
-            )
-            BodyMeasurementCatalog.fields.forEach { field ->
-                OutlinedTextField(
-                    value = drafts[field.id].orEmpty(),
-                    onValueChange = { raw ->
-                        drafts[field.id] = filterDecimal(raw)
-                    },
-                    label = { Text("${field.labelRu}, ${field.unit}") },
-                    modifier = Modifier.fillMaxWidth(),
-                    singleLine = true,
-                )
-            }
+            val dirty = edited.any { it.value }
             FilledTonalButton(
                 onClick = {
-                    onSave(
-                        drafts["shoulders"].parseCm(),
-                        drafts["biceps"].parseCm(),
-                        drafts["chest"].parseCm(),
-                        drafts["underbust"].parseCm(),
-                        drafts["waist"].parseCm(),
-                        drafts["hips"].parseCm(),
-                        drafts["thigh"].parseCm(),
-                        drafts["weight"].parseCm(),
-                    )
+                    edited.filterValues { it }.keys.forEach { id ->
+                        onSaveField(formDate, id, drafts[id].parseNumber())
+                    }
+                    edited.clear()
+                    savedNote = true
                 },
-                modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
+                enabled = dirty,
+                modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp),
             ) {
                 Text(stringResource(R.string.physical_body_measures_save))
             }
-
-            Text(
-                stringResource(R.string.physical_body_measures_charts_title),
-                style = MaterialTheme.typography.titleSmall,
-                modifier = Modifier.padding(top = 12.dp),
-            )
-            Text(
-                stringResource(R.string.physical_body_measures_charts_hint),
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-
-            BodyMeasurementCatalog.cmFields().forEach { field ->
-                val points = history.mapNotNull { row ->
-                    val v = field.read(row) ?: return@mapNotNull null
-                    dayLabel(row.date) to v
-                }
-                if (points.isNotEmpty()) {
-                    Text(
-                        "${field.labelRu} (${field.unit})",
-                        style = MaterialTheme.typography.labelMedium,
-                        modifier = Modifier.padding(top = 8.dp),
-                    )
-                    val maxY = (points.maxOf { it.second } * 1.15f).coerceAtLeast(1f)
-                    SimpleLineChart(series = points, maxY = maxY)
+            if (hasSaved) {
+                // Wrong values are removed here: the whole date at once, or a single field by clearing it and saving.
+                TextButton(
+                    onClick = { confirmDelete = true },
+                    colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error),
+                    modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp),
+                ) {
+                    Text(stringResource(R.string.physical_body_delete_date, DateUtils.formatRu(DateUtils.parseIso(formDate))))
                 }
             }
-
-            val weightPoints = mergedWeightSeries(history, hcDays)
-            if (weightPoints.isNotEmpty()) {
-                Text(
-                    stringResource(R.string.physical_body_measures_weight_chart),
-                    style = MaterialTheme.typography.labelMedium,
-                    modifier = Modifier.padding(top = 8.dp),
+            if (confirmDelete) {
+                AlertDialog(
+                    onDismissRequest = { confirmDelete = false },
+                    title = { Text(stringResource(R.string.physical_body_delete_title, DateUtils.formatRu(DateUtils.parseIso(formDate)))) },
+                    text = { Text(stringResource(R.string.physical_body_delete_text)) },
+                    confirmButton = {
+                        TextButton(onClick = {
+                            onDeleteDate(formDate)
+                            edited.clear()
+                            BodyMeasurementCatalog.fields.forEach { drafts[it.id] = "" }
+                            confirmDelete = false
+                        }) { Text(stringResource(R.string.physical_body_delete_confirm), color = MaterialTheme.colorScheme.error) }
+                    },
+                    dismissButton = { TextButton(onClick = { confirmDelete = false }) { Text(stringResource(android.R.string.cancel)) } },
                 )
-                val maxY = (weightPoints.maxOf { it.second } * 1.15f).coerceAtLeast(1f)
-                SimpleLineChart(series = weightPoints, maxY = maxY)
+            }
+            if (savedNote) {
+                Text(
+                    stringResource(R.string.physical_body_saved),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+
+            // All readings by date, newest first; tap a date to edit it in the form above.
+            var asList by rememberSaveable { mutableStateOf(false) }
+            ListToggleRow(stringResource(R.string.physical_list_toggle), asList, { asList = it }, Modifier.padding(top = 8.dp))
+            if (asList) {
+                Text(
+                    stringResource(R.string.physical_list_edit_hint),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                val groups = bodyReadingsByField(history, hcDays)
+                if (groups.isEmpty()) {
+                    Text(
+                        stringResource(R.string.physical_labs_no_data_yet),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                groups.forEach { group ->
+                    Row(Modifier.padding(top = 10.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Box(Modifier.size(8.dp).clip(CircleShape).background(group.color))
+                        Box(Modifier.width(6.dp))
+                        Text(group.title, style = MaterialTheme.typography.titleSmall)
+                    }
+                    group.readings.forEach { r ->
+                        DateReadingRow(
+                            isoDate = r.date,
+                            reading = r.value,
+                            note = r.note,
+                            onClick = { formDate = r.date },
+                            deleteLabel = "${group.label} ${r.value}",
+                            onDelete = r.fieldId?.let { id -> { onSaveField(r.date, id, null) } },
+                        )
+                    }
+                }
+            }
+            Row(
+                Modifier.fillMaxWidth().padding(top = 8.dp).heightIn(min = 48.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    stringResource(R.string.physical_body_measures_charts_title),
+                    style = MaterialTheme.typography.titleSmall,
+                    modifier = Modifier.weight(1f),
+                )
+                Switch(checked = chartsVisible, onCheckedChange = onChartsVisibleChange)
+            }
+            if (chartsVisible) {
+                BodyCharts(history = history, hcDays = hcDays)
             }
         }
     }
+}
 
-    if (sheetOpen) {
-        ModalBottomSheet(onDismissRequest = { sheetOpen = false }, sheetState = sheetState) {
-            Column(
-                Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 20.dp, vertical = 8.dp),
-                verticalArrangement = Arrangement.spacedBy(10.dp),
-            ) {
-                Text(stringResource(R.string.physical_body_add_measure), style = MaterialTheme.typography.titleMedium)
-                IsoDatePickerField(
-                    label = stringResource(R.string.physical_labs_sheet_date),
-                    value = sheetDate,
-                    onValueChange = { sheetDate = it },
-                )
-                BodyMeasurementCatalog.fields.chunked(3).forEach { chunk ->
-                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                        chunk.forEach { field ->
-                            FilterChip(
-                                selected = sheetFieldId == field.id,
-                                onClick = { sheetFieldId = field.id },
-                                label = { Text(field.labelRu, maxLines = 1) },
-                            )
-                        }
-                    }
-                }
-                val unit = BodyMeasurementCatalog.fieldById(sheetFieldId)?.unit.orEmpty()
-                OutlinedTextField(
-                    value = valueDraft,
-                    onValueChange = { valueDraft = filterDecimal(it) },
-                    label = { Text(BodyMeasurementCatalog.fieldById(sheetFieldId)?.labelRu.orEmpty()) },
-                    supportingText = { if (unit.isNotEmpty()) Text(unit) },
-                    modifier = Modifier.fillMaxWidth(),
-                    singleLine = true,
-                )
-                FilledTonalButton(
-                    onClick = {
-                        onSaveField(
-                            sheetDate,
-                            sheetFieldId,
-                            valueDraft.trim().takeIf { it.isNotEmpty() }?.toFloatOrNull(),
-                        )
-                        sheetOpen = false
-                    },
-                    modifier = Modifier.fillMaxWidth().padding(bottom = 24.dp),
-                ) {
-                    Text(stringResource(R.string.physical_body_measures_save))
-                }
+@Composable
+private fun BodyCharts(history: List<BodyMeasurementEntity>, hcDays: List<ExternalHealthDayEntity>) {
+    Text(
+        stringResource(R.string.physical_body_measures_charts_hint),
+        style = MaterialTheme.typography.bodySmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+    )
+    val weightPoints = mergedWeightSeries(history, hcDays)
+    if (weightPoints.isNotEmpty()) {
+        val title = stringResource(R.string.physical_body_measures_weight_chart)
+        Text(title, style = MaterialTheme.typography.labelMedium, modifier = Modifier.padding(top = 8.dp))
+        ZoomableMeasurementChart(title = title, series = weightPoints, yAxisLabel = "кг")
+    }
+    BodyMeasurementCatalog.cmFields().forEach { field ->
+        // ISO keys: points from different months must not collide on the X axis.
+        val points = history.mapNotNull { row ->
+            val v = field.read(row) ?: return@mapNotNull null
+            row.date to v
+        }.sortedBy { it.first }
+        if (points.isNotEmpty()) {
+            val title = "${field.labelRu} (${field.unit})"
+            Row(Modifier.padding(top = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+                Box(Modifier.size(8.dp).clip(CircleShape).background(field.chartColor))
+                Box(Modifier.width(6.dp))
+                Text(title, style = MaterialTheme.typography.labelMedium)
             }
+            ZoomableMeasurementChart(title = title, series = points, yAxisLabel = field.unit)
         }
     }
 }
@@ -287,10 +280,8 @@ private fun mergedWeightSeries(
     }
     return byDate.entries
         .sortedBy { it.key }
-        .map { dayLabel(it.key) to it.value }
+        .map { it.key to it.value }
 }
-
-private fun dayLabel(iso: String): String = iso.takeLast(2).trimStart('0').ifEmpty { iso.takeLast(2) }
 
 private fun formatDraft(v: Float): String =
     if (v == v.toLong().toFloat()) v.toLong().toString()
@@ -303,4 +294,33 @@ private fun filterDecimal(raw: String): String {
     else (cleaned.substring(0, firstDot + 1) + cleaned.substring(firstDot + 1).replace(".", "")).take(7)
 }
 
-private fun String?.parseCm(): Float? = this?.trim()?.takeIf { it.isNotEmpty() }?.toFloatOrNull()
+/** Empty field = clear that measurement for the date. */
+private fun String?.parseNumber(): Float? = this?.trim()?.takeIf { it.isNotEmpty() }?.toFloatOrNull()
+
+/** [fieldId] is null for Health Connect readings, which are removed in the app that wrote them. */
+private data class BodyReading(val date: String, val value: String, val note: String? = null, val fieldId: String? = null)
+private data class BodyReadingGroup(val label: String, val title: String, val color: androidx.compose.ui.graphics.Color, val readings: List<BodyReading>)
+
+/**
+ * One column per parameter: a heading, then "date — value" rows, newest first. Weight comes
+ * first and also lists Health Connect readings for days without a manual weight.
+ */
+private fun bodyReadingsByField(
+    history: List<BodyMeasurementEntity>,
+    hcDays: List<ExternalHealthDayEntity>,
+): List<BodyReadingGroup> =
+    BodyMeasurementCatalog.fields
+        .sortedBy { if (it.labelRu.startsWith("Вес")) 0 else 1 }
+        .mapNotNull { f ->
+            val readings = history.mapNotNull { row ->
+                f.read(row)?.let { BodyReading(row.date, "${formatDraft(it).replace('.', ',')} ${f.unit}", fieldId = f.id) }
+            }.toMutableList()
+            if (f.labelRu.startsWith("Вес")) {
+                val manualDates = readings.map { it.date }.toSet()
+                hcDays.filter { it.kind == "weight" && it.weightKg != null && it.date !in manualDates }.forEach { d ->
+                    readings += BodyReading(d.date, "${formatDraft(d.weightKg!!).replace('.', ',')} кг", "Health Connect")
+                }
+            }
+            readings.takeIf { it.isNotEmpty() }
+                ?.let { BodyReadingGroup(f.labelRu, "${f.labelRu}, ${f.unit}", f.chartColor, it.sortedByDescending { r -> r.date }) }
+        }

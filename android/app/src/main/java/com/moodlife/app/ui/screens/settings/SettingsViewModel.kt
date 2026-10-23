@@ -3,6 +3,7 @@ package com.moodlife.app.ui.screens.settings
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
+import android.util.Log
 import androidx.core.content.FileProvider
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -113,6 +114,7 @@ class SettingsViewModel @Inject constructor(
     private val healthConnectManager: HealthConnectManager,
     private val driveBackupManager: DriveBackupManager,
     private val jsonBackupImporter: JsonBackupImporter,
+    private val universalImporter: com.moodlife.app.data.backup.UniversalImporter,
     private val floRepository: FloRepository,
     private val periodRepository: PeriodRepository,
     private val exportManager: ExportManager,
@@ -326,6 +328,24 @@ class SettingsViewModel @Inject constructor(
         symptomRepository.setActive(symptom, false)
     }
 
+    suspend fun symptomMarks(symptom: SymptomEntity): Int = symptomRepository.markCount(symptom.id)
+
+    fun deleteSymptom(symptom: SymptomEntity) = viewModelScope.launch {
+        symptomRepository.deleteCompletely(symptom.id)
+    }
+
+    suspend fun factorMarks(factor: FactorEntity): Int = factorRepository.markCount(factor.id)
+
+    fun deleteFactor(factor: FactorEntity) = viewModelScope.launch {
+        factorRepository.deleteCompletely(factor.id)
+    }
+
+    suspend fun warningMarks(sign: EarlyWarningSignEntity): Int = warningSignRepository.markCount(sign.id)
+
+    fun deleteWarning(sign: EarlyWarningSignEntity) = viewModelScope.launch {
+        warningSignRepository.deleteCompletely(sign.id)
+    }
+
     fun restoreSymptom(symptom: SymptomEntity) = viewModelScope.launch {
         symptomRepository.setActive(symptom, true)
     }
@@ -363,6 +383,8 @@ class SettingsViewModel @Inject constructor(
     }
 
     fun observeTrackables() = settingsRepository.observe(com.moodlife.app.domain.TodayTrackables.KEY)
+
+    fun observeHcDiagnostics() = settingsRepository.observe(SettingsRepository.KEY_HC_LAST_DIAGNOSTICS)
 
     fun addWarning(name: String, direction: String) = viewModelScope.launch {
         val created = warningSignRepository.addSign(name, direction)
@@ -404,6 +426,12 @@ class SettingsViewModel @Inject constructor(
 
     fun deactivateMedication(med: MedicationEntity) = viewModelScope.launch {
         medicationRepository.deactivate(med)
+    }
+
+    suspend fun medicationLogDays(med: MedicationEntity): Int = medicationRepository.pastLogCount(med.id)
+
+    fun deleteMedication(med: MedicationEntity) = viewModelScope.launch {
+        medicationRepository.deleteCompletely(med.id)
     }
 
     fun restoreMedication(med: MedicationEntity) = viewModelScope.launch {
@@ -559,18 +587,19 @@ class SettingsViewModel @Inject constructor(
         val cleaned = axes.filter { it in setOf("depressed", "elevated", "anxious", "irritable") }
         settingsRepository.set(
             SettingsRepository.KEY_CHECKIN_AXES,
-            cleaned.joinToString(",").ifBlank { "depressed,elevated,anxious,irritable" },
+            cleaned.joinToString(",").ifBlank { "tension,clarity,impulse,fatigue" },
         )
     }
 
     fun saveCheckInConfig(config: com.moodlife.app.domain.CheckInConfig) = viewModelScope.launch {
+        val migrated = com.moodlife.app.domain.CheckInConfig.migrateIfLegacy(config)
         settingsRepository.set(
             SettingsRepository.KEY_CHECKIN_CONFIG,
-            com.moodlife.app.domain.CheckInConfig.toJson(config),
+            com.moodlife.app.domain.CheckInConfig.toJson(migrated),
         )
         settingsRepository.set(
             SettingsRepository.KEY_CHECKIN_AXES,
-            config.axes.joinToString(",") { it.id },
+            migrated.axes.joinToString(",") { it.id },
         )
     }
 
@@ -698,23 +727,6 @@ class SettingsViewModel @Inject constructor(
         return fmt.format(java.util.Date(ms))
     }
 
-    fun importFlo(uri: Uri) = viewModelScope.launch {
-        try {
-            val text = context.contentResolver.openInputStream(uri)?.bufferedReader()?.use { it.readText() }
-            if (text == null) {
-                _message.value = "flo_fail"
-                return@launch
-            }
-            val result = floRepository.importJson(text)
-            _message.value = when {
-                result.detected == 0 -> "flo_empty"
-                else -> "flo_ok:${result.imported}"
-            }
-        } catch (_: Exception) {
-            _message.value = "flo_fail"
-        }
-    }
-
     fun clearFlo() = viewModelScope.launch {
         floRepository.clearAll()
         _message.value = "flo_cleared"
@@ -741,20 +753,32 @@ class SettingsViewModel @Inject constructor(
         _message.value = "backup_ok"
     }
 
-    fun importBackup(uri: Uri) = viewModelScope.launch {
+    /** Any supported file: Trace backup, Flo, eMoods, Daylio, Bearable, CSV/JSON with dates, ZIPs of these. */
+    fun importAny(uri: Uri) = viewModelScope.launch {
+        _message.value = "import_running"
         try {
+            val name = displayName(uri)
             val stream = context.contentResolver.openInputStream(uri) ?: run {
-                _message.value = "import_fail"
+                _message.value = "import_fail:файл не открывается"
                 return@launch
             }
-            stream.use {
-                val result = jsonBackupImporter.importFromStream(it)
-                _message.value = if (result.success) "import_ok" else "import_fail:${result.message}"
+            val summary = stream.use { universalImporter.import(it, name) }
+            Log.i(IMPORT_TAG, "Import: formats=${summary.formats} days=${summary.days} notes=${summary.notes} error=${summary.error != null}")
+            _message.value = when {
+                summary.error != null -> "import_fail:${summary.error}"
+                else -> "import_done:${summary.formats.joinToString(", ")}|${summary.days}|${summary.notes}" +
+                    "|${summary.firstDate.orEmpty()}|${summary.lastDate.orEmpty()}|${summary.sleepFilled}|${summary.sleepKept}"
             }
-        } catch (_: Exception) {
-            _message.value = "import_fail"
+        } catch (e: Exception) {
+            Log.w(IMPORT_TAG, "Import failed: ${e.javaClass.simpleName}")
+            _message.value = "import_fail:${importReason(e)}"
         }
     }
+
+    private fun displayName(uri: Uri): String = runCatching {
+        context.contentResolver.query(uri, arrayOf(android.provider.OpenableColumns.DISPLAY_NAME), null, null, null)
+            ?.use { c -> if (c.moveToFirst()) c.getString(0) else null }
+    }.getOrNull() ?: "file"
 
     fun setWeeklyBackupFolder(uri: Uri) = viewModelScope.launch {
         com.moodlife.app.workers.WeeklyFolderBackupWorker.takePersistablePermission(context, uri)
@@ -809,4 +833,15 @@ class SettingsViewModel @Inject constructor(
     companion object {
         private const val MASKED_API_KEY = "••••••••"
     }
+}
+
+private const val IMPORT_TAG = "TraceImport"
+
+/** User-facing reason. Parser messages quote file content, so they are never shown or logged. */
+private fun importReason(e: Exception): String = when (e) {
+    is org.json.JSONException, is com.google.gson.JsonParseException -> "файл не читается как JSON"
+    is IllegalArgumentException -> e.message ?: "неверный файл"
+    is SecurityException -> "нет доступа к файлу"
+    is java.io.IOException -> "файл не удалось прочитать"
+    else -> e.javaClass.simpleName
 }

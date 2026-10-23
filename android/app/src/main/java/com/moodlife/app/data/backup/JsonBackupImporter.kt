@@ -19,13 +19,28 @@ class JsonBackupImporter @Inject constructor(
     private val tables = BackupSchema.TABLES
 
     suspend fun importFromStream(stream: InputStream): ImportResult = withContext(Dispatchers.IO) {
-        val text = stream.bufferedReader().readText().trim().removePrefix("\uFEFF")
+        val files = ImportFileReader.read(stream)
+        if (files.isEmpty()) return@withContext ImportResult(false, "В архиве нет файлов JSON или CSV")
+        // In a ZIP prefer our own backup file; otherwise the first readable one.
+        val file = files.firstOrNull { it.text.startsWith("{") && it.text.contains("\"mood_entries\"") } ?: files.first()
+        val text = file.text
         if (text.isEmpty()) return@withContext ImportResult(false, "Файл пустой")
-        if (text.startsWith("{") || text.startsWith("[")) {
-            importJson(text)
-        } else {
-            importCsv(text)
+        try {
+            if (text.startsWith("{") || text.startsWith("[")) {
+                importJson(text)
+            } else {
+                importCsv(text)
+            }
+        } catch (e: org.json.JSONException) {
+            ImportResult(false, "файл не похож на резервную копию Trace (JSON не читается)")
         }
+    }
+
+    /** Trace JSON backup text (already unpacked). */
+    fun importText(text: String): ImportResult = try {
+        importJson(text)
+    } catch (e: org.json.JSONException) {
+        ImportResult(false, "файл не похож на резервную копию Trace (JSON не читается)")
     }
 
     private fun importJson(text: String): ImportResult {
@@ -51,7 +66,7 @@ class JsonBackupImporter @Inject constructor(
                 }
             }
             db.setTransactionSuccessful()
-            ImportResult(true, "Импортировано строк: $rows")
+            ImportResult(true, "Импортировано строк: $rows", rows)
         } catch (e: Exception) {
             ImportResult(false, e.message ?: "Ошибка импорта")
         } finally {
@@ -96,7 +111,7 @@ class JsonBackupImporter @Inject constructor(
                         episodePhase, routineScore, note, createdAt, updatedAt
                     ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
                     """.trimIndent(),
-                    arrayOf(
+                    arrayOf<Any?>(
                         id, date,
                         intAt("depressed", "д"),
                         intAt("elevated", "п"),
@@ -208,7 +223,7 @@ class JsonBackupImporter @Inject constructor(
                 (id, name, valueText, valueNumeric, unit, date, clinic, createdAt, updatedAt)
                 VALUES (?, ?, ?, ?, ?, ?, NULL, ?, ?)
                 """.trimIndent(),
-                arrayOf(id, name, valueText, value, unit, date, createdAt, updatedAt),
+                arrayOf<Any?>(id, name, valueText, value, unit, date, createdAt, updatedAt),
             )
             n++
         }
@@ -261,5 +276,5 @@ class JsonBackupImporter @Inject constructor(
         return true
     }
 
-    data class ImportResult(val success: Boolean, val message: String)
+    data class ImportResult(val success: Boolean, val message: String, val rows: Int = 0)
 }

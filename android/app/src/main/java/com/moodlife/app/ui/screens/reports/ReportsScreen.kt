@@ -42,13 +42,34 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.moodlife.app.R
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.material3.Switch
+import androidx.compose.ui.draw.clip
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.selection.selectable
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.IntrinsicSize
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.runtime.CompositionLocalProvider
+import com.moodlife.app.ui.components.LocalChartPlotHeight
+import com.moodlife.app.util.DateUtils
+import com.moodlife.app.ui.components.IsoDatePickerField
+import com.moodlife.app.domain.ReportPeriod
+import com.moodlife.app.domain.MoodScales
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.material3.FilterChip
+import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import com.moodlife.app.data.export.ExportFormat
 import com.moodlife.app.domain.MedAccentColors
 import com.moodlife.app.domain.ReportsCharts
 import com.moodlife.app.ui.components.ChartFullscreenDialog
 import com.moodlife.app.ui.components.ChartSeries
 import com.moodlife.app.ui.components.ChartZoomState
-import com.moodlife.app.ui.components.GroupedBarChart
 import com.moodlife.app.ui.components.MedAdherenceGrid
 import com.moodlife.app.ui.components.MoodCard
 import com.moodlife.app.ui.components.MoodHeatmapChart
@@ -71,6 +92,9 @@ fun ReportsScreen(viewModel: ReportsViewModel = hiltViewModel()) {
     val charts = state.visibleCharts
     var dataFormatDialog by remember { mutableStateOf(false) }
     var doctorFormatDialog by remember { mutableStateOf(false) }
+    var showExport by rememberSaveable { mutableStateOf(false) }
+    var headerDialog by remember { mutableStateOf(false) }
+    val reportHeader by viewModel.reportHeader.collectAsStateWithLifecycle()
     var zoomChartId by remember { mutableStateOf<ReportsCharts.Id?>(null) }
 
     fun launchExport(format: ExportFormat) {
@@ -91,26 +115,59 @@ fun ReportsScreen(viewModel: ReportsViewModel = hiltViewModel()) {
             modifier = Modifier.padding(top = 4.dp),
         )
         MoodCard(Modifier.padding(top = 8.dp), contentPadding = false) {
-            Row(Modifier.fillMaxWidth().padding(horizontal = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-                IconButton(onClick = viewModel::prevMonth) {
-                    Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(R.string.reports_prev_month))
-                }
-                Text(state.monthLabel, Modifier.weight(1f), style = MaterialTheme.typography.titleMedium, maxLines = 1)
-                IconButton(onClick = viewModel::nextMonth) {
-                    Icon(Icons.AutoMirrored.Filled.ArrowForward, contentDescription = stringResource(R.string.reports_next_month))
-                }
-            }
-            Text(
-                stringResource(R.string.reports_export_title),
-                style = MaterialTheme.typography.titleSmall,
-                modifier = Modifier.padding(start = 16.dp, top = 8.dp),
+            ReportPeriodSelector(
+                state = state,
+                onKind = viewModel::selectPeriodKind,
+                onPrevMonth = viewModel::prevMonth,
+                onNextMonth = viewModel::nextMonth,
+                onCustomRange = viewModel::setCustomRange,
             )
+            Row(
+                Modifier
+                    .fillMaxWidth()
+                    .padding(start = 16.dp, end = 12.dp, top = 8.dp)
+                    .heightIn(min = 48.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    stringResource(R.string.reports_export_title),
+                    style = MaterialTheme.typography.titleSmall,
+                    modifier = Modifier.weight(1f),
+                )
+                Switch(checked = showExport, onCheckedChange = { showExport = it })
+            }
+            if (!showExport) {
+                Spacer(Modifier.height(8.dp))
+            } else {
             Text(
                 stringResource(R.string.reports_export_hint),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 4.dp),
             )
+            Text(
+                "Период отчёта: " + state.period.label(java.time.LocalDate.now()),
+                style = MaterialTheme.typography.bodyMedium,
+                modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 8.dp),
+            )
+            Row(
+                Modifier
+                    .fillMaxWidth()
+                    .clickable { headerDialog = true }
+                    .padding(start = 16.dp, end = 8.dp, top = 4.dp)
+                    .heightIn(min = 48.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Column(Modifier.weight(1f)) {
+                    Text("Шапка отчёта", style = MaterialTheme.typography.titleSmall)
+                    Text(
+                        reportHeaderSummary(reportHeader),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                TextButton(onClick = { headerDialog = true }) { Text("Изменить") }
+            }
             Column(
                 Modifier.padding(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 16.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp),
@@ -128,8 +185,16 @@ fun ReportsScreen(viewModel: ReportsViewModel = hiltViewModel()) {
                     }
                 }
             }
+            }
         }
 
+        if (headerDialog) {
+            ReportHeaderDialog(
+                initial = reportHeader,
+                onSave = { viewModel.saveReportHeader(it); headerDialog = false },
+                onDismiss = { headerDialog = false },
+            )
+        }
         if (dataFormatDialog) {
             AlertDialog(
                 onDismissRequest = { dataFormatDialog = false },
@@ -284,29 +349,7 @@ fun ReportsScreen(viewModel: ReportsViewModel = hiltViewModel()) {
                                     modifier = Modifier.padding(bottom = 8.dp),
                                 )
                             }
-                            val names = state.medDoseSeries.map { it.name }
-                            val chartSeries = state.medDoseSeries.map { s ->
-                                ChartSeries(s.name, MedAccentColors.accentForName(s.name, names), s.points)
-                            }
-                            val maxY = chartSeries.flatMap { it.points.map { p -> p.second } }
-                                .maxOrNull()?.coerceAtLeast(1f) ?: 1f
-                            MultiLineChart(
-                                series = chartSeries,
-                                maxY = maxY,
-                                yAxisLabel = stringResource(R.string.reports_axis_mg),
-                                xAxisLabel = stringResource(R.string.reports_axis_days),
-                                showAxisTicks = true,
-                            )
-                            if (state.medTakenLines.isNotEmpty()) {
-                                Text(
-                                    stringResource(R.string.reports_med_taken_list_title),
-                                    style = MaterialTheme.typography.titleSmall,
-                                    modifier = Modifier.padding(top = 12.dp),
-                                )
-                                state.medTakenLines.take(40).forEach { line ->
-                                    Text("• $line", style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(top = 3.dp))
-                                }
-                            }
+                            MedDoseChart(state)
                         }
                     }
                 }
@@ -330,62 +373,28 @@ fun ReportsScreen(viewModel: ReportsViewModel = hiltViewModel()) {
                 }
                 ReportsCharts.Id.LEVEL2 -> {
                     if (("level2" in charts || "energy" in charts) &&
-                        (state.anxiousSeries.isNotEmpty() || state.energySeries.isNotEmpty())
+                        (state.anxiousSeries.isNotEmpty() || state.irritableSeries.isNotEmpty())
                     ) {
                         ReportChartBlock(chartId = ReportsCharts.Id.LEVEL2, 
                             title = stringResource(R.string.reports_level2_title),
                             hint = stringResource(R.string.reports_level2_hint),
                             onZoom = { zoomChartId = it },
                         ) {
-                            GroupedBarChart(
-                                seriesA = state.anxiousSeries,
-                                seriesB = state.energySeries,
-                                labelA = stringResource(R.string.axis_anxious),
-                                labelB = stringResource(R.string.axis_energy),
-                                colorA = Color(0xFFE8A838),
-                                colorB = Color(0xFF66BB6A),
-                                maxY = 10f,
-                                yAxisLabel = stringResource(R.string.reports_axis_score),
-                                xAxisLabel = stringResource(R.string.reports_axis_days),
-                            )
-                            if (state.irritableSeries.isNotEmpty()) {
-                                Text(
-                                    stringResource(R.string.axis_irritable),
-                                    style = MaterialTheme.typography.titleSmall,
-                                    modifier = Modifier.padding(top = 12.dp),
-                                )
-                                MultiLineChart(
-                                    series = listOf(
-                                        ChartSeries(stringResource(R.string.axis_irritable), mood.irritable, state.irritableSeries),
-                                    ),
-                                    maxY = 5f,
-                                    yAxisLabel = stringResource(R.string.reports_axis_score),
-                                    xAxisLabel = stringResource(R.string.reports_axis_days),
-                                    modifier = Modifier.padding(top = 6.dp),
-                                )
-                            }
+                            AnxietyIrritabilityChart(state)
                         }
                     }
                 }
                 ReportsCharts.Id.LEVEL3 -> {
                     if (("level3" in charts) &&
-                        (state.concentrationSeries.isNotEmpty() || state.sociabilitySeries.isNotEmpty() || state.appetiteSeries.isNotEmpty())
+                        (state.energySeries.isNotEmpty() || state.concentrationSeries.isNotEmpty() ||
+                            state.sociabilitySeries.isNotEmpty() || state.appetiteSeries.isNotEmpty())
                     ) {
                         ReportChartBlock(chartId = ReportsCharts.Id.LEVEL3, 
                             title = stringResource(R.string.reports_level3_title),
                             hint = stringResource(R.string.reports_level3_hint),
                             onZoom = { zoomChartId = it },
                         ) {
-                            MultiLineChart(
-                                series = listOf(
-                                    ChartSeries(stringResource(R.string.axis_concentration), Color(0xFF64B5F6), state.concentrationSeries),
-                                    ChartSeries(stringResource(R.string.axis_sociability), Color(0xFFBA68C8), state.sociabilitySeries),
-                                    ChartSeries(stringResource(R.string.axis_appetite), Color(0xFFFFB74D), state.appetiteSeries),
-                                ),
-                                maxY = 5f,
-                                yAxisLabel = stringResource(R.string.reports_axis_score),
-                                xAxisLabel = stringResource(R.string.reports_axis_days),
-                            )
+                            ExtraAxesCharts(state)
                         }
                     }
                 }
@@ -400,7 +409,8 @@ fun ReportsScreen(viewModel: ReportsViewModel = hiltViewModel()) {
             id == ReportsCharts.Id.MED_DOSE ||
             id == ReportsCharts.Id.LEVEL2 ||
             id == ReportsCharts.Id.LEVEL3 ||
-            id == ReportsCharts.Id.SCATTER
+            id == ReportsCharts.Id.SCATTER ||
+            id == ReportsCharts.Id.RADAR
         ChartFullscreenDialog(
             title = stringResource(id.titleRes),
             onDismiss = { zoomChartId = null },
@@ -475,7 +485,7 @@ private fun ReportZoomContent(
             moodPoints = state.polaritySeries,
             zoom = zoom,
         )
-        ReportsCharts.Id.RADAR -> RadarChart(state.radarAxes)
+        ReportsCharts.Id.RADAR -> RadarChart(state.radarAxes, zoom = zoom)
         ReportsCharts.Id.HEATMAP -> MoodHeatmapChart(cells = state.heatCells)
         ReportsCharts.Id.MOOD_SLEEP -> MoodSleepPolarityChart(
             moodPoints = state.polaritySeries,
@@ -488,60 +498,197 @@ private fun ReportZoomContent(
             avgSleep = state.avgSleepHours,
         )
         ReportsCharts.Id.HISTORY -> Unit
-        ReportsCharts.Id.MED_DOSE -> {
-            val names = state.medDoseSeries.map { it.name }
-            val chartSeries = state.medDoseSeries.map { s ->
-                ChartSeries(s.name, MedAccentColors.accentForName(s.name, names), s.points)
-            }
-            val maxY = chartSeries.flatMap { it.points.map { p -> p.second } }.maxOrNull()?.coerceAtLeast(1f) ?: 1f
-            MultiLineChart(
-                series = chartSeries,
-                maxY = maxY,
-                yAxisLabel = stringResource(R.string.reports_axis_mg),
-                xAxisLabel = stringResource(R.string.reports_axis_days),
-                showAxisTicks = true,
-                zoom = zoom,
-            )
-        }
+        ReportsCharts.Id.MED_DOSE -> MedDoseChart(state, zoom)
         ReportsCharts.Id.MED_ADHERENCE -> MedAdherenceGrid(dayFractions = state.adherenceDays)
-        ReportsCharts.Id.SCATTER -> SleepMoodScatterChart(points = state.sleepMoodPoints)
-        ReportsCharts.Id.LEVEL2 -> {
-            GroupedBarChart(
-                seriesA = state.anxiousSeries,
-                seriesB = state.energySeries,
-                labelA = stringResource(R.string.axis_anxious),
-                labelB = stringResource(R.string.axis_energy),
-                colorA = Color(0xFFE8A838),
-                colorB = Color(0xFF66BB6A),
-                maxY = 10f,
-                yAxisLabel = stringResource(R.string.reports_axis_score),
-                xAxisLabel = stringResource(R.string.reports_axis_days),
-                zoom = zoom,
+        ReportsCharts.Id.SCATTER -> SleepMoodScatterChart(points = state.sleepMoodPoints, zoom = zoom)
+        ReportsCharts.Id.LEVEL2 -> AnxietyIrritabilityChart(state, zoom)
+        ReportsCharts.Id.LEVEL3 -> ExtraAxesCharts(state, zoom)
+    }
+}
+
+/** Dose per medication; names are written at the end of each line, not only in the legend. */
+@Composable
+private fun MedDoseChart(state: ReportsUiState, zoom: ChartZoomState = ChartZoomState()) {
+    state.adherencePercent?.let { pct ->
+        Text(
+            stringResource(R.string.reports_adherence, pct),
+            style = MaterialTheme.typography.bodyMedium,
+            modifier = Modifier.padding(bottom = 8.dp),
+        )
+    }
+    val names = state.medDoseSeries.map { it.name }
+    MultiLineChart(
+        series = state.medDoseSeries.map { s ->
+            ChartSeries(s.name, MedAccentColors.accentForName(s.name, names), s.points)
+        },
+        yAxisLabel = stringResource(R.string.reports_axis_mg),
+        xAxisLabel = stringResource(R.string.reports_axis_days),
+        showAxisTicks = true,
+        autoScaleY = true,
+        labelLineEnds = true,
+        zoom = zoom,
+    )
+}
+
+/**
+ * Anxiety and irritability share the 0–5 intensity scale, so one chart with word ticks.
+ * (Previously anxiety was mixed with energy, a 0–3 option scale, and irritability was a second
+ * chart with its own duplicate title, axis captions and legend.)
+ */
+@Composable
+private fun AnxietyIrritabilityChart(state: ReportsUiState, zoom: ChartZoomState = ChartZoomState()) {
+    val mood = LocalMoodColors.current
+    MultiLineChart(
+        series = listOf(
+            ChartSeries(stringResource(R.string.axis_anxious), Color(0xFFE8A838), state.anxiousSeries),
+            ChartSeries(stringResource(R.string.axis_irritable), mood.irritable, state.irritableSeries),
+        ),
+        minY = 0f,
+        maxY = 5f,
+        yTickLabels = MoodScales.INTENSITY_ANCHORS_COMPACT,
+        xAxisLabel = stringResource(R.string.reports_axis_days),
+        showAxisTicks = true,
+        zoom = zoom,
+    )
+}
+
+/**
+ * Option scales (0–3). Energy, concentration and sociability run low → high with «как обычно»
+ * at 2; appetite runs «как обычно» → «совсем иначе», so it gets its own chart with its own words
+ * instead of sharing an axis whose labels would be wrong for it.
+ */
+@Composable
+private fun ExtraAxesCharts(state: ReportsUiState, zoom: ChartZoomState = ChartZoomState()) {
+    // Fullscreen: two charts share the available height.
+    val fullHeight = LocalChartPlotHeight.current
+    CompositionLocalProvider(LocalChartPlotHeight provides fullHeight?.let { (it - 96.dp) / 2 }) {
+        Column {
+            val relative = listOf(
+                ChartSeries(stringResource(R.string.axis_energy), Color(0xFF2E9D57), state.energySeries),
+                ChartSeries(stringResource(R.string.axis_concentration), Color(0xFF3B7DD8), state.concentrationSeries),
+                ChartSeries(stringResource(R.string.axis_sociability), Color(0xFFBA68C8), state.sociabilitySeries),
             )
-            if (state.irritableSeries.isNotEmpty()) {
+            if (relative.any { it.points.isNotEmpty() }) {
                 MultiLineChart(
-                    series = listOf(
-                        ChartSeries(stringResource(R.string.axis_irritable), mood.irritable, state.irritableSeries),
-                    ),
-                    maxY = 5f,
-                    yAxisLabel = stringResource(R.string.reports_axis_score),
+                    series = relative,
+                    minY = 0f,
+                    maxY = 3f,
+                    yTickLabels = listOf("сильно ниже", "ниже", "как обычно", "выше"),
+                    showAxisTicks = true,
+                    zoom = zoom,
+                )
+            }
+            if (state.appetiteSeries.isNotEmpty()) {
+                Text(
+                    stringResource(R.string.axis_appetite),
+                    style = MaterialTheme.typography.titleSmall,
+                    modifier = Modifier.padding(top = 12.dp, bottom = 4.dp),
+                )
+                MultiLineChart(
+                    series = listOf(ChartSeries("", Color(0xFFE08A1E), state.appetiteSeries)),
+                    minY = 0f,
+                    maxY = 3f,
+                    yTickLabels = listOf("как обычно", "чуть иначе", "заметно иначе", "совсем иначе"),
                     xAxisLabel = stringResource(R.string.reports_axis_days),
-                    modifier = Modifier.padding(top = 12.dp),
+                    showAxisTicks = true,
                     zoom = zoom,
                 )
             }
         }
-        ReportsCharts.Id.LEVEL3 -> MultiLineChart(
-            series = listOf(
-                ChartSeries(stringResource(R.string.axis_concentration), Color(0xFF64B5F6), state.concentrationSeries),
-                ChartSeries(stringResource(R.string.axis_sociability), Color(0xFFBA68C8), state.sociabilitySeries),
-                ChartSeries(stringResource(R.string.axis_appetite), Color(0xFFFFB74D), state.appetiteSeries),
-            ),
-            maxY = 5f,
-            yAxisLabel = stringResource(R.string.reports_axis_score),
-            xAxisLabel = stringResource(R.string.reports_axis_days),
-            showAxisTicks = true,
-            zoom = zoom,
-        )
+    }
+}
+
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun ReportPeriodSelector(
+    state: ReportsUiState,
+    onKind: (ReportPeriod.Kind) -> Unit,
+    onPrevMonth: () -> Unit,
+    onNextMonth: () -> Unit,
+    onCustomRange: (String?, String?) -> Unit,
+) {
+    val period = state.period
+    Column(Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, top = 12.dp)) {
+        Text(stringResource(R.string.reports_period_title), style = MaterialTheme.typography.titleSmall)
+        // One line: equal flat segments (wrapping chips took two rows on a phone).
+        val outline = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f)
+        val shape = RoundedCornerShape(4.dp)
+        Row(
+            Modifier
+                .fillMaxWidth()
+                .padding(top = 6.dp)
+                .height(IntrinsicSize.Min)
+                .clip(shape)
+                .border(1.dp, outline, shape),
+        ) {
+            val kinds = listOf(
+                ReportPeriod.Kind.DAYS_7 to R.string.reports_period_7,
+                ReportPeriod.Kind.DAYS_30 to R.string.reports_period_30,
+                ReportPeriod.Kind.DAYS_90 to R.string.reports_period_90,
+                ReportPeriod.Kind.MONTH to R.string.reports_period_month,
+                ReportPeriod.Kind.CUSTOM to R.string.reports_period_custom,
+            )
+            kinds.forEachIndexed { index, (kind, label) ->
+                val selected = period.kind == kind
+                Box(
+                    Modifier
+                        .weight(1f)
+                        .fillMaxHeight()
+                        .heightIn(min = 44.dp)
+                        .background(if (selected) MaterialTheme.colorScheme.primary else Color.Transparent)
+                        .selectable(selected = selected, onClick = { onKind(kind) }, role = Role.Tab)
+                        .padding(horizontal = 2.dp, vertical = 6.dp),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Text(
+                        stringResource(label),
+                        style = MaterialTheme.typography.labelMedium,
+                        color = if (selected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface,
+                        maxLines = 1,
+                        softWrap = false,
+                    )
+                }
+                if (index < kinds.lastIndex) Box(Modifier.width(1.dp).fillMaxHeight().background(outline))
+            }
+        }
+        when (period.kind) {
+            ReportPeriod.Kind.MONTH -> Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                IconButton(onClick = onPrevMonth) {
+                    Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(R.string.reports_prev_month))
+                }
+                Text(
+                    state.monthLabel,
+                    Modifier.weight(1f),
+                    style = MaterialTheme.typography.titleMedium,
+                    textAlign = TextAlign.Center,
+                    maxLines = 1,
+                )
+                IconButton(onClick = onNextMonth) {
+                    Icon(Icons.AutoMirrored.Filled.ArrowForward, contentDescription = stringResource(R.string.reports_next_month))
+                }
+            }
+            ReportPeriod.Kind.CUSTOM -> Row(
+                Modifier.fillMaxWidth().padding(top = 8.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                IsoDatePickerField(
+                    label = stringResource(R.string.reports_period_from),
+                    value = period.customFrom.orEmpty(),
+                    onValueChange = { onCustomRange(it, null) },
+                    modifier = Modifier.weight(1f),
+                )
+                IsoDatePickerField(
+                    label = stringResource(R.string.reports_period_to),
+                    value = period.customTo.orEmpty(),
+                    onValueChange = { onCustomRange(null, it) },
+                    modifier = Modifier.weight(1f),
+                )
+            }
+            else -> Text(
+                state.monthLabel,
+                style = MaterialTheme.typography.titleMedium,
+                modifier = Modifier.padding(vertical = 10.dp),
+            )
+        }
     }
 }

@@ -6,6 +6,8 @@ import org.json.JSONObject
 /**
  * Full user configuration for mood check-ins: slots, axes, custom scales.
  * Persisted as JSON in Settings (offline-first).
+ *
+ * Default axes are a short "how I feel now" slice — not the graph-params mood axes.
  */
 data class CheckInSlot(
     val id: String,
@@ -18,22 +20,39 @@ data class CheckInAxisConfig(
     val min: Int = 0,
     val max: Int = 5,
     val stepLabels: List<String> = emptyList(),
+    /** yesno | 0-5 | options */
+    val scaleType: String = "0-5",
 ) {
-    fun anchors(): List<String>? {
-        val needed = (max - min + 1).coerceAtLeast(1)
-        if (stepLabels.isNotEmpty()) {
-            // Prefer custom labels immediately — pad/truncate so Today picks them up
-            // even while the user is still typing (size may temporarily mismatch).
-            return when {
-                stepLabels.size == needed -> stepLabels
-                stepLabels.size > needed -> stepLabels.take(needed)
-                else -> stepLabels + List(needed - stepLabels.size) { "" }
-            }
+    fun normalizedScaleType(): String = when (scaleType) {
+        "yesno", "0-5", "options" -> scaleType
+        else -> when {
+            max - min == 1 -> "yesno"
+            stepLabels.size in 3..4 && max - min <= 3 -> "options"
+            else -> "0-5"
         }
-        return when (max - min) {
-            5 -> MoodScales.INTENSITY_ANCHORS_COMPACT
+    }
+
+    fun anchors(): List<String>? {
+        return when (normalizedScaleType()) {
+            "yesno" -> stepLabels.ifEmpty { listOf("Нет", "Да") }
+            "options" -> stepLabels.ifEmpty { DefaultSeedData.OPTIONS_SEVERITY_LABELS }
+            "0-5" -> {
+                val needed = 6
+                when {
+                    stepLabels.size == needed -> stepLabels
+                    stepLabels.size > needed -> stepLabels.take(needed)
+                    stepLabels.isNotEmpty() -> stepLabels + List(needed - stepLabels.size) { "" }
+                    else -> MoodScales.INTENSITY_ANCHORS_COMPACT
+                }
+            }
             else -> null
         }
+    }
+
+    fun displayMax(): Int = when (normalizedScaleType()) {
+        "yesno" -> 1
+        "options" -> (anchors()?.size ?: 4) - 1
+        else -> 5
     }
 }
 
@@ -42,21 +61,53 @@ data class CheckInConfig(
     val axes: List<CheckInAxisConfig>,
 ) {
     companion object {
+        private val LEGACY_MOOD_AXIS_IDS = setOf("depressed", "elevated", "anxious", "irritable")
+
         fun default(): CheckInConfig = CheckInConfig(
             slots = listOf(
                 CheckInSlot("morning", "Утро"),
                 CheckInSlot("afternoon", "День"),
                 CheckInSlot("evening", "Вечер"),
             ),
-            axes = listOf(
-                CheckInAxisConfig("depressed", "Спад", 0, 5, MoodScales.INTENSITY_ANCHORS_COMPACT),
-                CheckInAxisConfig("elevated", "Подъём", 0, 5, MoodScales.INTENSITY_ANCHORS_COMPACT),
-                CheckInAxisConfig("anxious", "Тревога", 0, 5, MoodScales.INTENSITY_ANCHORS_COMPACT),
-                CheckInAxisConfig("irritable", "Раздражение", 0, 5, MoodScales.INTENSITY_ANCHORS_COMPACT),
+            axes = defaultAxes(),
+        )
+
+        fun defaultAxes(): List<CheckInAxisConfig> = listOf(
+            CheckInAxisConfig(
+                id = "tension",
+                label = "Напряжение",
+                min = 0,
+                max = 5,
+                stepLabels = MoodScales.INTENSITY_ANCHORS_COMPACT,
+                scaleType = "0-5",
+            ),
+            CheckInAxisConfig(
+                id = "clarity",
+                label = "Ясность головы",
+                min = 0,
+                max = 5,
+                stepLabels = MoodScales.INTENSITY_ANCHORS_COMPACT,
+                scaleType = "0-5",
+            ),
+            CheckInAxisConfig(
+                id = "impulse",
+                label = "Импульс",
+                min = 0,
+                max = 1,
+                stepLabels = listOf("Нет", "Да"),
+                scaleType = "yesno",
+            ),
+            CheckInAxisConfig(
+                id = "fatigue",
+                label = "Усталость",
+                min = 0,
+                max = 5,
+                stepLabels = MoodScales.INTENSITY_ANCHORS_COMPACT,
+                scaleType = "0-5",
             ),
         )
 
-        fun fromScheme(scheme: String, enabledAxes: Set<String>): CheckInConfig {
+        fun fromScheme(scheme: String, enabledAxes: Set<String> = emptySet()): CheckInConfig {
             val base = default()
             val slots = when (scheme) {
                 "halves" -> listOf(
@@ -70,8 +121,24 @@ data class CheckInConfig(
                 )
                 else -> base.slots
             }
-            val axes = base.axes.filter { it.id in enabledAxes }.ifEmpty { base.axes }
+            val axes = if (enabledAxes.isEmpty() || enabledAxes.any { it in LEGACY_MOOD_AXIS_IDS }) {
+                base.axes
+            } else {
+                base.axes.filter { it.id in enabledAxes }.ifEmpty { base.axes }
+            }
             return CheckInConfig(slots, axes)
+        }
+
+        /** True if config still uses the old mood-axis check-in set. */
+        fun isLegacyMoodAxes(config: CheckInConfig): Boolean {
+            val ids = config.axes.map { it.id }.toSet()
+            return ids.any { it in LEGACY_MOOD_AXIS_IDS } &&
+                ids.intersect(LEGACY_MOOD_AXIS_IDS).size >= 2
+        }
+
+        fun migrateIfLegacy(config: CheckInConfig): CheckInConfig {
+            if (!isLegacyMoodAxes(config)) return config
+            return config.copy(axes = defaultAxes())
         }
 
         fun parse(raw: String?): CheckInConfig? {
@@ -95,6 +162,13 @@ data class CheckInConfig(
                                 for (j in 0 until labelsArr.length()) add(labelsArr.getString(j))
                             }
                         }
+                        val scaleType = a.optString("scaleType", "").ifBlank {
+                            when {
+                                a.optInt("max", 5) - a.optInt("min", 0) == 1 -> "yesno"
+                                labels.size in 3..4 -> "options"
+                                else -> "0-5"
+                            }
+                        }
                         add(
                             CheckInAxisConfig(
                                 id = a.getString("id"),
@@ -102,6 +176,7 @@ data class CheckInConfig(
                                 min = a.optInt("min", 0),
                                 max = a.optInt("max", 5),
                                 stepLabels = labels,
+                                scaleType = scaleType,
                             ),
                         )
                     }
@@ -126,7 +201,8 @@ data class CheckInConfig(
                         .put("label", a.label)
                         .put("min", a.min)
                         .put("max", a.max)
-                        .put("stepLabels", labels),
+                        .put("stepLabels", labels)
+                        .put("scaleType", a.normalizedScaleType()),
                 )
             }
             o.put("slots", slots)

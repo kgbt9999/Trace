@@ -23,6 +23,7 @@ import com.moodlife.app.data.repository.SettingsRepository
 import com.moodlife.app.domain.CaseHistorySummary
 import com.moodlife.app.domain.CrisisContacts
 import com.moodlife.app.domain.LabMarkerCatalog
+import com.moodlife.app.domain.ReportHeader
 import com.moodlife.app.util.DateUtils
 import com.moodlife.app.util.MedsUtils
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -54,6 +55,7 @@ class DoctorExportGenerator @Inject constructor(
     private val warningSignDao: WarningSignDao,
     private val periodDao: PeriodDao,
     private val settingsRepository: SettingsRepository,
+    private val bodyMeasurementRepository: com.moodlife.app.data.repository.BodyMeasurementRepository,
 ) {
     companion object {
         /** Same palette as Reports med-dose chart. */
@@ -70,9 +72,9 @@ class DoctorExportGenerator @Inject constructor(
         """.trimIndent()
     }
 
-    suspend fun generateHtml(year: Int, month: Int): String {
-        val entries = loadMonthEntries(year, month)
-        val (from, to) = DateUtils.monthRange(year, month)
+    suspend fun generateHtml(from: String, to: String): String {
+        val entries = moodEntryDao.observeRange(from, to).first()
+        val header = ReportHeader.load(settingsRepository)
         val medLogs = medicationLogDao.listRange(from, to)
         val dayNotes = dayNoteDao.listRange(from, to)
         val allMeds = medicationDao.observeVisibleInRange(from, to).first()
@@ -103,19 +105,11 @@ class DoctorExportGenerator @Inject constructor(
             val med = medById[log.medicationId] ?: continue
             val name = medicationRepository.effectiveName(med, log)
             val cur = medAdherence.getOrPut(name) { 0 to 0 }
-            val raw = medicationRepository.effectiveIntakeTimes(med, log)
-            val slots = MedsUtils.parseIntakeTimes(raw).filter { it != "by-scheme" }
-            val scheduled = if (slots.isEmpty()) 1 else slots.size
-            val taken = if (slots.isEmpty()) {
-                if (log.taken) 1 else 0
-            } else {
-                slots.count { MedsUtils.isSlotTaken(log.taken, log.slotsTaken, it, slots) }
-            }
+            val day = MedsUtils.daySlots(medicationRepository.effectiveIntakeTimes(med, log), log.taken, log.slotsTaken)
+            val scheduled = day.scheduledCount
+            val taken = day.takenCount
             medAdherence[name] = cur.first + scheduled to cur.second + taken
         }
-
-        val monthLabel = "${DateUtils.MONTH_NAMES_RU[month]} $year"
-        val exportedAt = SimpleDateFormat("dd.MM.yyyy HH:mm", Locale("ru")).format(Date())
 
         val dayRows = entries.joinToString("") { e ->
             """
@@ -128,7 +122,7 @@ class DoctorExportGenerator @Inject constructor(
         }
 
         val medsByDay = buildMedsByDayHtml(from, to, medLogs, allMeds, includeUntaken = true)
-        val medDoseSeries = reportsRepository.observeMonthMedDoseSeries(year, month).first()
+        val medDoseSeries = reportsRepository.observeMedDoseSeries(from, to).first()
         val labResults = labResultDao.observeRange(from, to).first()
         val medDoseSvg = buildMedDoseSvg(medDoseSeries)
         val labsBlock = buildLabsHtml(labResults)
@@ -170,7 +164,7 @@ class DoctorExportGenerator @Inject constructor(
             else -> "bad"
         }
 
-        val caseHistory = loadCaseHistory(year, month)
+        val caseHistory = loadCaseHistory(to)
         val caseHistoryRows = caseHistory.joinToString("") { row ->
             val bandLabel = CaseHistorySummary.bandLabel(row.band)
             val sevLabel = CaseHistorySummary.severityLabel(row.severity)
@@ -252,7 +246,7 @@ class DoctorExportGenerator @Inject constructor(
         val radarSvg = buildStateProfileSvg(last7.ifEmpty { entries })
         val heatHtml = buildPolarityCalendarHeatmap(entries, from, to)
         val triggersHtml = buildObservedTriggersHtml(entries, earlySignFreq, missedOverall)
-        val doctorName = settingsRepository.get(SettingsRepository.KEY_CRISIS_DOCTOR)?.trim().orEmpty().ifBlank { "—" }
+        val doctorName = header.doctor.ifBlank { "—" }
         val crisisHtml = buildCrisisLevelsHtml(
             doctor = doctorName,
             support = settingsRepository.get(SettingsRepository.KEY_CRISIS_SUPPORT).orEmpty(),
@@ -285,15 +279,13 @@ class DoctorExportGenerator @Inject constructor(
 
         return DoctorClinicalReportHtml.render(
             DoctorClinicalReportHtml.Model(
-                title = context.getString(R.string.export_html_title, monthLabel),
-                subtitle = "Мониторинг самоотчёта · дневник настроения и симптомов",
+                title = header.effectiveTitle,
+                subtitle = "Мониторинг самоотчёта · дневник настроения, сна, лекарств и физических показателей",
                 periodLabel = periodRange,
                 exportedAt = SimpleDateFormat("dd.MM.yyyy", Locale("ru")).format(Date()),
-                patientName = "—",
-                patientDob = "—",
-                diagnosis = "— (не заполняется приложением)",
-                doctorName = doctorName,
-                nextVisit = "—",
+                patientName = header.patient,
+                headerFieldsHtml = headerFieldsHtml(header, adherenceLabel, adherenceColor),
+                visitComment = header.comment,
                 adherenceLabel = adherenceLabel,
                 adherenceColor = adherenceColor,
                 disclaimer = DISCLAIMER,
@@ -328,14 +320,186 @@ class DoctorExportGenerator @Inject constructor(
                 medDoseSvg = medDoseSvg,
                 historyRows = caseHistoryRows,
                 crisisHtml = crisisHtml,
+                physicalHtml = buildPhysicalSection(from, to, labResults),
+                diaryRows = buildDiaryRows(entries, dayNotes, weightByDate(from, to)),
             ),
         )
     }
 
+    /** Header fields that the user filled in; empty ones are left out instead of showing «—». */
+    private fun headerFieldsHtml(h: ReportHeader, adherence: String, adherenceColor: String): String {
+        val fields = listOf(
+            "Пациент" to h.patient,
+            "Дата рождения" to h.birthDate,
+            "Диагноз (со слов врача)" to h.diagnosis,
+            "Лечащий врач" to h.doctor,
+            "Клиника" to h.clinic,
+            "Следующий приём" to h.nextVisit,
+        ).filter { it.second.isNotBlank() }
+        val html = fields.joinToString("") { (label, value) ->
+            "<div class=\"field\"><span class=\"label\">${esc(label)}</span><span class=\"value\">${esc(value)}</span></div>"
+        }
+        return html + "<div class=\"field\"><span class=\"label\">Приём лекарств</span><span class=\"value\" style=\"color:$adherenceColor\">${esc(adherence)}</span></div>"
+    }
+
+    /** Weight per date: manual entry wins over Health Connect for the same day. */
+    private suspend fun weightByDate(from: String, to: String): Map<String, Pair<Float, Boolean>> {
+        val out = sortedMapOf<String, Pair<Float, Boolean>>()
+        externalHealthDayDao.observeRange(from, to).first()
+            .filter { it.kind == "weight" }
+            .forEach { d -> d.weightKg?.let { out[d.date] = it to false } }
+        bodyMeasurementRepository.observeRange(from, to).first()
+            .forEach { r -> r.weightKg?.let { out[r.date] = it to true } }
+        return out
+    }
+
+    /**
+     * Physical block: weight (cards + chart), body measurements by date, device activity and
+     * lab results. Returns "" when there is nothing physical for the period.
+     */
+    private suspend fun buildPhysicalSection(from: String, to: String, labs: List<LabResultEntity>): String {
+        val weights = weightByDate(from, to)
+        val body = bodyMeasurementRepository.observeRange(from, to).first().sortedBy { it.date }
+        val health = externalHealthDayDao.observeRange(from, to).first()
+        val steps = health.filter { it.kind == "activity" }.mapNotNull { it.steps }.filter { it > 0 }
+        val hcSleep = health.filter { it.kind == "sleep" }.mapNotNull { it.sleepHours }
+        if (weights.isEmpty() && body.isEmpty() && steps.isEmpty() && labs.isEmpty()) return ""
+        val ru = Locale("ru")
+        fun num(v: Float) = if (v == v.toLong().toFloat()) v.toLong().toString() else String.format(ru, "%.1f", v)
+
+        val cards = buildList {
+            if (weights.isNotEmpty()) {
+                val first = weights.entries.first()
+                val last = weights.entries.last()
+                val delta = last.value.first - first.value.first
+                val deltaText = if (weights.size > 1) String.format(ru, "%+.1f кг за период", delta) else "одно измерение"
+                add(Triple("Вес, кг", num(last.value.first), "${formatDateRu(last.key)} · $deltaText"))
+            }
+            if (steps.isNotEmpty()) {
+                add(Triple("Шаги в день", String.format(ru, "%,d", steps.average().toInt()), "в среднем · ${steps.size} дн. с устройства"))
+            }
+            if (hcSleep.isNotEmpty()) {
+                add(Triple("Сон по устройству", String.format(ru, "%.1f ч", hcSleep.average()), "в среднем · ${hcSleep.size} ночей"))
+            }
+            if (labs.isNotEmpty()) {
+                add(Triple("Анализы", "${labs.size}", "записей за период"))
+            }
+        }
+        val cardsHtml = if (cards.isEmpty()) "" else """
+          <div class="grid-3" style="margin-bottom:14px">
+            ${cards.joinToString("") { (l, v, sub) -> "<div class=\"metric-card\"><div class=\"m-label\">${esc(l)}</div><div class=\"m-value\">${esc(v)}</div><div class=\"m-sub\">${esc(sub)}</div></div>" }}
+          </div>
+        """
+
+        val weightChart = if (weights.size >= 2) """
+          <div class="card" style="margin-bottom:14px">
+            <div class="card-title"><span>Вес, кг</span><span style="font-size:11px;color:var(--text-2);font-weight:400">ручной ввод и Health Connect</span></div>
+            <div class="chart">${buildSparseLineSvg(title = "", points = weights.map { (d, v) -> dayTick(d) to v.first }, color = "#7986CB", autoScale = true)}</div>
+          </div>
+        """ else ""
+
+        // Columns: only the parameters that have at least one value in the period.
+        val fields = com.moodlife.app.domain.BodyMeasurementCatalog.fields
+            .sortedBy { if (it.id == "weight") 0 else 1 }
+            .filter { f -> f.id == "weight" && weights.isNotEmpty() || body.any { f.read(it) != null } }
+        val dates = (body.map { it.date } + weights.keys).distinct().sortedDescending()
+        val bodyByDate = body.associateBy { it.date }
+        val bodyTable = if (dates.isEmpty() || fields.isEmpty()) "" else {
+            val head = fields.joinToString("") { "<th>${esc(it.labelRu)}, ${esc(it.unit)}</th>" }
+            val rows = dates.joinToString("") { d ->
+                val cells = fields.joinToString("") { f ->
+                    if (f.id == "weight") {
+                        val w = weights[d]
+                        when {
+                            w == null -> "<td class=\"muted\">—</td>"
+                            w.second -> "<td><strong>${num(w.first)}</strong></td>"
+                            else -> "<td><strong>${num(w.first)}</strong> <span class=\"src\">HC</span></td>"
+                        }
+                    } else {
+                        bodyByDate[d]?.let(f.read)?.let { "<td>${num(it)}</td>" } ?: "<td class=\"muted\">—</td>"
+                    }
+                }
+                "<tr><td class=\"date\">${esc(formatDateRu(d))}</td>$cells</tr>"
+            }
+            """
+          <div class="card" style="margin-bottom:14px">
+            <div class="card-title">Замеры по датам</div>
+            <table class="hist-table"><thead><tr><th>Дата</th>$head</tr></thead><tbody>$rows</tbody></table>
+            <div class="card-note">HC — значение из Health Connect. Самоотчёт, не норма и не диагноз.</div>
+          </div>
+            """
+        }
+
+        val labsHtml = if (labs.isEmpty()) "" else {
+            val rows = labs.sortedWith(compareBy({ it.name.lowercase() }, { it.date })).joinToString("") { r ->
+                "<tr><td class=\"date\">${esc(formatDateRu(r.date))}</td><td><strong>${esc(r.name)}</strong></td><td>${esc(r.valueText)} ${esc(r.unit.orEmpty())}</td><td>${esc(r.clinic.orEmpty().ifBlank { "—" })}</td></tr>"
+            }
+            val charts = labs.filter { it.valueNumeric != null }
+                .groupBy { it.name.trim().lowercase() }
+                .values.filter { it.size >= 2 }
+                .joinToString("") { rowsForName ->
+                    val label = rowsForName.first().name
+                    val unit = rowsForName.firstNotNullOfOrNull { it.unit?.takeIf { u -> u.isNotBlank() } }
+                    val colorInt = LabMarkerCatalog.colorForName(label).toArgb()
+                    val color = String.format(java.util.Locale.US, "#%06X", colorInt and 0xFFFFFF)
+                    val pts = rowsForName.sortedBy { it.date }.map { dayTick(it.date) to it.valueNumeric!! }
+                    "<div class=\"chart\" style=\"margin-top:10px\">${buildSparseLineSvg(if (unit != null) "$label, $unit" else label, pts, color, autoScale = true)}</div>"
+                }
+            """
+          <div class="card">
+            <div class="card-title">Лабораторные показатели</div>
+            <table class="hist-table"><thead><tr><th>Дата</th><th>Показатель</th><th>Значение</th><th>Лаборатория</th></tr></thead><tbody>$rows</tbody></table>
+            $charts
+            <div class="card-note">Значения внесены пользователем. Без референсных диапазонов и интерпретации.</div>
+          </div>
+            """
+        }
+        return cardsHtml + weightChart + bodyTable + labsHtml
+    }
+
+    /**
+     * One row per day that has a diary entry or a note: date, mood, sleep, anxiety, weight and the
+     * notes of that day in full — so every note is tied to its date.
+     */
+    private fun buildDiaryRows(
+        entries: List<MoodEntryEntity>,
+        dayNotes: List<com.moodlife.app.data.local.entity.DayNoteEntity>,
+        weights: Map<String, Pair<Float, Boolean>>,
+    ): String {
+        val byDate = entries.associateBy { it.date }
+        val notesByDate = dayNotes.groupBy { it.date }
+        val dates = (byDate.keys + notesByDate.keys).sorted()
+        val ru = Locale("ru")
+        return dates.joinToString("") { d ->
+            val e = byDate[d]
+            val pol = e?.let { it.elevated - it.depressed }
+            val badge = when {
+                pol == null -> "<span class=\"muted\">—</span>"
+                pol >= 2 -> "<span class=\"badge badge-man\">${String.format(ru, "%+d", pol)}</span>"
+                pol <= -2 -> "<span class=\"badge badge-dep\">${String.format(ru, "%+d", pol)}</span>"
+                else -> "<span class=\"badge badge-eut\">${String.format(ru, "%+d", pol)}</span>"
+            }
+            val sleep = e?.sleepHours?.let { String.format(ru, "%.1f", it) } ?: "—"
+            val anx = e?.anxious?.toString() ?: "—"
+            val w = weights[d]?.first?.let { String.format(ru, "%.1f", it) } ?: "—"
+            val notes = listOfNotNull(e?.note?.trim()?.takeIf { it.isNotEmpty() }) +
+                notesByDate[d].orEmpty().map { it.content.trim() }.filter { it.isNotEmpty() }
+            val notesHtml = notes.distinct().joinToString("<br/>") { esc(it.take(600)) }.ifBlank { "<span class=\"muted\">—</span>" }
+            "<tr><td class=\"date\">${esc(formatDateRu(d))}</td><td>$badge</td><td>$sleep</td><td>$anx</td><td>$w</td><td class=\"note\">$notesHtml</td></tr>"
+        }
+    }
+
+    /** Short day label for chart axes that may span several months: «7.09». */
+    private fun dayTick(iso: String): String {
+        val d = LocalDate.parse(iso)
+        return "${d.dayOfMonth}.${d.monthValue.toString().padStart(2, '0')}"
+    }
+
     /** Plain-language monthly summary for the patient (HTML only). */
-    suspend fun generatePatientHtml(year: Int, month: Int): String {
-        val entries = loadMonthEntries(year, month)
-        val (from, to) = DateUtils.monthRange(year, month)
+    suspend fun generatePatientHtml(from: String, to: String): String {
+        val entries = moodEntryDao.observeRange(from, to).first()
+        val header = ReportHeader.load(settingsRepository)
+        val dayNotes = dayNoteDao.listRange(from, to)
         val medLogs = medicationLogDao.listRange(from, to)
         val labResults = labResultDao.observeRange(from, to).first()
         val allMeds = medicationDao.observeVisibleInRange(from, to).first()
@@ -354,21 +518,18 @@ class DoctorExportGenerator @Inject constructor(
         var taken = 0
         for (log in medLogs) {
             val med = medById[log.medicationId] ?: continue
-            val raw = medicationRepository.effectiveIntakeTimes(med, log)
-            val slots = MedsUtils.parseIntakeTimes(raw).filter { it != "by-scheme" }
-            val s = if (slots.isEmpty()) 1 else slots.size
-            val t = if (slots.isEmpty()) {
-                if (log.taken) 1 else 0
-            } else {
-                slots.count { MedsUtils.isSlotTaken(log.taken, log.slotsTaken, it, slots) }
-            }
+            val day = MedsUtils.daySlots(medicationRepository.effectiveIntakeTimes(med, log), log.taken, log.slotsTaken)
+            val s = day.scheduledCount
+            val t = day.takenCount
             scheduled += s
             taken += t
         }
         val adherence = if (scheduled > 0) "${taken * 100 / scheduled}%" else "—"
         val labsCount = labResults.size
-        val monthLabel = "${DateUtils.MONTH_NAMES_RU[month]} $year"
+        val monthLabel = "${formatDateRu(from)} — ${formatDateRu(to)}"
         val exportedAt = SimpleDateFormat("dd.MM.yyyy HH:mm", Locale("ru")).format(Date())
+        val physicalHtml = buildPhysicalSection(from, to, labResults)
+        val diaryRows = buildDiaryRows(entries, dayNotes, weightByDate(from, to))
         val moodSvg = buildPolaritySvg(entries)
         val sleepMoodSvg = buildSleepMoodDualSvg(entries)
 
@@ -407,13 +568,32 @@ class DoctorExportGenerator @Inject constructor(
             ul { padding-left: 1.2rem; margin-top: 8px; }
             li { margin: 0.35rem 0; color: var(--text-2); }
             .footer { border-top: 1px solid var(--border); margin-top: 24px; padding-top: 12px; font-size: 11px; color: var(--text-3); }
-            @media (max-width: 640px) { .grid-3 { grid-template-columns: 1fr; } }
+            .hist-table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+            .hist-table th { background: var(--surface-2); font-weight: 500; padding: 8px 10px; text-align: left; font-size: 11px; color: var(--text-2); border-bottom: 1px solid var(--border); }
+            .hist-table td { padding: 8px 10px; border-bottom: 1px solid var(--border); vertical-align: top; }
+            .hist-table tr:nth-child(even) td { background: #fafbfc; }
+            .hist-table td.date { white-space: nowrap; font-variant-numeric: tabular-nums; color: var(--text-2); }
+            .hist-table td.note { white-space: pre-line; }
+            .muted { color: var(--text-3); }
+            .src { font-size: 10px; color: var(--text-3); }
+            .badge { display: inline-block; padding: 1px 8px; border-radius: 20px; font-size: 11px; font-weight: 600; font-variant-numeric: tabular-nums; }
+            .badge-dep { background: #ddeeff; color: #1a4f8a; } .badge-man { background: #fde8e8; color: #8B2020; } .badge-eut { background: #e6f9ee; color: #0d6e38; }
+            .who { display: flex; flex-wrap: wrap; gap: 6px 24px; margin-top: 10px; font-size: 12px; color: var(--text-2); }
+            .who strong { color: var(--text); font-weight: 500; }
+            @page { size: A4; margin: 12mm 10mm; }
+            @media print { body { background: #fff; -webkit-print-color-adjust: exact; print-color-adjust: exact; } .card, .metric-card, tr { break-inside: avoid; } thead { display: table-header-group; } }
+            @media screen and (max-width: 640px) { .grid-3 { grid-template-columns: 1fr; } }
           </style>
         </head>
         <body>
           <div class="report-header">
-            <h1>${esc(context.getString(R.string.export_patient_html_heading))}</h1>
-            <div class="subtitle">${esc(monthLabel)} · ${esc(exportedAt)}</div>
+            <h1>${esc(header.title.ifBlank { context.getString(R.string.export_patient_html_heading) })}</h1>
+            <div class="subtitle">${esc(monthLabel)} · сформирован ${esc(exportedAt)}</div>
+            <div class="who">
+              ${listOf("Пациент" to header.patient, "Дата рождения" to header.birthDate, "Врач" to header.doctor, "Клиника" to header.clinic, "Следующий приём" to header.nextVisit)
+                  .filter { it.second.isNotBlank() }
+                  .joinToString("") { (l, v) -> "<span>${esc(l)}: <strong>${esc(v)}</strong></span>" }}
+            </div>
           </div>
           <div class="page">
             <div class="note">
@@ -422,7 +602,7 @@ class DoctorExportGenerator @Inject constructor(
             </div>
 
             <div class="section">
-              <div class="section-title">Ключевые показатели месяца</div>
+              <div class="section-title">Ключевые показатели периода</div>
               <div class="grid-3">
                 <div class="metric-card"><div class="m-label">Дней с записью</div><div class="m-value">$totalDays</div><div class="m-sub">ваш дневник</div></div>
                 <div class="metric-card"><div class="m-label">Средняя полярность</div><div class="m-value">$avgPolarity</div><div class="m-sub">шкала −5…+5</div></div>
@@ -456,6 +636,25 @@ class DoctorExportGenerator @Inject constructor(
             </div>
             """ else ""}
 
+            ${if (physicalHtml.isNotBlank()) """
+            <div class="section">
+              <div class="section-title">Физические показатели</div>
+              $physicalHtml
+            </div>
+            """ else ""}
+
+            ${if (diaryRows.isNotBlank()) """
+            <div class="section">
+              <div class="section-title">Дневник по дням</div>
+              <div class="card">
+                <table class="hist-table">
+                  <thead><tr><th>Дата</th><th>Настроение</th><th>Сон, ч</th><th>Тревога</th><th>Вес, кг</th><th>Заметки</th></tr></thead>
+                  <tbody>$diaryRows</tbody>
+                </table>
+              </div>
+            </div>
+            """ else ""}
+
             <div class="section">
               <div class="section-title">Что можно обсудить с врачом</div>
               <div class="card">
@@ -474,6 +673,9 @@ class DoctorExportGenerator @Inject constructor(
         </html>
         """.trimIndent()
     }
+
+    suspend fun loadEntries(from: String, to: String): List<MoodEntryEntity> =
+        moodEntryDao.observeRange(from, to).first()
 
     suspend fun loadMonthEntries(year: Int, month: Int): List<MoodEntryEntity> {
         val (from, to) = DateUtils.monthRange(year, month)
@@ -521,14 +723,9 @@ class DoctorExportGenerator @Inject constructor(
             val med = medById[log.medicationId] ?: continue
             val name = medicationRepository.effectiveName(med, log)
             val cur = medAdherence.getOrPut(name) { 0 to 0 }
-            val raw = medicationRepository.effectiveIntakeTimes(med, log)
-            val slots = MedsUtils.parseIntakeTimes(raw).filter { it != "by-scheme" }
-            val scheduled = if (slots.isEmpty()) 1 else slots.size
-            val taken = if (slots.isEmpty()) {
-                if (log.taken) 1 else 0
-            } else {
-                slots.count { MedsUtils.isSlotTaken(log.taken, log.slotsTaken, it, slots) }
-            }
+            val day = MedsUtils.daySlots(medicationRepository.effectiveIntakeTimes(med, log), log.taken, log.slotsTaken)
+            val scheduled = day.scheduledCount
+            val taken = day.takenCount
             medAdherence[name] = cur.first + scheduled to cur.second + taken
         }
         return medAdherence.map { (name, pair) ->
@@ -563,9 +760,12 @@ class DoctorExportGenerator @Inject constructor(
     /**
      * Lookback summary for doctor PDF case-history table (diary bands, not diagnosis).
      */
-    suspend fun loadCaseHistory(year: Int, month: Int, lookbackMonths: Int = 11): List<com.moodlife.app.domain.CaseHistorySummary.Row> {
-        val (_, toMonthTo) = DateUtils.monthRange(year, month)
-        val end = java.time.LocalDate.parse(toMonthTo)
+    suspend fun loadCaseHistory(year: Int, month: Int, lookbackMonths: Int = 11): List<com.moodlife.app.domain.CaseHistorySummary.Row> =
+        loadCaseHistory(DateUtils.monthRange(year, month).second, lookbackMonths)
+
+    /** Case history ending at [toIso] and looking back [lookbackMonths] whole months. */
+    suspend fun loadCaseHistory(toIso: String, lookbackMonths: Int = 11): List<com.moodlife.app.domain.CaseHistorySummary.Row> {
+        val end = java.time.LocalDate.parse(toIso)
         val start = end.minusMonths(lookbackMonths.toLong()).withDayOfMonth(1)
         val from = start.toString()
         val to = end.toString()
@@ -617,17 +817,13 @@ class DoctorExportGenerator @Inject constructor(
             val lines = allMeds.mapNotNull { med ->
                 val log = dayLogs.find { it.medicationId == med.id }
                 if (log == null && !med.isActive) return@mapNotNull null
-                val raw = medicationRepository.effectiveIntakeTimes(med, log)
-                val slots = MedsUtils.parseIntakeTimes(raw)
-                val timed = slots.filter { it != "by-scheme" }
-                val scheduled = if (timed.isEmpty()) 1 else timed.size
-                val taken = if (timed.isEmpty()) {
-                    if (log?.taken == true) 1 else 0
-                } else {
-                    timed.count { slot ->
-                        MedsUtils.isSlotTaken(log?.taken == true, log?.slotsTaken, slot, timed)
-                    }
-                }
+                val day = MedsUtils.daySlots(
+                    medicationRepository.effectiveIntakeTimes(med, log),
+                    log?.taken == true,
+                    log?.slotsTaken,
+                )
+                val scheduled = day.scheduledCount
+                val taken = day.takenCount
                 if (!includeUntaken && taken <= 0) return@mapNotNull null
                 if (log == null && taken <= 0 && !includeUntaken) return@mapNotNull null
                 // Show day only if there is a log or med is active regular (planned)
@@ -635,13 +831,11 @@ class DoctorExportGenerator @Inject constructor(
                 if (log == null && includeUntaken && !med.isRegular) return@mapNotNull null
                 val dose = medicationRepository.effectiveDosage(med, log)?.takeIf { it.isNotBlank() }
                 val name = medicationRepository.effectiveName(med, log)
-                val slotChecks = if (timed.isEmpty()) {
-                    val ok = log?.taken == true
-                    listOf("день: ${if (ok) "✓" else "○"}")
+                val slotChecks = if (day.untimed) {
+                    listOf("день: ${if (day.takenCount > 0) "✓" else "○"}")
                 } else {
-                    timed.map { slot ->
-                        val ok = MedsUtils.isSlotTaken(log?.taken == true, log?.slotsTaken, slot, timed)
-                        "${MedsUtils.slotLabel(slot)}: ${if (ok) "✓" else "○"}"
+                    day.slots.map { slot ->
+                        "${MedsUtils.slotLabel(slot)}: ${if (day.taken[slot] == true) "✓" else "○"}"
                     }
                 }
                 buildString {
@@ -711,6 +905,7 @@ class DoctorExportGenerator @Inject constructor(
             .flatMap { s -> s.points.map { it.first } }
             .distinct()
             .sortedWith(compareBy({ it.toIntOrNull() ?: Int.MAX_VALUE }, { it }))
+        fun tick(lab: String) = if (lab.length == 10) dayTick(lab) else lab
         val w = 720
         val h = 220
         val padL = 36
@@ -754,7 +949,7 @@ class DoctorExportGenerator @Inject constructor(
         }.joinToString("")
         val xTick = xLabels.mapIndexed { i, lab ->
             if (i % ((xLabels.size / 8).coerceAtLeast(1)) == 0 || i == xLabels.lastIndex) {
-                """<text x="${x(i)}" y="${h - 6}" font-size="9" fill="#5A6A80" text-anchor="middle">${esc(lab)}</text>"""
+                """<text x="${x(i)}" y="${h - 6}" font-size="9" fill="#5A6A80" text-anchor="middle">${esc(tick(lab))}</text>"""
             } else ""
         }.joinToString("")
         return """
@@ -796,7 +991,7 @@ class DoctorExportGenerator @Inject constructor(
                     }
                 if (points.isEmpty()) return@mapNotNull null
                 val colorInt = LabMarkerCatalog.colorForName(label).toArgb()
-                val color = String.format("#%06X", colorInt and 0xFFFFFF)
+                val color = String.format(java.util.Locale.US, "#%06X", colorInt and 0xFFFFFF)
                 val title = if (unit.isNotEmpty()) "$label ($unit)" else label
                 val svg = buildSparseLineSvg(title = title, points = points, color = color)
                 """<h3>${esc(title)}</h3><div class="chart">$svg</div>"""
@@ -822,19 +1017,24 @@ class DoctorExportGenerator @Inject constructor(
         title: String,
         points: List<Pair<String, Float>>,
         color: String,
+        autoScale: Boolean = false,
     ): String {
         if (points.isEmpty()) return ""
         val w = 720
         val h = 160
         val padL = 40
         val padR = 16
-        val padT = 28
+        val padT = if (title.isBlank()) 12 else 28
         val padB = 28
-        val maxY = (points.maxOf { it.second } * 1.15f).coerceAtLeast(0.1f)
+        val hi = points.maxOf { it.second }
+        val lo = points.minOf { it.second }
+        val span = (hi - lo).coerceAtLeast(hi.coerceAtLeast(1f) * 0.02f)
+        val minY = if (autoScale) (lo - span * 0.25f).coerceAtLeast(0f) else 0f
+        val maxY = if (autoScale) hi + span * 0.25f else (hi * 1.15f).coerceAtLeast(0.1f)
         fun x(i: Int) = padL + (w - padL - padR) * i / (points.size - 1).coerceAtLeast(1).toFloat()
-        fun y(v: Float) = (h - padB) - (h - padT - padB) * (v / maxY).coerceIn(0f, 1f)
+        fun y(v: Float) = (h - padB) - (h - padT - padB) * ((v - minY) / (maxY - minY)).coerceIn(0f, 1f)
         val grid = (0..4).joinToString("") { i ->
-            val v = maxY * i / 4f
+            val v = minY + (maxY - minY) * i / 4f
             val gy = y(v)
             """<line x1="$padL" y1="$gy" x2="${w - padR}" y2="$gy" stroke="#D5DCE6"/>
                <text x="2" y="${gy + 3}" font-size="9" fill="#5A6A80">${formatLabNumber(v)}</text>"""
@@ -850,7 +1050,7 @@ class DoctorExportGenerator @Inject constructor(
         }.joinToString("")
         return """
         <svg viewBox="0 0 $w $h" width="100%" role="img" aria-label="${esc(title)}">
-          <text x="$padL" y="14" font-size="12" fill="#0B1C3D">${esc(title)}</text>
+          ${if (title.isBlank()) "" else """<text x="$padL" y="14" font-size="12" fill="#0B1C3D">${esc(title)}</text>"""}
           $grid
           <polyline fill="none" stroke="$color" stroke-width="2" points="$ptsAttr"/>
           $dots
@@ -904,7 +1104,7 @@ class DoctorExportGenerator @Inject constructor(
         }.joinToString("")
         val xLabels = entries.mapIndexed { i, e ->
             if (i % ((entries.size / 8).coerceAtLeast(1)) == 0 || i == entries.lastIndex) {
-                """<text x="${x(i)}" y="${h - 6}" font-size="9" fill="#5A6070" text-anchor="middle">${e.date.takeLast(2)}</text>"""
+                """<text x="${x(i)}" y="${h - 6}" font-size="9" fill="#5A6070" text-anchor="middle">${dayTick(e.date)}</text>"""
             } else ""
         }.joinToString("")
         return """
@@ -962,7 +1162,7 @@ class DoctorExportGenerator @Inject constructor(
         }
         val xLabels = entries.mapIndexed { i, e ->
             if (i % ((entries.size / 8).coerceAtLeast(1)) == 0 || i == entries.lastIndex) {
-                """<text x="${x(i)}" y="${h - 6}" font-size="9" fill="#5A6070" text-anchor="middle">${e.date.takeLast(2)}</text>"""
+                """<text x="${x(i)}" y="${h - 6}" font-size="9" fill="#5A6070" text-anchor="middle">${dayTick(e.date)}</text>"""
             } else ""
         }.joinToString("")
         return """
@@ -1049,7 +1249,7 @@ class DoctorExportGenerator @Inject constructor(
             val r = (255 * t).toInt()
             val g = (220 - 140 * t).toInt()
             val b = (220 - 100 * t).toInt()
-            return String.format("#%02X%02X%02X", r, g, b)
+            return String.format(java.util.Locale.US, "#%02X%02X%02X", r, g, b)
         }
         val cells = labels.indices.joinToString("") { row ->
             val y = 28 + row * cell

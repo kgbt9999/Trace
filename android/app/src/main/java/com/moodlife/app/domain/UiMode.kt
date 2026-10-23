@@ -18,7 +18,6 @@ enum class UiMode(val storage: String) {
 /** Sections always shown in basic mode (core daily flow). */
 val UiModeBasicCore: Set<TodaySections.Id> = setOf(
     TodaySections.Id.GRAPH_PARAMS,
-    TodaySections.Id.CHECKINS,
     TodaySections.Id.SLEEP,
     TodaySections.Id.MEDS,
     TodaySections.Id.NOTES,
@@ -27,6 +26,7 @@ val UiModeBasicCore: Set<TodaySections.Id> = setOf(
 /** Extra sections collapsed under «Ещё» in basic mode. */
 val UiModeBasicExtra: Set<TodaySections.Id> = setOf(
     TodaySections.Id.CONTEXT,
+    TodaySections.Id.CHECKINS,
     TodaySections.Id.SYMPTOMS,
     TodaySections.Id.FACTORS,
     TodaySections.Id.WARNINGS,

@@ -423,15 +423,14 @@ class CalendarViewModel @Inject constructor(
     }
 
     private fun buildDayLine(med: MedicationEntity, log: MedicationLogEntity?): DayMedLine {
-        val slots = MedsUtils.parseIntakeTimes(
+        val day = MedsUtils.daySlots(
             medicationRepository.effectiveIntakeTimes(med, log),
+            log?.taken == true,
+            log?.slotsTaken,
         )
-        val timed = slots.filter { it != "by-scheme" }
-        val displaySlots = if (timed.isEmpty()) listOf(slots.firstOrNull() ?: "by-scheme") else timed
-        val scheduled = displaySlots.size
-        val takenMap = displaySlots.associateWith { slot ->
-            MedsUtils.isSlotTaken(log?.taken == true, log?.slotsTaken, slot, displaySlots)
-        }
+        val displaySlots = day.slots
+        val scheduled = day.scheduledCount
+        val takenMap = day.taken
         val takenSlotLabels = displaySlots.filter { takenMap[it] == true }
         val taken = takenSlotLabels.size
         return DayMedLine(
@@ -442,7 +441,7 @@ class CalendarViewModel @Inject constructor(
             scheduledSlots = scheduled,
             slotsDetail = when {
                 taken == 0 -> "0/$scheduled"
-                timed.isEmpty() && taken > 0 -> "принято"
+                day.untimed && taken > 0 -> "принято"
                 else -> takenSlotLabels.joinToString(", ") { MedsUtils.slotLabel(it) }
             },
             slotKeys = displaySlots,

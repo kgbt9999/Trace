@@ -66,4 +66,40 @@ object MedsUtils {
         if (scheduled.size <= 1) return taken
         return false
     }
+
+    /** Slots shown/counted for one medication on one day, with their taken state. */
+    data class DaySlots(
+        val slots: List<String>,
+        val taken: Map<String, Boolean>,
+        /** True when the day has no explicit times (single "by scheme" intake). */
+        val untimed: Boolean,
+    ) {
+        val scheduledCount: Int get() = slots.size
+        val takenCount: Int get() = slots.count { taken[it] == true }
+    }
+
+    /**
+     * Single source of truth for a day's slots.
+     *
+     * A scheme edit rewrites the day's intake-times snapshot but not `slotsTaken`, so ticks
+     * recorded under the old scheme (e.g. "morning" before switching to "09:00") would no
+     * longer match any slot and silently disappear. Such orphaned *taken* keys are appended
+     * so a recorded intake is never hidden or dropped from adherence.
+     */
+    fun daySlots(intakeTimesRaw: String?, taken: Boolean, slotsTakenJson: String?): DaySlots {
+        val parsed = parseIntakeTimes(intakeTimesRaw)
+        val timed = parsed.filter { it != "by-scheme" }
+        val scheduled = timed.ifEmpty { listOf("by-scheme") }
+        val marks = parseSlotsTaken(slotsTakenJson)
+        val orphans = marks
+            .filter { (key, value) -> value && key !in scheduled && (presetIds.contains(key) || timeRe.matches(key)) }
+            .keys
+            .sortedWith(compareBy({ key -> INTAKE_PRESETS.indexOfFirst { it.first == key }.takeIf { it >= 0 } ?: INTAKE_PRESETS.size }, { it }))
+        val slots = scheduled + orphans
+        return DaySlots(
+            slots = slots,
+            taken = slots.associateWith { isSlotTaken(taken, slotsTakenJson, it, scheduled) },
+            untimed = timed.isEmpty() && orphans.isEmpty(),
+        )
+    }
 }

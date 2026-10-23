@@ -21,6 +21,11 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.semantics.selected
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -54,10 +59,18 @@ fun ScaleInput(
     citationSourceId: String? = null,
     onOpenSources: (() -> Unit)? = null,
     onEditLabel: (() -> Unit)? = null,
+    /** Daily questionnaire layout ([QuestionScale]): wrapping question, flat segmented answers. */
+    compact: Boolean = false,
 ) {
+    if (compact) {
+        QuestionScale(label, value, onValueChange, color, max, options, anchors, onEditLabel)
+        return
+    }
     val isNumeric = options == null
     val count = if (isNumeric) max + 1 else options.size
+    // value < 0 = not marked for this day: no step is highlighted.
     val readout = when {
+        value < 0 -> "—"
         !isNumeric -> options.getOrNull(value) ?: "—"
         anchors?.getOrNull(value) != null -> "$value · ${anchors[value]}"
         else -> "$value/$max"
@@ -74,7 +87,7 @@ fun ScaleInput(
         shadowElevation = 0.dp,
         border = androidx.compose.foundation.BorderStroke(
             1.dp,
-            MaterialTheme.colorScheme.outline.copy(alpha = 0.35f),
+            MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f),
         ),
     ) {
         Column(Modifier.padding(14.dp)) {
@@ -243,13 +256,13 @@ private fun OptionSteps(
                     ) { ink ->
                         Text(
                             text = options[i],
-                            fontSize = 13.sp,
+                            fontSize = 12.sp,
                             fontWeight = FontWeight.Medium,
                             textAlign = TextAlign.Center,
                             color = ink,
-                            maxLines = 3,
+                            maxLines = 2,
                             overflow = TextOverflow.Ellipsis,
-                            lineHeight = 16.sp,
+                            lineHeight = 15.sp,
                         )
                     }
                 }
@@ -271,7 +284,7 @@ private fun ScaleStep(
     contentDescription: String,
     content: @Composable (Color) -> Unit,
 ) {
-    val border = MaterialTheme.colorScheme.outline.copy(alpha = 0.7f)
+    val border = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.7f)
     val bg = when {
         active -> color
         else -> color.copy(alpha = tintAmount.coerceIn(0.04f, 0.32f))
@@ -279,7 +292,7 @@ private fun ScaleStep(
     val ink = if (active) color.onFill() else MaterialTheme.colorScheme.onSurface
     Box(
         modifier = modifier
-            .heightIn(min = 58.dp)
+            .heightIn(min = 52.dp)
             .clip(RoundedCornerShape(10.dp))
             .background(bg)
             .border(
@@ -361,4 +374,112 @@ fun OptionScaleRow(
         options = options,
         hint = hint,
     )
+}
+
+/**
+ * Daily-questionnaire layout: the question wraps (never ellipsised), answers sit in one
+ * rectangular segmented bar whose cells wrap their text instead of clipping it, and a numeric
+ * scale gets its end meanings written under the bar. Replaces rounded 52dp pills whose
+ * single-line anchors cut words like «заметно» to «зам…».
+ */
+@Composable
+private fun QuestionScale(
+    label: String,
+    value: Int,
+    onValueChange: (Int) -> Unit,
+    color: Color,
+    max: Int,
+    options: List<String>?,
+    anchors: List<String>?,
+    onEditLabel: (() -> Unit)?,
+) {
+    val count = options?.size ?: (max + 1)
+    val answer = when {
+        value < 0 -> null
+        options != null -> options.getOrNull(value)
+        else -> anchors?.getOrNull(value)?.let { "$value · $it" } ?: "$value"
+    }
+    Column(
+        Modifier
+            .fillMaxWidth()
+            .padding(vertical = 6.dp)
+            .semantics(mergeDescendants = false) { contentDescription = "scale_$label" },
+    ) {
+        Row(verticalAlignment = Alignment.Top) {
+            Text(
+                text = label,
+                style = MaterialTheme.typography.bodyMedium,
+                fontWeight = FontWeight.Medium,
+                modifier = Modifier
+                    .weight(1f)
+                    .then(if (onEditLabel != null) Modifier.clickable(onClick = onEditLabel) else Modifier),
+            )
+            if (answer != null) {
+                Text(
+                    text = answer,
+                    style = MaterialTheme.typography.labelMedium,
+                    color = color,
+                    fontWeight = FontWeight.SemiBold,
+                    textAlign = TextAlign.End,
+                    modifier = Modifier.padding(start = 8.dp).widthIn(max = 140.dp),
+                )
+            }
+        }
+        val shape = RoundedCornerShape(4.dp)
+        val outline = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f)
+        Row(
+            Modifier
+                .padding(top = 6.dp)
+                .fillMaxWidth()
+                .height(IntrinsicSize.Min)
+                .clip(shape)
+                .border(1.dp, outline, shape),
+        ) {
+            for (i in 0 until count) {
+                val active = i == value
+                val text = options?.getOrNull(i) ?: "$i"
+                Box(
+                    Modifier
+                        .weight(1f)
+                        .fillMaxHeight()
+                        .heightIn(min = 44.dp)
+                        .background(if (active) color else Color.Transparent)
+                        .clickable(onClick = { onValueChange(i) })
+                        .semantics {
+                            contentDescription = "$label: " + (options?.getOrNull(i) ?: anchors?.getOrNull(i)?.let { "$i, $it" } ?: "$i")
+                            selected = active
+                        }
+                        .padding(horizontal = 2.dp, vertical = 6.dp),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Text(
+                        text = text,
+                        color = if (active) color.onFill() else MaterialTheme.colorScheme.onSurface,
+                        style = if (options != null) MaterialTheme.typography.labelMedium else MaterialTheme.typography.titleSmall,
+                        textAlign = TextAlign.Center,
+                    )
+                }
+                if (i < count - 1) {
+                    Box(Modifier.width(1.dp).fillMaxHeight().background(outline))
+                }
+            }
+        }
+        if (options == null && anchors != null && anchors.size >= 2) {
+            Row(Modifier.fillMaxWidth().padding(top = 2.dp)) {
+                Text(
+                    anchors.first(),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.weight(1f),
+                )
+                Text(
+                    anchors.getOrNull(max) ?: anchors.last(),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    textAlign = TextAlign.End,
+                    modifier = Modifier.weight(1f),
+                )
+            }
+        }
+    }
 }

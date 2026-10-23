@@ -5,6 +5,8 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.IntrinsicSize
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
@@ -58,6 +60,8 @@ import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.moodlife.app.R
+import com.moodlife.app.domain.markedValue
+import com.moodlife.app.domain.markedPolarity
 import com.moodlife.app.data.local.entity.MoodEntryEntity
 import com.moodlife.app.domain.CycleUtils
 import com.moodlife.app.domain.MedAccentColors
@@ -556,6 +560,9 @@ private fun CalendarMonthGrid(
                     }
                 }
             }
+            if (state.period?.lastPeriodStart != null) {
+                CyclePhaseIconLegend(Modifier.padding(top = 10.dp, start = 4.dp, end = 4.dp))
+            }
         }
     }
 }
@@ -614,14 +621,18 @@ private fun CalendarMedsMonthSection(
             )
         } else {
             weeks.forEach { week ->
+                // Row height = tallest day in the week, so every med line fits and cells align.
                 Row(
-                    Modifier.fillMaxWidth().padding(vertical = 2.dp),
+                    Modifier
+                        .fillMaxWidth()
+                        .height(IntrinsicSize.Min)
+                        .padding(vertical = 2.dp),
                     horizontalArrangement = Arrangement.spacedBy(2.dp),
                 ) {
                     week.forEach { cell ->
                         MedMonthDayCell(
                             cell = cell,
-                            modifier = Modifier.weight(1f),
+                            modifier = Modifier.weight(1f).fillMaxHeight(),
                             onClick = { cell.date?.let(onDayClick) },
                         )
                     }
@@ -680,6 +691,8 @@ private fun MedCalendarLegend(
     }
 }
 
+private const val MAX_MED_LINES_PER_CELL = 5
+
 @Composable
 private fun MedMonthDayCell(
     cell: MedMonthCell,
@@ -696,7 +709,8 @@ private fun MedMonthDayCell(
     }
     Column(
         modifier
-            .aspectRatio(0.62f)
+            // Content-sized (was a fixed 0.62 aspect ratio that clipped the 2nd–3rd med line).
+            .heightIn(min = 44.dp)
             .clip(RoundedCornerShape(6.dp))
             .border(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.55f), RoundedCornerShape(6.dp))
             .background(MaterialTheme.colorScheme.surface)
@@ -726,8 +740,8 @@ private fun MedMonthDayCell(
                 )
             }
         }
-        // Priority: stable per-med glyph + dosage (names omitted to keep cells readable).
-        visible.take(3).forEach { line ->
+        // Stable per-med glyph + dosage (names live in the legend below the grid).
+        visible.take(MAX_MED_LINES_PER_CELL).forEach { line ->
             val dose = line.dosage?.trim()?.takeIf { it.isNotEmpty() } ?: "—"
             val tint = MedAccentColors.accentForName(line.name)
             Row(
@@ -750,7 +764,9 @@ private fun MedMonthDayCell(
                         fontWeight = FontWeight.Bold,
                         color = Color.White,
                         maxLines = 1,
-                        lineHeight = 8.sp,
+                        softWrap = false,
+                        lineHeight = 9.sp,
+                        textAlign = TextAlign.Center,
                     )
                 }
                 Text(
@@ -765,9 +781,9 @@ private fun MedMonthDayCell(
                 )
             }
         }
-        if (visible.size > 3) {
+        if (visible.size > MAX_MED_LINES_PER_CELL) {
             Text(
-                "+${visible.size - 3}",
+                "+${visible.size - MAX_MED_LINES_PER_CELL}",
                 fontSize = 7.sp,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -809,6 +825,8 @@ private fun androidx.compose.foundation.layout.RowScope.CalendarDayCell(
     val moon = iso?.let { MoonPhaseCalc.moonPhase(it) }
     val glyph = entry?.let { dayGlyph(it) }
     val personalIcon = iso?.let { state.dayIcons[it] }
+    val weatherIcon = iso?.let { state.weatherByDate[it] }?.icon?.take(2)?.takeIf { it.isNotBlank() }
+    val primaryBadge = personalIcon ?: glyph?.takeIf { it != "·" }
     val baseBg = if (tint == Color.Transparent) {
         Color.Transparent
     } else {
@@ -830,15 +848,15 @@ private fun androidx.compose.foundation.layout.RowScope.CalendarDayCell(
                 },
             )
             .clickable(enabled = iso != null, onClick = onClick)
-            .padding(horizontal = 2.dp, vertical = 3.dp)
+            .padding(horizontal = 2.dp, vertical = 2.dp)
             .semantics {
                 contentDescription = buildString {
                     dayNum?.let { append("День $it") }
-                    glyph?.let { append(", $it") }
-                    personalIcon?.let { append(", значок $it") }
+                    primaryBadge?.let { append(", $it") }
                     moon?.let { append(", ${it.label}") }
                 }
             },
+        horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         Row(
             Modifier.fillMaxWidth(),
@@ -848,36 +866,58 @@ private fun androidx.compose.foundation.layout.RowScope.CalendarDayCell(
             dayNum?.let {
                 Text(
                     it,
-                    style = MaterialTheme.typography.labelMedium,
+                    style = MaterialTheme.typography.labelSmall,
                     fontWeight = if (entry != null) FontWeight.SemiBold else FontWeight.Normal,
                     color = MaterialTheme.colorScheme.onSurface,
+                    maxLines = 1,
+                    fontSize = 10.sp,
+                    lineHeight = 11.sp,
                 )
             }
-            Row(horizontalArrangement = Arrangement.spacedBy(1.dp)) {
-                if (personalIcon != null) Text(personalIcon, fontSize = 8.sp)
-                if (glyph != null) {
-                    Text(glyph, fontSize = 9.sp, fontWeight = FontWeight.Bold)
-                }
-                iso?.let { state.weatherByDate[it] }?.icon?.let { Text(it.take(2), fontSize = 7.sp) }
-                if (moon != null) Text(moon.icon, fontSize = 7.sp)
-                if (isPeriod) {
-                    Box(
-                        Modifier
-                            .size(width = 8.dp, height = 3.dp)
-                            .clip(RoundedCornerShape(50))
-                            .background(palette.cycle),
-                    )
+            cycleMarkers?.phase?.let { phase ->
+                CycleUtils.PHASE_INFO[phase]?.let { info ->
+                    Text(info.emoji, fontSize = 9.sp, lineHeight = 10.sp, maxLines = 1, softWrap = false)
                 }
             }
         }
-        if (glyph != null || personalIcon != null) {
-            Spacer(Modifier.height(4.dp))
-            Text(
-                glyph ?: personalIcon.orEmpty(),
-                fontSize = 12.sp,
-                fontWeight = FontWeight.Bold,
-                modifier = Modifier.align(Alignment.CenterHorizontally),
-            )
+        Box(
+            Modifier
+                .weight(1f)
+                .fillMaxWidth(),
+            contentAlignment = Alignment.Center,
+        ) {
+            if (primaryBadge != null) {
+                Text(
+                    primaryBadge,
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Bold,
+                    lineHeight = 14.sp,
+                    maxLines = 1,
+                    softWrap = false,
+                    textAlign = TextAlign.Center,
+                )
+            }
+        }
+        val secondary = buildList {
+            weatherIcon?.let { add(it) }
+            moon?.icon?.let { add(it) }
+            if (personalIcon != null && glyph != null && glyph != "·") add(glyph)
+        }.take(2)
+        if (secondary.isNotEmpty()) {
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(1.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                secondary.forEach { mark ->
+                    Text(
+                        mark,
+                        fontSize = 7.sp,
+                        lineHeight = 8.sp,
+                        maxLines = 1,
+                        softWrap = false,
+                    )
+                }
+            }
         }
     }
 }
@@ -893,6 +933,25 @@ private fun dayGlyph(entry: MoodEntryEntity): String {
         entry.irritable >= 3 -> "Р${entry.irritable}"
         entry.depressed == 0 && entry.elevated == 0 -> "·"
         else -> "·"
+    }
+}
+
+/** Cycle phase icons used in the cells. */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun CyclePhaseIconLegend(modifier: Modifier = Modifier) {
+    FlowRow(
+        modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+        verticalArrangement = Arrangement.spacedBy(4.dp),
+    ) {
+        CycleUtils.PHASE_INFO.values.forEach { info ->
+            Text(
+                "${info.emoji} ${info.label}",
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
     }
 }
 

@@ -4,6 +4,7 @@ import androidx.room.Dao
 import androidx.room.Insert
 import androidx.room.OnConflictStrategy
 import androidx.room.Query
+import androidx.room.Update
 import com.moodlife.app.data.local.entity.DayNoteEntity
 import com.moodlife.app.data.local.entity.MedicationEntity
 import com.moodlife.app.data.local.entity.MedicationLogEntity
@@ -41,6 +42,9 @@ interface MedicationDao {
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun upsert(medication: MedicationEntity)
+
+    @Query("DELETE FROM medications WHERE id = :id")
+    suspend fun deleteById(id: String)
 }
 
 @Dao
@@ -65,6 +69,19 @@ interface MedicationLogDao {
     @Query("DELETE FROM medication_logs WHERE medicationId = :medId AND date = :date")
     suspend fun deleteByMedAndDate(medId: String, date: String)
 
+    @Query("DELETE FROM medication_logs WHERE medicationId = :medId")
+    suspend fun deleteAllForMed(medId: String)
+
+    @Query("SELECT COUNT(*) FROM medication_logs WHERE medicationId = :medId AND date <= :today")
+    suspend fun countPastForMed(medId: String, today: String): Int
+
+    /** Pre-planned future days nobody has marked yet (no slot taken). */
+    @Query(
+        "DELETE FROM medication_logs WHERE medicationId = :medId AND date > :today " +
+            "AND taken = 0 AND slotsTaken NOT LIKE '%true%'",
+    )
+    suspend fun deleteFutureUnmarked(medId: String, today: String)
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun upsert(log: MedicationLogEntity)
 }
@@ -77,6 +94,9 @@ interface SymptomDao {
     @Query("SELECT * FROM symptoms ORDER BY isActive DESC, sortOrder, name")
     fun observeAll(): Flow<List<SymptomEntity>>
 
+    @Query("SELECT * FROM symptoms ORDER BY sortOrder, name")
+    suspend fun listAll(): List<SymptomEntity>
+
     @Query("SELECT * FROM symptoms WHERE name = :name LIMIT 1")
     suspend fun getByName(name: String): SymptomEntity?
 
@@ -88,6 +108,9 @@ interface SymptomDao {
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun upsert(symptom: SymptomEntity)
+
+    @Query("DELETE FROM symptoms WHERE id = :id")
+    suspend fun deleteById(id: String)
 }
 
 @Dao
@@ -106,6 +129,12 @@ interface SymptomLogDao {
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun upsert(log: SymptomLogEntity)
+
+    @Query("DELETE FROM symptom_logs WHERE symptomId = :symptomId")
+    suspend fun deleteAllForSymptom(symptomId: String)
+
+    @Query("SELECT COUNT(*) FROM symptom_logs WHERE symptomId = :symptomId")
+    suspend fun countForSymptom(symptomId: String): Int
 }
 
 @Dao
@@ -116,6 +145,15 @@ interface DayNoteDao {
     @Query("SELECT * FROM day_notes WHERE date >= :from AND date <= :to ORDER BY date, createdAt")
     suspend fun listRange(from: String, to: String): List<DayNoteEntity>
 
+    @Query("SELECT * FROM day_notes WHERE id = :id LIMIT 1")
+    suspend fun getById(id: String): DayNoteEntity?
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insert(note: DayNoteEntity)
+
+    @Update
+    suspend fun update(note: DayNoteEntity)
+
+    @Query("DELETE FROM day_notes WHERE id = :id")
+    suspend fun deleteById(id: String)
 }

@@ -11,25 +11,42 @@ object DefaultSeedData {
         val hint: String? = null,
     )
 
+    /** Prefill for symptom/check-in "options" scale. */
+    val OPTIONS_SEVERITY_LABELS = listOf("Нет", "Слабо", "Умеренно", "Сильно")
+
+    val ALLOWED_SYMPTOM_SCALES = setOf("yesno", "0-5", "options")
+
     val DEFAULT_SYMPTOMS = listOf(
-        DefaultSymptom("Речь быстрее", "Поведение", "#F59E0B", "qual4-lmh", "Сравнительно с обычным днём."),
-        DefaultSymptom("Траты", "Поведение", "#EF4444", "qual4-i", "Покупки сверх обычного."),
-        DefaultSymptom("Мысли гонкой", "Когнитивные", "#F97316", "qual4-i"),
-        DefaultSymptom("Не сидится", "Поведение", "#F59E0B", "qual4-i"),
-        DefaultSymptom("Рискованные решения", "Поведение", "#DC2626", "yesno"),
-        DefaultSymptom("Нет интереса", "Эмоции", "#64748B", "qual4-i"),
-        DefaultSymptom("Уход в себя", "Поведение", "#6366F1", "qual4-i"),
-        DefaultSymptom("Плаксивость", "Эмоции", "#8B5CF6", "qual4-i"),
-        DefaultSymptom("Паническая атака", "Эмоции", "#EF4444", "yesno"),
-        DefaultSymptom("Головная боль", "Тело", "#0EA5E9", "qual4-i"),
-        DefaultSymptom("Туман в голове", "Когнитивные", "#0891B2", "qual4-i"),
+        DefaultSymptom("Приподнятость / эйфория", "Эмоции", "#F59E0B", "0-5", "Настроение выше обычного без видимой причины."),
+        DefaultSymptom("Ускоренная речь", "Поведение", "#F97316", "0-5", "Говорю быстрее, трудно перебить."),
+        DefaultSymptom("Скачка мыслей", "Когнитивные", "#F97316", "0-5", "Мысли несутся, трудно сосредоточиться на одной."),
+        DefaultSymptom("Завышенная самооценка", "Эмоции", "#EF4444", "0-5", "Ощущение особых способностей, грандиозных планов."),
+        DefaultSymptom("Двигательное беспокойство", "Поведение", "#F59E0B", "0-5", "Не могу усидеть на месте, много двигаюсь."),
+        DefaultSymptom("Импульсивные поступки", "Поведение", "#DC2626", "yesno", "Незапланированные траты, рискованные решения."),
+        DefaultSymptom("Подавленность / тоска", "Эмоции", "#6366F1", "0-5", "Ощущение пустоты, грусти, безнадёжности."),
+        DefaultSymptom("Упадок сил / апатия", "Тело", "#8B5CF6", "0-5", "Нет энергии, трудно начать что-либо делать."),
+        DefaultSymptom("Потеря интереса", "Эмоции", "#64748B", "0-5", "Занятия, которые нравились, не приносят удовольствия."),
+        DefaultSymptom("Негативные мысли", "Когнитивные", "#475569", "0-5", "Мысли о вине, никчёмности, пессимизм."),
+        DefaultSymptom("Трудности с концентрацией", "Когнитивные", "#0EA5E9", "0-5", "Сложно сосредоточиться, забываю слова или задачи."),
+        DefaultSymptom("Плаксивость", "Эмоции", "#8B5CF6", "0-5", "Слёзы близко или чаще, чем обычно."),
+        DefaultSymptom("Раздражительность", "Эмоции", "#DC2626", "0-5", "Вспышки раздражения, нетерпимость к мелочам."),
+        DefaultSymptom("Тревога", "Эмоции", "#06B6D4", "0-5", "Внутреннее напряжение, беспокойство, страх."),
     )
 
-    fun scaleMaxFor(type: String): Int = when (type) {
+    fun scaleMaxFor(type: String): Int = when (normalizeSymptomScale(type)) {
         "0-5" -> 5
-        "0-10" -> 10
         "yesno" -> 1
-        else -> 3
+        "options" -> OPTIONS_SEVERITY_LABELS.size - 1
+        else -> 5
+    }
+
+    /** Map legacy symptom scales to the allowed set. */
+    fun normalizeSymptomScale(type: String): String = when (type) {
+        "yesno" -> "yesno"
+        "options" -> "options"
+        "0-5" -> "0-5"
+        "0-10", "qual4-i", "qual4-lmh" -> "0-5"
+        else -> if (type in ALLOWED_SYMPTOM_SCALES) type else "0-5"
     }
 
     data class DefaultFactor(

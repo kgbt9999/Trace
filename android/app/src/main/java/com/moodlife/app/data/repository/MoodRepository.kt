@@ -6,6 +6,7 @@ import com.moodlife.app.data.local.entity.MoodEntryEntity
 import com.moodlife.app.util.EpisodeClassifier
 import kotlinx.coroutines.flow.Flow
 import java.util.UUID
+import com.moodlife.app.domain.MarkedAxes
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -47,6 +48,7 @@ class MoodRepository @Inject constructor(
             alcoholUse = fields.alcoholUse,
             substanceUse = fields.substanceUse,
             routineScore = fields.routineScore,
+            markedAxes = MarkedAxes.serialize(fields.marked),
             createdAt = now,
             updatedAt = now,
         )
@@ -100,6 +102,7 @@ class MoodRepository @Inject constructor(
             alcoholUse = fields.alcoholUse,
             substanceUse = fields.substanceUse,
             routineScore = fields.routineScore,
+            markedAxes = MarkedAxes.serialize(fields.marked),
             createdAt = existing?.createdAt ?: now,
             updatedAt = now,
         )
@@ -130,7 +133,31 @@ class MoodRepository @Inject constructor(
         val alcoholUse: Int = 0,
         val substanceUse: Int = 0,
         val routineScore: Int = 0,
+        /** Scales the user marked; values for other keys are stored as 0 but ignored. */
+        val marked: Set<String> = emptySet(),
     ) {
+        /** Sets one day scale by its key and marks it. */
+        fun withAxis(key: String, value: Int): MoodFields {
+            val next = when (key) {
+                "depressed" -> copy(depressed = value)
+                "elevated" -> copy(elevated = value)
+                "anxious" -> copy(anxious = value)
+                "irritable" -> copy(irritable = value)
+                "energy" -> copy(energy = value)
+                "concentration" -> copy(concentration = value)
+                "appetite" -> copy(appetite = value)
+                "sociability" -> copy(sociability = value)
+                "sleepQuality" -> copy(sleepQuality = value)
+                "functioning" -> copy(functioning = value)
+                "safetyCheck" -> copy(safetyCheck = value)
+                "alcoholUse" -> copy(alcoholUse = value)
+                "substanceUse" -> copy(substanceUse = value)
+                "routineScore" -> copy(routineScore = value)
+                else -> return this
+            }
+            return next.copy(marked = marked + key)
+        }
+
         companion object {
             fun fromEntity(e: MoodEntryEntity) = MoodFields(
                 depressed = e.depressed,
@@ -150,6 +177,7 @@ class MoodRepository @Inject constructor(
                 alcoholUse = e.alcoholUse,
                 substanceUse = e.substanceUse,
                 routineScore = e.routineScore,
+                marked = MarkedAxes.of(e),
             )
         }
     }

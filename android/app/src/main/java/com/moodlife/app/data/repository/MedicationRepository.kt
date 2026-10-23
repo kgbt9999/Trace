@@ -101,7 +101,22 @@ class MedicationRepository @Inject constructor(
 
     suspend fun deactivate(med: MedicationEntity) {
         medicationDao.upsert(med.copy(isActive = false, updatedAt = System.currentTimeMillis()))
-        // Keep historical logs; do not delete rows on hide/rename.
+        // Keep history, but drop the pre-planned future days: a hidden medication must not show
+        // up as "missed" tomorrow.
+        medicationLogDao.deleteFutureUnmarked(med.id, java.time.LocalDate.now().toString())
+    }
+
+    /** Days with a journal row up to today — shown in the delete confirmation. */
+    suspend fun pastLogCount(medicationId: String): Int =
+        medicationLogDao.countPastForMed(medicationId, java.time.LocalDate.now().toString())
+
+    /**
+     * Removes a medication added by mistake together with every journal row, so it disappears
+     * from the calendar and reports. Hiding ([deactivate]) is the choice when history matters.
+     */
+    suspend fun deleteCompletely(medicationId: String) {
+        medicationLogDao.deleteAllForMed(medicationId)
+        medicationDao.deleteById(medicationId)
     }
 
     suspend fun toggleSlot(
@@ -113,6 +128,8 @@ class MedicationRepository @Inject constructor(
         val med = medicationDao.getById(medicationId) ?: return
         val existing = medicationLogDao.getByMedAndDate(medicationId, date)
         val scheduled = MedsUtils.parseIntakeTimes(effectiveIntakeTimes(med, existing))
+            .filter { it != "by-scheme" }
+            .ifEmpty { listOf("by-scheme") }
         val now = System.currentTimeMillis()
         val slots = existing?.let { MedsUtils.parseSlotsTaken(it.slotsTaken).toMutableMap() }
             ?: mutableMapOf()
@@ -230,6 +247,19 @@ class MedicationRepository @Inject constructor(
         medicationLogDao.deleteByMedAndDate(medicationId, date)
     }
 
+    /**
+     * Whether [med] belongs on [date] when that day has no journal row yet: only from the day it
+     * was added. Without this a newly added medication showed up (as "missed") on every past day.
+     */
+    fun isPlannedOn(med: MedicationEntity, date: String): Boolean =
+        med.isActive && date >= startDate(med)
+
+    fun startDate(med: MedicationEntity): String =
+        java.time.Instant.ofEpochMilli(med.createdAt)
+            .atZone(java.time.ZoneId.systemDefault())
+            .toLocalDate()
+            .toString()
+
     fun effectiveName(med: MedicationEntity, log: MedicationLogEntity?): String =
         log?.nameSnapshot?.takeIf { it.isNotBlank() } ?: med.name
 
@@ -295,5 +325,21 @@ class DayNoteRepository @Inject constructor(
                 updatedAt = now,
             ),
         )
+    }
+
+    suspend fun updateNote(id: String, content: String) {
+        val text = content.trim()
+        if (text.isEmpty()) return
+        val existing = dayNoteDao.getById(id) ?: return
+        dayNoteDao.update(
+            existing.copy(
+                content = text,
+                updatedAt = System.currentTimeMillis(),
+            ),
+        )
+    }
+
+    suspend fun deleteNote(id: String) {
+        dayNoteDao.deleteById(id)
     }
 }

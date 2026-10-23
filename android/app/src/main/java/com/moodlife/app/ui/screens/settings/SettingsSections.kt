@@ -1,5 +1,9 @@
 package com.moodlife.app.ui.screens.settings
 
+import androidx.compose.material.icons.outlined.Delete
+import androidx.compose.material.icons.Icons
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import android.content.ActivityNotFoundException
 import android.content.Intent
 import android.net.Uri
@@ -54,6 +58,8 @@ import com.moodlife.app.data.local.entity.MedicationEntity
 import com.moodlife.app.data.local.entity.SymptomEntity
 import com.moodlife.app.ui.components.IsoDatePickerField
 import com.moodlife.app.ui.components.MedicationFormDialog
+import com.moodlife.app.ui.components.ScaleTypeChips
+import com.moodlife.app.ui.components.TRACKABLE_SCALE_OPTIONS
 import com.moodlife.app.ui.theme.AppearanceId
 import com.moodlife.app.ui.theme.BrandColors
 import com.moodlife.app.ui.theme.ThemeViewModel
@@ -63,21 +69,15 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 
 private val SYMPTOM_SCALE_TYPES = listOf(
-    "qual4-i" to R.string.settings_scale_qual4_i,
-    "qual4-lmh" to R.string.settings_scale_qual4_lmh,
     "yesno" to R.string.settings_scale_yesno,
     "0-5" to R.string.settings_scale_0_5,
-    "0-10" to R.string.settings_scale_0_10,
+    "options" to R.string.settings_scale_options_short,
 )
 
 private val SYMPTOM_CATEGORIES = listOf("Общие", "Поведение", "Когнитивные", "Эмоции", "Тело")
 private val FACTOR_CATEGORIES = listOf("Триггеры", "Напитки", "Активность", "Стрессоры", "Позитив", "Погода")
-private val FACTOR_SCALE_TYPES = listOf(
-    "0-5" to R.string.settings_scale_0_5,
-    "0-10" to R.string.settings_scale_0_10,
-    "qual4-i" to R.string.settings_scale_qual4_i,
-    "yesno" to R.string.settings_scale_yesno,
-)
+/** Same set Today can render (0-10 / qual4-i used to be offered and silently shown as 0–5). */
+private val FACTOR_SCALE_TYPES = SYMPTOM_SCALE_TYPES
 
 private val WEATHER_CITIES = listOf(
     Triple("Москва", "55.75", "37.62"),
@@ -184,7 +184,7 @@ private fun SymptomsSettingsSection(state: SettingsUiState, viewModel: SettingsV
                     initialName = "",
                     initialCategory = "Общие",
                     initialColor = SETTINGS_COLOR_PALETTE.first(),
-                    initialScale = "qual4-i",
+                    initialScale = "0-5",
                     initialHint = "",
                     submitLabel = stringResource(R.string.settings_add),
                     onSubmit = { name, category, color, scale, hint ->
@@ -206,7 +206,15 @@ private fun SymptomsSettingsSection(state: SettingsUiState, viewModel: SettingsV
                         title = symptom.name,
                         leadingColor = parseCssColor(symptom.color),
                         trailing = {
-                            SettingsItemActions(onRestore = { viewModel.restoreSymptom(symptom) })
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                DeleteCatalogItemButton(
+                                    name = symptom.name,
+                                    marksText = R.string.settings_item_delete_marks_symptom,
+                                    countMarks = { viewModel.symptomMarks(symptom) },
+                                    onDelete = { viewModel.deleteSymptom(symptom) },
+                                )
+                                SettingsItemActions(onRestore = { viewModel.restoreSymptom(symptom) })
+                            }
                         },
                     )
                 }
@@ -412,7 +420,17 @@ private fun FactorsSettingsSection(state: SettingsUiState, viewModel: SettingsVi
                 archived.forEach { factor ->
                     SettingsListRow(
                         title = factor.name,
-                        trailing = { SettingsItemActions(onRestore = { viewModel.restoreFactor(factor) }) },
+                        trailing = {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                DeleteCatalogItemButton(
+                                    name = factor.name,
+                                    marksText = R.string.settings_item_delete_marks_factor,
+                                    countMarks = { viewModel.factorMarks(factor) },
+                                    onDelete = { viewModel.deleteFactor(factor) },
+                                )
+                                SettingsItemActions(onRestore = { viewModel.restoreFactor(factor) })
+                            }
+                        },
                     )
                 }
             }
@@ -423,7 +441,9 @@ private fun FactorsSettingsSection(state: SettingsUiState, viewModel: SettingsVi
         var name by remember(factor.id) { mutableStateOf(factor.name) }
         var cat by remember(factor.id) { mutableStateOf(factor.category) }
         var color by remember(factor.id) { mutableStateOf(factor.color) }
-        var scale by remember(factor.id) { mutableStateOf(factor.scaleType) }
+        var scale by remember(factor.id) {
+            mutableStateOf(com.moodlife.app.domain.DefaultSeedData.normalizeSymptomScale(factor.scaleType))
+        }
         AlertDialog(
             onDismissRequest = { editing = null },
             title = { Text(stringResource(R.string.settings_edit)) },
@@ -562,7 +582,17 @@ private fun WarningsSettingsSection(state: SettingsUiState, viewModel: SettingsV
                 archived.forEach { sign ->
                     SettingsListRow(
                         title = sign.name,
-                        trailing = { SettingsItemActions(onRestore = { viewModel.restoreWarning(sign) }) },
+                        trailing = {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                DeleteCatalogItemButton(
+                                    name = sign.name,
+                                    marksText = R.string.settings_item_delete_marks_warning,
+                                    countMarks = { viewModel.warningMarks(sign) },
+                                    onDelete = { viewModel.deleteWarning(sign) },
+                                )
+                                SettingsItemActions(onRestore = { viewModel.restoreWarning(sign) })
+                            }
+                        },
                     )
                 }
             }
@@ -634,23 +664,64 @@ private fun MedsSettingsSection(state: SettingsUiState, viewModel: SettingsViewM
         FilledTonalButton(onClick = { showAdd = true }, modifier = Modifier.fillMaxWidth()) {
             Text(stringResource(R.string.settings_add_med))
         }
+        val medReminderContext = LocalContext.current
+        var medsReminderOn by remember { mutableStateOf(false) }
+        var medsReminderTimes by remember { mutableStateOf("08:00,21:00") }
+        LaunchedEffect(Unit) {
+            val (on, times) = com.moodlife.app.notifications.ReminderScheduler.readMeds(medReminderContext)
+            medsReminderOn = on
+            medsReminderTimes = times.joinToString(",")
+        }
         SettingsCard(
             title = stringResource(R.string.notif_meds_section_title),
             description = stringResource(R.string.notif_meds_section_desc),
         ) {
-            Text(
-                stringResource(R.string.settings_med_reminders_note),
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-            Text(
-                stringResource(R.string.notif_meds_section_hint),
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(top = 6.dp),
-            )
-            TextButton(onClick = { viewModel.dayNavigation.selectSettingsSection("other") }) {
-                Text(stringResource(R.string.notif_open_other))
+            Row(
+                Modifier.fillMaxWidth().heightIn(min = 48.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    stringResource(R.string.notif_meds_enable),
+                    Modifier.weight(1f),
+                    style = MaterialTheme.typography.bodyMedium,
+                )
+                Switch(
+                    checked = medsReminderOn,
+                    onCheckedChange = { on ->
+                        medsReminderOn = on
+                        viewModel.saveMedsReminder(
+                            medReminderContext, on,
+                            medsReminderTimes.split(',').map { it.trim() }.filter { it.isNotEmpty() },
+                        )
+                    },
+                )
+            }
+            if (medsReminderOn) {
+                OutlinedTextField(
+                    value = medsReminderTimes,
+                    onValueChange = { raw ->
+                        medsReminderTimes = raw
+                        viewModel.saveMedsReminder(
+                            medReminderContext, true,
+                            raw.split(',').map { it.trim() }.filter { it.isNotEmpty() },
+                        )
+                    },
+                    label = { Text(stringResource(R.string.notif_meds_times)) },
+                    supportingText = { Text(stringResource(R.string.notif_meds_times_hint)) },
+                    modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
+                    singleLine = true,
+                )
+            }
+            if (android.os.Build.VERSION.SDK_INT >= 33) {
+                val launcher = androidx.activity.compose.rememberLauncherForActivityResult(
+                    androidx.activity.result.contract.ActivityResultContracts.RequestPermission(),
+                ) { }
+                TextButton(
+                    onClick = { launcher.launch(android.Manifest.permission.POST_NOTIFICATIONS) },
+                    modifier = Modifier.padding(top = 2.dp),
+                ) {
+                    Text(stringResource(R.string.notif_request_permission))
+                }
             }
         }
         if (showAdd) {
@@ -675,11 +746,85 @@ private fun MedsSettingsSection(state: SettingsUiState, viewModel: SettingsViewM
                     SettingsListRow(
                         title = med.name,
                         subtitle = med.dosage,
-                        trailing = { SettingsItemActions(onRestore = { viewModel.restoreMedication(med) }) },
+                        trailing = {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                DeleteMedicationButton(med, viewModel)
+                                SettingsItemActions(onRestore = { viewModel.restoreMedication(med) })
+                            }
+                        },
                     )
                 }
             }
         }
+    }
+}
+
+/**
+ * Deletes a hidden symptom, trigger or early sign for good, after a confirmation that names it and
+ * says how many diary marks go with it. Restoring stays the choice when the history matters.
+ */
+@Composable
+private fun DeleteCatalogItemButton(
+    name: String,
+    marksText: Int,
+    countMarks: suspend () -> Int,
+    onDelete: () -> Unit,
+) {
+    var confirm by remember { mutableStateOf(false) }
+    var marks by remember { mutableStateOf<Int?>(null) }
+    LaunchedEffect(confirm) { if (confirm) marks = countMarks() }
+    IconButton(onClick = { confirm = true }) {
+        Icon(
+            Icons.Outlined.Delete,
+            contentDescription = stringResource(R.string.settings_item_delete_cd, name),
+            tint = MaterialTheme.colorScheme.error,
+        )
+    }
+    if (confirm) {
+        AlertDialog(
+            onDismissRequest = { confirm = false },
+            title = { Text(stringResource(R.string.settings_item_delete_title, name)) },
+            text = { Text(stringResource(marksText, marks ?: 0)) },
+            confirmButton = {
+                TextButton(onClick = { onDelete(); confirm = false }) {
+                    Text(stringResource(R.string.settings_item_delete_confirm), color = MaterialTheme.colorScheme.error)
+                }
+            },
+            dismissButton = { TextButton(onClick = { confirm = false }) { Text(stringResource(android.R.string.cancel)) } },
+        )
+    }
+}
+
+/** Deletes a medication added by mistake, with all its days, after a confirmation that names it. */
+@Composable
+private fun DeleteMedicationButton(med: MedicationEntity, viewModel: SettingsViewModel) {
+    var confirm by remember { mutableStateOf(false) }
+    var days by remember { mutableStateOf<Int?>(null) }
+    LaunchedEffect(confirm) { if (confirm) days = viewModel.medicationLogDays(med) }
+    IconButton(onClick = { confirm = true }) {
+        Icon(
+            Icons.Outlined.Delete,
+            contentDescription = stringResource(R.string.settings_med_delete_cd, med.name),
+            tint = MaterialTheme.colorScheme.error,
+        )
+    }
+    if (confirm) {
+        AlertDialog(
+            onDismissRequest = { confirm = false },
+            title = { Text(stringResource(R.string.settings_med_delete_title, med.name)) },
+            text = {
+                Text(
+                    stringResource(R.string.settings_med_delete_text, days ?: 0) + "\n\n" +
+                        stringResource(R.string.settings_med_delete_hint),
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = { viewModel.deleteMedication(med); confirm = false }) {
+                    Text(stringResource(R.string.settings_med_delete_confirm), color = MaterialTheme.colorScheme.error)
+                }
+            },
+            dismissButton = { TextButton(onClick = { confirm = false }) { Text(stringResource(android.R.string.cancel)) } },
+        )
     }
 }
 
@@ -704,10 +849,13 @@ private fun MedRow(med: MedicationEntity, viewModel: SettingsViewModel) {
             }
         },
         trailing = {
-            SettingsItemActions(
-                onEdit = { showEdit = true },
-                onHide = { viewModel.deactivateMedication(med) },
-            )
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                DeleteMedicationButton(med, viewModel)
+                SettingsItemActions(
+                    onEdit = { showEdit = true },
+                    onHide = { viewModel.deactivateMedication(med) },
+                )
+            }
         },
     )
     if (showEdit) {
@@ -1154,6 +1302,7 @@ private fun IntegrationsSettingsSection(
                     modifier = Modifier.padding(top = 4.dp),
                 )
             }
+            HcDiagnostics(viewModel)
 
             if (!state.hcAvailable) {
                 Button(
@@ -1293,6 +1442,7 @@ private fun IntegrationsSettingsSection(
             FilledTonalButton(onClick = onImportFlo, modifier = Modifier.padding(top = 8.dp).fillMaxWidth()) {
                 Text(stringResource(R.string.settings_flo_import))
             }
+            ImportResultLine(state.integrationMessage, prefix = "import_")
             if (state.floCount > 0) {
                 OutlinedButton(onClick = viewModel::clearFlo, modifier = Modifier.padding(top = 8.dp).fillMaxWidth()) {
                     Text(stringResource(R.string.settings_flo_clear))
@@ -1420,6 +1570,7 @@ private fun DataSettingsSection(
             FilledTonalButton(onClick = onImportBackup, modifier = Modifier.fillMaxWidth().padding(top = 8.dp)) {
                 Text(stringResource(R.string.settings_backup_import))
             }
+            ImportResultLine(state.integrationMessage, prefix = "import_")
             Text(
                 stringResource(R.string.settings_export_formats),
                 style = MaterialTheme.typography.labelMedium,
@@ -1612,233 +1763,10 @@ private fun DataSettingsSection(
 @Composable
 private fun LayoutSettingsSection(viewModel: SettingsViewModel) {
     var prefs by remember { mutableStateOf(com.moodlife.app.domain.TodaySections.defaults()) }
-    val checkInConfigRaw by viewModel.observeCheckInConfig().collectAsStateWithLifecycle(initialValue = null)
-    val checkInScheme by viewModel.observeCheckInScheme().collectAsStateWithLifecycle(initialValue = null)
-    val checkInAxesRaw by viewModel.observeCheckInAxes().collectAsStateWithLifecycle(initialValue = null)
-    var config by remember {
-        mutableStateOf(com.moodlife.app.domain.CheckInConfig.default())
-    }
-    // Local draft strings so typing stays snappy; config/parse happens on commit + debounce.
-    var stepLabelDrafts by remember { mutableStateOf(mapOf<String, String>()) }
-    var configHydrated by remember { mutableStateOf(false) }
-    var configDirty by remember { mutableStateOf(false) }
-    fun updateConfig(next: com.moodlife.app.domain.CheckInConfig) {
-        config = next
-        configDirty = true
-    }
-    LaunchedEffect(checkInConfigRaw, checkInScheme, checkInAxesRaw) {
-        if (configDirty) return@LaunchedEffect
-        val parsed = com.moodlife.app.domain.CheckInConfig.parse(checkInConfigRaw)
-        if (parsed != null) {
-            config = parsed
-        } else {
-            val axes = checkInAxesRaw?.split(',')?.map { it.trim() }?.filter { it.isNotEmpty() }?.toSet()
-                ?: setOf("depressed", "elevated", "anxious", "irritable")
-            config = com.moodlife.app.domain.CheckInConfig.fromScheme(
-                checkInScheme ?: "morning_day_night",
-                axes,
-            )
-        }
-        stepLabelDrafts = config.axes.associate { it.id to it.stepLabels.joinToString(", ") }
-        configHydrated = true
-    }
-    // Debounced persist — Today picks up step/axis labels without waiting for Save.
-    LaunchedEffect(config) {
-        if (!configHydrated || !configDirty) return@LaunchedEffect
-        kotlinx.coroutines.delay(350)
-        viewModel.saveCheckInConfig(config)
-        configDirty = false
-    }
     LaunchedEffect(Unit) {
         viewModel.loadTodaySections { prefs = it }
     }
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        SettingsCard(
-            title = stringResource(R.string.checkins_full_title),
-            description = stringResource(R.string.checkins_full_desc),
-        ) {
-            Text(stringResource(R.string.checkins_slots_edit), style = MaterialTheme.typography.titleSmall)
-            config.slots.forEachIndexed { index, slot ->
-                Row(
-                    Modifier.fillMaxWidth().padding(vertical = 4.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                ) {
-                    OutlinedTextField(
-                        value = slot.label,
-                        onValueChange = { label ->
-                            updateConfig(
-                                config.copy(
-                                    slots = config.slots.toMutableList().also {
-                                        it[index] = slot.copy(label = label)
-                                    },
-                                ),
-                            )
-                        },
-                        label = { Text(stringResource(R.string.checkins_slot_label)) },
-                        modifier = Modifier.weight(1f),
-                        singleLine = true,
-                    )
-                    TextButton(
-                        onClick = {
-                            if (config.slots.size > 1) {
-                                updateConfig(config.copy(slots = config.slots.filterIndexed { i, _ -> i != index }))
-                            }
-                        },
-                        enabled = config.slots.size > 1,
-                    ) { Text(stringResource(R.string.checkins_remove)) }
-                }
-            }
-            OutlinedButton(
-                onClick = {
-                    val id = "slot_${System.currentTimeMillis() % 100000}"
-                    updateConfig(
-                        config.copy(
-                            slots = config.slots + com.moodlife.app.domain.CheckInSlot(id, "Слот ${config.slots.size + 1}"),
-                        ),
-                    )
-                },
-                modifier = Modifier.fillMaxWidth(),
-            ) { Text(stringResource(R.string.checkins_add_slot)) }
-
-            HorizontalDivider(Modifier.padding(vertical = 12.dp))
-            Text(stringResource(R.string.checkins_axes_edit), style = MaterialTheme.typography.titleSmall)
-            config.axes.forEachIndexed { index, axis ->
-                Column(Modifier.padding(vertical = 6.dp)) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        OutlinedTextField(
-                            value = axis.label,
-                            onValueChange = { label ->
-                                updateConfig(
-                                    config.copy(
-                                        axes = config.axes.toMutableList().also {
-                                            it[index] = axis.copy(label = label)
-                                        },
-                                    ),
-                                )
-                            },
-                            label = { Text(stringResource(R.string.checkins_axis_label)) },
-                            modifier = Modifier.weight(1f),
-                            singleLine = true,
-                        )
-                        TextButton(
-                            onClick = {
-                                if (config.axes.size > 1) {
-                                    updateConfig(config.copy(axes = config.axes.filterIndexed { i, _ -> i != index }))
-                                }
-                            },
-                            enabled = config.axes.size > 1,
-                        ) { Text(stringResource(R.string.checkins_remove)) }
-                    }
-                    Row(
-                        Modifier.fillMaxWidth().padding(top = 4.dp),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    ) {
-                        OutlinedTextField(
-                            value = axis.min.toString(),
-                            onValueChange = { v ->
-                                val n = v.toIntOrNull() ?: return@OutlinedTextField
-                                updateConfig(
-                                    config.copy(
-                                        axes = config.axes.toMutableList().also {
-                                            it[index] = axis.copy(min = n.coerceIn(0, 20))
-                                        },
-                                    ),
-                                )
-                            },
-                            label = { Text("min") },
-                            modifier = Modifier.weight(1f),
-                            singleLine = true,
-                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                        )
-                        OutlinedTextField(
-                            value = axis.max.toString(),
-                            onValueChange = { v ->
-                                val n = v.toIntOrNull() ?: return@OutlinedTextField
-                                updateConfig(
-                                    config.copy(
-                                        axes = config.axes.toMutableList().also {
-                                            it[index] = axis.copy(max = n.coerceIn(axis.min + 1, 20))
-                                        },
-                                    ),
-                                )
-                            },
-                            label = { Text("max") },
-                            modifier = Modifier.weight(1f),
-                            singleLine = true,
-                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                        )
-                    }
-                    OutlinedTextField(
-                        value = stepLabelDrafts[axis.id] ?: axis.stepLabels.joinToString(", "),
-                        onValueChange = { raw ->
-                            stepLabelDrafts = stepLabelDrafts + (axis.id to raw)
-                            val labels = raw.split(',').map { it.trim() }.filter { it.isNotEmpty() }
-                            updateConfig(
-                                config.copy(
-                                    axes = config.axes.toMutableList().also {
-                                        it[index] = axis.copy(stepLabels = labels)
-                                    },
-                                ),
-                            )
-                        },
-                        label = { Text(stringResource(R.string.checkins_step_labels)) },
-                        modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
-                        supportingText = { Text(stringResource(R.string.checkins_step_labels_hint)) },
-                    )
-                }
-            }
-            OutlinedButton(
-                onClick = {
-                    val id = "custom_${System.currentTimeMillis() % 100000}"
-                    updateConfig(
-                        config.copy(
-                            axes = config.axes + com.moodlife.app.domain.CheckInAxisConfig(
-                                id = id,
-                                label = "Ось ${config.axes.size + 1}",
-                                min = 0,
-                                max = 5,
-                                stepLabels = com.moodlife.app.domain.MoodScales.INTENSITY_ANCHORS_COMPACT,
-                            ),
-                        ),
-                    )
-                },
-                modifier = Modifier.fillMaxWidth(),
-            ) { Text(stringResource(R.string.checkins_add_axis)) }
-
-            Button(
-                onClick = {
-                    configDirty = false
-                    viewModel.saveCheckInConfig(config)
-                },
-                modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
-            ) { Text(stringResource(R.string.checkins_save_config)) }
-
-            Text(
-                stringResource(R.string.checkins_presets_title),
-                style = MaterialTheme.typography.titleSmall,
-                modifier = Modifier.padding(top = 16.dp),
-            )
-            listOf(
-                "morning_day_night" to R.string.checkins_scheme_mdn,
-                "halves" to R.string.checkins_scheme_halves,
-                "hours" to R.string.checkins_scheme_hours,
-            ).forEach { (id, res) ->
-                TextButton(
-                    onClick = {
-                        val next = com.moodlife.app.domain.CheckInConfig.fromScheme(
-                            id,
-                            config.axes.map { it.id }.toSet().ifEmpty {
-                                setOf("depressed", "elevated", "anxious", "irritable")
-                            },
-                        )
-                        stepLabelDrafts = next.axes.associate { it.id to it.stepLabels.joinToString(", ") }
-                        updateConfig(next)
-                        viewModel.setCheckInScheme(id)
-                    },
-                ) { Text(stringResource(res)) }
-            }
-        }
         SettingsCard(
             title = stringResource(R.string.today_trackables_settings_title),
             description = stringResource(R.string.today_trackables_settings_desc),
@@ -1867,34 +1795,27 @@ private fun LayoutSettingsSection(viewModel: SettingsViewModel) {
                                 checked = item.enabled,
                                 onCheckedChange = {
                                     trackables = com.moodlife.app.domain.TodayTrackables.toggle(trackables, item.key)
+                                    viewModel.saveTrackables(trackables)
                                 },
                             )
                         }
                         if (item.enabled) {
-                            FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                                listOf("0-5", "0-10", "options", "yesno").forEach { scale ->
-                                    FilterChip(
-                                        selected = item.scaleType == scale,
-                                        onClick = {
-                                            trackables = com.moodlife.app.domain.TodayTrackables.setScale(
-                                                trackables,
-                                                item.key,
-                                                scale,
-                                            )
-                                        },
-                                        label = { Text(scale) },
+                            ScaleTypeChips(
+                                selected = item.scaleType,
+                                onSelect = {
+                                    trackables = com.moodlife.app.domain.TodayTrackables.setScale(
+                                        trackables,
+                                        item.key,
+                                        it,
                                     )
-                                }
-                            }
+                                    viewModel.saveTrackables(trackables)
+                                },
+                                options = TRACKABLE_SCALE_OPTIONS,
+                                showTitle = false,
+                            )
                         }
                     }
                 }
-            }
-            Button(
-                onClick = { viewModel.saveTrackables(trackables) },
-                modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
-            ) {
-                Text(stringResource(R.string.today_trackables_save))
             }
         }
         SettingsCard(
@@ -1905,7 +1826,8 @@ private fun LayoutSettingsSection(viewModel: SettingsViewModel) {
                 .filter {
                     it.id != com.moodlife.app.domain.TodaySections.Id.MOOD &&
                         it.id != com.moodlife.app.domain.TodaySections.Id.EXTRA &&
-                        it.id != com.moodlife.app.domain.TodaySections.Id.CLINICAL
+                        it.id != com.moodlife.app.domain.TodaySections.Id.CLINICAL &&
+                        it.id != com.moodlife.app.domain.TodaySections.Id.CHECKINS
                 }
                 .sortedBy { it.order }
             layoutPrefs.forEachIndexed { index, pref ->
@@ -2174,11 +2096,66 @@ private fun warningDirLabel(dir: String): String = when (dir) {
 }
 
 @Composable
-private fun symptomScaleLabel(symptom: SymptomEntity): String = when (symptom.scaleType) {
+private fun symptomScaleLabel(symptom: SymptomEntity): String = when (
+    com.moodlife.app.domain.DefaultSeedData.normalizeSymptomScale(symptom.scaleType)
+) {
     "yesno" -> stringResource(R.string.settings_scale_yesno)
-    "qual4-i" -> stringResource(R.string.settings_scale_qual4_i)
-    "qual4-lmh" -> stringResource(R.string.settings_scale_qual4_lmh)
+    "options" -> stringResource(R.string.settings_scale_options)
     "0-5" -> stringResource(R.string.settings_scale_0_5)
-    "0-10" -> stringResource(R.string.settings_scale_0_10)
-    else -> "0–${symptom.scaleMax}"
+    else -> stringResource(R.string.settings_scale_0_5)
+}
+
+/** Per record type from the last sync: how many records came in, or which error stopped it. */
+@Composable
+private fun HcDiagnostics(viewModel: SettingsViewModel) {
+    val raw by viewModel.observeHcDiagnostics().collectAsStateWithLifecycle(initialValue = null)
+    val rows = remember(raw) {
+        runCatching {
+            val o = org.json.JSONObject(raw ?: return@runCatching emptyList<Pair<String, String>>())
+            o.keys().asSequence().map { it to o.optString(it) }.toList()
+        }.getOrDefault(emptyList())
+    }
+    if (rows.isEmpty()) return
+    var open by remember { mutableStateOf(false) }
+    TextButton(onClick = { open = !open }, modifier = Modifier.padding(top = 4.dp)) {
+        Text(stringResource(R.string.settings_hc_diagnostics) + if (open) " ▲" else " ▼")
+    }
+    if (open) {
+        rows.forEach { (type, value) ->
+            Text(
+                "${hcTypeLabel(type)}: $value",
+                style = MaterialTheme.typography.bodySmall,
+                color = if (value.startsWith("ошибка")) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+    }
+}
+
+private fun hcTypeLabel(type: String): String = when (type) {
+    "StepsRecord" -> "Шаги"
+    "DistanceRecord" -> "Дистанция"
+    "ExerciseSessionRecord" -> "Тренировки"
+    "ActiveCaloriesBurnedRecord" -> "Активные калории"
+    "TotalCaloriesBurnedRecord" -> "Калории всего"
+    "SleepSessionRecord" -> "Сон"
+    "WeightRecord" -> "Вес"
+    "BodyFatRecord" -> "Жир, %"
+    "HeightRecord" -> "Рост"
+    "NutritionRecord" -> "Питание"
+    "MenstruationFlowRecord" -> "Менструация (выделения)"
+    "MenstruationPeriodRecord" -> "Менструация (период)"
+    "HeartRateRecord" -> "Пульс"
+    else -> type
+}
+
+/** Result of the last import, right under the button that started it. */
+@Composable
+private fun ImportResultLine(message: String?, prefix: String) {
+    val msg = message?.takeIf { it.startsWith(prefix) } ?: return
+    Text(
+        integrationMessageText(msg),
+        style = MaterialTheme.typography.bodyMedium,
+        color = if (msg.contains("fail") || msg.contains("empty")) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary,
+        modifier = Modifier.padding(top = 6.dp),
+    )
 }

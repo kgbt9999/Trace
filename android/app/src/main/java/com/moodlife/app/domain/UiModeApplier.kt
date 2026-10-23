@@ -7,11 +7,10 @@ package com.moodlife.app.domain
 object UiModeApplier {
 
     private val advancedReveal: Set<TodaySections.Id> = setOf(
-        TodaySections.Id.EXTRA,
-        TodaySections.Id.CLINICAL,
         TodaySections.Id.CONTEXT,
         TodaySections.Id.SYMPTOMS,
         TodaySections.Id.FACTORS,
+        TodaySections.Id.CHECKINS,
     )
 
     fun applyToSectionPrefs(mode: UiMode, prefs: List<TodaySections.Pref>): List<TodaySections.Pref> {

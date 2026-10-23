@@ -144,7 +144,7 @@ fun IsoDatePickerField(
                     disabledTextColor = MaterialTheme.colorScheme.onSurface,
                     disabledLabelColor = MaterialTheme.colorScheme.onSurfaceVariant,
                     disabledTrailingIconColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                    disabledBorderColor = MaterialTheme.colorScheme.outline,
+                    disabledBorderColor = MaterialTheme.colorScheme.outlineVariant,
                 ),
             )
             Box(
