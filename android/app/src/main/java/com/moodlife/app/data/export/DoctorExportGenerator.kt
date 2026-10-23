@@ -441,7 +441,7 @@ class DoctorExportGenerator @Inject constructor(
                     val label = rowsForName.first().name
                     val unit = rowsForName.firstNotNullOfOrNull { it.unit?.takeIf { u -> u.isNotBlank() } }
                     val colorInt = LabMarkerCatalog.colorForName(label).toArgb()
-                    val color = String.format("#%06X", colorInt and 0xFFFFFF)
+                    val color = String.format(java.util.Locale.US, "#%06X", colorInt and 0xFFFFFF)
                     val pts = rowsForName.sortedBy { it.date }.map { dayTick(it.date) to it.valueNumeric!! }
                     "<div class=\"chart\" style=\"margin-top:10px\">${buildSparseLineSvg(if (unit != null) "$label, $unit" else label, pts, color, autoScale = true)}</div>"
                 }
@@ -991,7 +991,7 @@ class DoctorExportGenerator @Inject constructor(
                     }
                 if (points.isEmpty()) return@mapNotNull null
                 val colorInt = LabMarkerCatalog.colorForName(label).toArgb()
-                val color = String.format("#%06X", colorInt and 0xFFFFFF)
+                val color = String.format(java.util.Locale.US, "#%06X", colorInt and 0xFFFFFF)
                 val title = if (unit.isNotEmpty()) "$label ($unit)" else label
                 val svg = buildSparseLineSvg(title = title, points = points, color = color)
                 """<h3>${esc(title)}</h3><div class="chart">$svg</div>"""
@@ -1249,7 +1249,7 @@ class DoctorExportGenerator @Inject constructor(
             val r = (255 * t).toInt()
             val g = (220 - 140 * t).toInt()
             val b = (220 - 100 * t).toInt()
-            return String.format("#%02X%02X%02X", r, g, b)
+            return String.format(java.util.Locale.US, "#%02X%02X%02X", r, g, b)
         }
         val cells = labels.indices.joinToString("") { row ->
             val y = 28 + row * cell

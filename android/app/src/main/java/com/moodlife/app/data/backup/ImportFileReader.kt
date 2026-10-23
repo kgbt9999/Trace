@@ -24,7 +24,7 @@ object ImportFileReader {
         input.reset()
         val isZip = n == 2 && magic[0] == 'P'.code.toByte() && magic[1] == 'K'.code.toByte()
         if (!isZip) {
-            return listOf(TextFile(displayName, readLimited(input).trim().removePrefix("﻿")))
+            return listOf(TextFile(displayName, readLimited(input).trim().removePrefix("\uFEFF")))
         }
         val out = mutableListOf<TextFile>()
         ZipInputStream(input).use { zip ->
@@ -33,7 +33,7 @@ object ImportFileReader {
                 val name = entry.name
                 val lower = name.lowercase()
                 if (!entry.isDirectory && (lower.endsWith(".json") || lower.endsWith(".csv"))) {
-                    out += TextFile(name, readLimited(zip).trim().removePrefix("﻿"))
+                    out += TextFile(name, readLimited(zip).trim().removePrefix("\uFEFF"))
                 }
                 entry = zip.nextEntry
             }

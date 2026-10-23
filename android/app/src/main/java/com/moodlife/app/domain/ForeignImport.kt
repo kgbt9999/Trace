@@ -32,7 +32,7 @@ object ForeignImport {
     // ---------- detection ----------
 
     fun parse(fileName: String, text: String): Result? {
-        val t = text.trim().removePrefix("﻿")
+        val t = text.trim().removePrefix("\uFEFF")
         if (t.isEmpty()) return null
         return if (t.startsWith("{") || t.startsWith("[")) parseJson(t) else parseCsv(fileName, t)
     }

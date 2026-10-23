@@ -553,6 +553,7 @@
     <string name="settings_weather_hide_coords">Скрыть координаты</string>
     <string name="settings_crisis_call">Позвонить на телефон доверия</string>
     <string name="settings_hide">Скрыть</string>
+    <string name="settings_show_item">Показывать</string>
     <string name="settings_meds">Лекарства</string>
     <string name="settings_meds_desc">Постоянный приём — чекбоксы на неделю вперёд. Смена схемы — только ваши ручные отметки; история не затирается.</string>
     <string name="settings_meds_empty">Препаратов пока нет. Добавьте ниже.</string>

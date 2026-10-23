@@ -22,8 +22,6 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.outlined.Edit
 import androidx.compose.material.icons.outlined.Remove
-import androidx.compose.material.icons.outlined.Visibility
-import androidx.compose.material.icons.outlined.VisibilityOff
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
@@ -38,6 +36,8 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.material3.Switch
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
@@ -272,21 +272,23 @@ fun SettingsItemActions(
     onHide: (() -> Unit)? = null,
     onRestore: (() -> Unit)? = null,
 ) {
-    Row {
+    Row(verticalAlignment = Alignment.CenterVertically) {
         if (onEdit != null) {
             IconButton(onClick = onEdit) {
                 Icon(Icons.Outlined.Edit, contentDescription = stringResource(R.string.settings_edit))
             }
         }
-        if (onHide != null) {
-            IconButton(onClick = onHide) {
-                Icon(Icons.Outlined.VisibilityOff, contentDescription = stringResource(R.string.settings_hide))
-            }
-        }
-        if (onRestore != null) {
-            IconButton(onClick = onRestore) {
-                Icon(Icons.Outlined.Visibility, contentDescription = stringResource(R.string.settings_restore))
-            }
+        // A switch shows the current state; an eye icon read as "already hidden".
+        if (onHide != null || onRestore != null) {
+            val shown = onHide != null
+            val label = stringResource(R.string.settings_show_item)
+            Switch(
+                checked = shown,
+                onCheckedChange = { if (shown) onHide?.invoke() else onRestore?.invoke() },
+                modifier = Modifier
+                    .padding(start = 4.dp)
+                    .semantics { contentDescription = label },
+            )
         }
     }
 }

@@ -231,7 +231,7 @@ fun ReportsDashboardCard(
             } ?: "—"
             DashKpi(
                 stringResource(R.string.reports_kpi_avg_mood),
-                avgPolarity?.let { String.format("%+.1f", it) } ?: "—",
+                avgPolarity?.let { String.format(java.util.Locale("ru"), "%+.1f", it) } ?: "—",
                 polarityLabel,
                 Modifier.weight(1f),
             )
@@ -252,7 +252,7 @@ fun ReportsDashboardCard(
             } ?: "—"
             DashKpi(
                 stringResource(R.string.reports_kpi_avg_sleep),
-                avgSleep?.let { String.format("%.1f", it) } ?: "—",
+                avgSleep?.let { String.format(java.util.Locale("ru"), "%.1f", it) } ?: "—",
                 sleepHint,
                 Modifier.weight(1f),
             )
@@ -628,7 +628,7 @@ fun WarningSignsDashboard(
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             DashKpi(
                 stringResource(R.string.reports_kpi_avg_mood),
-                avgPolarity?.let { String.format("%+.1f", it) } ?: "—",
+                avgPolarity?.let { String.format(java.util.Locale("ru"), "%+.1f", it) } ?: "—",
                 avgPolarity?.let {
                     when {
                         it >= 1f -> stringResource(R.string.reports_kpi_mood_elevated)
@@ -660,7 +660,7 @@ fun WarningSignsDashboard(
             }
             DashKpi(
                 stringResource(R.string.reports_kpi_avg_sleep),
-                avgSleep?.let { String.format("%.1f ч", it) } ?: "—",
+                avgSleep?.let { String.format(java.util.Locale("ru"), "%.1f ч", it) } ?: "—",
                 avgSleep?.let {
                     if (it < 6f) stringResource(R.string.reports_kpi_sleep_low)
                     else stringResource(R.string.reports_kpi_sleep_ok)
@@ -772,8 +772,8 @@ fun MonthHistoryTable(
                     stringResource(
                         R.string.reports_history_row,
                         row.entryCount,
-                        row.avgPolarity?.let { String.format("%+.1f", it) } ?: "—",
-                        row.avgSleepHours?.let { String.format("%.1f", it) } ?: "—",
+                        row.avgPolarity?.let { String.format(java.util.Locale("ru"), "%+.1f", it) } ?: "—",
+                        row.avgSleepHours?.let { String.format(java.util.Locale("ru"), "%.1f", it) } ?: "—",
                     ),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
