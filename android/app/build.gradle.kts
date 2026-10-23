@@ -22,8 +22,8 @@ android {
         applicationId = "com.moodlife.app"
         minSdk = 30
         targetSdk = 36
-        versionCode = 9
-        versionName = "0.4.0"
+        versionCode = 10
+        versionName = "0.4.1"
 
         testInstrumentationRunner = "com.moodlife.app.HiltTestRunner"
         vectorDrawables { useSupportLibrary = true }
