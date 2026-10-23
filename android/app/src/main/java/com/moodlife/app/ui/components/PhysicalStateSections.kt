@@ -5,6 +5,11 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.material3.Surface
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.IntrinsicSize
+import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
@@ -104,168 +109,105 @@ fun PhysicalDateNav(
     }
 }
 
-@OptIn(ExperimentalLayoutApi::class)
+/**
+ * Physical overview: one card of tiles (sleep, activity, body, cycle) with the data-source line
+ * in [footer], then nutrition only when there is any. Period and date are chosen above it.
+ */
 @Composable
 fun PhysicalStateSections(
     summary: PhysicalAggregate?,
-    onPrevDay: (() -> Unit)? = null,
-    onNextDay: (() -> Unit)? = null,
-    onConfigureCycle: (() -> Unit)? = null,
     modifier: Modifier = Modifier,
+    /** Last known weight with its date («75,7 кг · 20 окт.»), shown when the period has none. */
+    latestWeight: String? = null,
+    footer: @Composable ColumnScope.() -> Unit = {},
 ) {
     val mood = LocalMoodColors.current
-    if (summary == null) {
-        Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            EmptyStateCard(message = stringResource(R.string.physical_empty))
-            CycleSectionCard(
-                cycleDay = null,
-                cyclePhaseLabel = null,
-                onConfigureCycle = onConfigureCycle,
-                accent = mood.cycle,
-            )
-        }
-        return
-    }
-    Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        KbjuNutritionCard(
-            summary = summary,
-            onPrevDay = onPrevDay,
-            onNextDay = onNextDay,
-        )
-
-        MoodCard(tint = MaterialTheme.colorScheme.primary) {
-            Text(
-                stringResource(R.string.physical_body_title),
-                style = MaterialTheme.typography.titleSmall,
-                fontWeight = FontWeight.SemiBold,
-                color = MaterialTheme.colorScheme.primary,
-            )
-            FlowRow(
-                Modifier.padding(top = 8.dp),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                CompactMetric(
-                    label = stringResource(R.string.physical_weight),
-                    value = summary.weightKg?.let { String.format(Locale("ru"), "%.1f кг", it) } ?: "—",
-                )
-            }
-        }
-
-        CycleSectionCard(
-            cycleDay = summary.cycleDay,
-            cyclePhaseLabel = summary.cyclePhaseLabel,
-            onConfigureCycle = onConfigureCycle,
-            accent = mood.cycle,
-        )
-
+    val ru = Locale("ru")
+    Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(12.dp)) {
         MoodCard {
-            Text(
-                stringResource(R.string.physical_activity_title),
-                style = MaterialTheme.typography.titleSmall,
-                fontWeight = FontWeight.SemiBold,
-                color = mood.energy,
-            )
-            FlowRow(
-                Modifier.padding(top = 8.dp),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                CompactMetric(
-                    label = stringResource(R.string.physical_cardio),
-                    value = summary.cardioMinutes?.let { "$it мин" } ?: "—",
-                )
-                CompactMetric(
-                    label = stringResource(R.string.physical_steps),
-                    value = summary.steps?.toString() ?: "—",
-                )
-            }
-            if (summary.period != PhysicalPeriod.DAY) {
+            if (summary == null) {
                 Text(
-                    stringResource(R.string.physical_activity_sum_note),
-                    style = MaterialTheme.typography.labelSmall,
+                    stringResource(R.string.physical_empty),
+                    style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(top = 6.dp),
                 )
+            } else {
+                GroupLabel(stringResource(R.string.physical_sleep_title), mood.sleep)
+                MetricRow(
+                    MetricTile(stringResource(R.string.physical_overview_sleep_hours), summary.sleepHours?.let { String.format(ru, "%.1f ч", it) }),
+                    MetricTile(
+                        stringResource(R.string.physical_overview_sleep_window),
+                        if (summary.bedtime != null || summary.wakeTime != null) "${summary.bedtime ?: "—"}–${summary.wakeTime ?: "—"}" else null,
+                    ),
+                    MetricTile(stringResource(R.string.physical_metric_quality), summary.sleepQuality?.toString()),
+                )
+                GroupLabel(stringResource(R.string.physical_overview_activity_body), mood.energy)
+                MetricRow(
+                    MetricTile(stringResource(R.string.physical_steps), formatIntRu(summary.steps).takeIf { summary.steps != null }),
+                    MetricTile(stringResource(R.string.physical_cardio), summary.cardioMinutes?.let { "$it мин" }),
+                    MetricTile(stringResource(R.string.physical_weight), summary.weightKg?.let { String.format(ru, "%.1f кг", it) } ?: latestWeight),
+                )
+                GroupLabel(stringResource(R.string.physical_cycle_title), mood.cycle)
+                MetricRow(
+                    MetricTile(
+                        stringResource(R.string.physical_overview_cycle),
+                        summary.cycleDay?.let { day ->
+                            listOfNotNull("День $day", summary.cyclePhaseLabel).joinToString(" · ")
+                        } ?: stringResource(R.string.physical_overview_cycle_off),
+                    ),
+                )
+                if (summary.period != PhysicalPeriod.DAY) {
+                    Text(
+                        stringResource(R.string.physical_activity_sum_note),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(top = 8.dp),
+                    )
+                }
             }
-        }
-
-        MoodCard {
-            Text(
-                stringResource(R.string.physical_sleep_title),
-                style = MaterialTheme.typography.titleSmall,
-                fontWeight = FontWeight.SemiBold,
-                color = mood.sleep,
+            HorizontalDivider(
+                color = MaterialTheme.colorScheme.outlineVariant,
+                modifier = Modifier.padding(vertical = 12.dp),
             )
-            FlowRow(
-                Modifier.padding(top = 8.dp),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                CompactMetric(
-                    label = stringResource(R.string.physical_sleep_title),
-                    value = summary.sleepHours?.let {
-                        String.format(Locale("ru"), "%.1f ч", it)
-                    } ?: "—",
-                )
-                CompactMetric(
-                    label = stringResource(R.string.physical_metric_bedtime),
-                    value = summary.bedtime ?: "—",
-                )
-                CompactMetric(
-                    label = stringResource(R.string.physical_metric_wake),
-                    value = summary.wakeTime ?: "—",
-                )
-                CompactMetric(
-                    label = stringResource(R.string.physical_metric_quality),
-                    value = summary.sleepQuality?.toString() ?: "—",
-                )
-            }
+            footer()
+        }
+        if (summary != null && (summary.hasNutrition || summary.caloriesBurned != null)) {
+            KbjuNutritionCard(summary = summary, onPrevDay = null, onNextDay = null)
         }
     }
 }
 
+private data class MetricTile(val label: String, val value: String?)
+
 @Composable
-private fun CycleSectionCard(
-    cycleDay: Int?,
-    cyclePhaseLabel: String?,
-    onConfigureCycle: (() -> Unit)?,
-    accent: Color,
-) {
-    MoodCard(tint = accent) {
-        Text(
-            stringResource(R.string.physical_cycle_title),
-            style = MaterialTheme.typography.titleSmall,
-            fontWeight = FontWeight.SemiBold,
-            color = accent,
-        )
-        if (cycleDay == null) {
-            EmptyStateCard(
-                message = stringResource(R.string.physical_cycle_empty),
-                modifier = Modifier.padding(top = 8.dp),
-            )
-        } else {
-            Text(
-                stringResource(R.string.physical_cycle_day, cycleDay),
-                style = MaterialTheme.typography.bodyLarge,
-                modifier = Modifier.padding(top = 6.dp),
-            )
-            cyclePhaseLabel?.let {
-                Text(
-                    stringResource(R.string.physical_cycle_phase, it),
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-        }
-        if (onConfigureCycle != null) {
-            OutlinedButton(
-                onClick = onConfigureCycle,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(top = 10.dp),
+private fun GroupLabel(text: String, color: Color) {
+    Row(Modifier.padding(top = 4.dp, bottom = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+        Box(Modifier.size(8.dp).clip(RoundedCornerShape(4.dp)).background(color))
+        Text(text, style = MaterialTheme.typography.labelLarge, modifier = Modifier.padding(start = 6.dp))
+    }
+}
+
+/** Equal-width tiles in one row; a missing value shows as «—». */
+@Composable
+private fun MetricRow(vararg tiles: MetricTile) {
+    Row(
+        Modifier.fillMaxWidth().height(IntrinsicSize.Min).padding(bottom = 8.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        tiles.forEach { t ->
+            Surface(
+                Modifier.weight(1f).fillMaxHeight(),
+                shape = RoundedCornerShape(10.dp),
+                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.7f),
             ) {
-                Text(stringResource(R.string.calendar_cycle_settings))
+                Column(Modifier.padding(horizontal = 10.dp, vertical = 8.dp)) {
+                    Text(t.label, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
+                    Text(
+                        t.value ?: "—",
+                        style = MaterialTheme.typography.titleSmall,
+                        color = if (t.value == null) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.onSurface,
+                    )
+                }
             }
         }
     }
@@ -488,38 +430,6 @@ private fun MacroBarColumn(
             textAlign = TextAlign.Center,
             maxLines = 1,
         )
-    }
-}
-
-@Composable
-private fun CompactMetric(
-    label: String,
-    value: String,
-    hint: String? = null,
-) {
-    androidx.compose.material3.Card(
-        modifier = Modifier.fillMaxWidth(0.48f),
-    ) {
-        Column(Modifier.padding(12.dp)) {
-            Text(
-                label,
-                style = MaterialTheme.typography.labelMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-            Text(
-                value,
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.SemiBold,
-                modifier = Modifier.padding(top = 2.dp),
-            )
-            if (hint != null) {
-                Text(
-                    hint,
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-        }
     }
 }
 

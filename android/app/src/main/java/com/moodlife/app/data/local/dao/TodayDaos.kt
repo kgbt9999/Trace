@@ -108,6 +108,9 @@ interface SymptomDao {
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun upsert(symptom: SymptomEntity)
+
+    @Query("DELETE FROM symptoms WHERE id = :id")
+    suspend fun deleteById(id: String)
 }
 
 @Dao
@@ -126,6 +129,12 @@ interface SymptomLogDao {
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun upsert(log: SymptomLogEntity)
+
+    @Query("DELETE FROM symptom_logs WHERE symptomId = :symptomId")
+    suspend fun deleteAllForSymptom(symptomId: String)
+
+    @Query("SELECT COUNT(*) FROM symptom_logs WHERE symptomId = :symptomId")
+    suspend fun countForSymptom(symptomId: String): Int
 }
 
 @Dao

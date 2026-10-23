@@ -80,9 +80,15 @@ fun BodyMeasurementsSection(
 
     CollapsibleSection(
         title = stringResource(R.string.physical_body_measures_title),
-        subtitle = stringResource(R.string.physical_body_measures_subtitle, DateUtils.formatRu(DateUtils.parseIso(formDate))),
+        // Collapsed by default; the subtitle shows the latest entry so the card is useful closed.
+        subtitle = history.maxByOrNull { it.date }?.let { last ->
+            val parts = BodyMeasurementCatalog.fields.sortedBy { if (it.id == "weight") 0 else 1 }
+                .mapNotNull { f -> f.read(last)?.let { "${f.labelRu.lowercase()} ${formatDraft(it).replace('.', ',')} ${f.unit}" } }
+                .take(2)
+            "Последний замер ${DateUtils.formatRu(DateUtils.parseIso(last.date))}: ${parts.joinToString(", ")}"
+        } ?: "Замеров пока нет",
         helpText = stringResource(R.string.physical_body_measures_disclaimer),
-        initiallyExpanded = true,
+        initiallyExpanded = false,
         modifier = modifier,
     ) {
         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -198,7 +204,14 @@ fun BodyMeasurementsSection(
                         Text(group.title, style = MaterialTheme.typography.titleSmall)
                     }
                     group.readings.forEach { r ->
-                        DateReadingRow(isoDate = r.date, reading = r.value, note = r.note, onClick = { formDate = r.date })
+                        DateReadingRow(
+                            isoDate = r.date,
+                            reading = r.value,
+                            note = r.note,
+                            onClick = { formDate = r.date },
+                            deleteLabel = "${group.label} ${r.value}",
+                            onDelete = r.fieldId?.let { id -> { onSaveField(r.date, id, null) } },
+                        )
                     }
                 }
             }
@@ -284,8 +297,9 @@ private fun filterDecimal(raw: String): String {
 /** Empty field = clear that measurement for the date. */
 private fun String?.parseNumber(): Float? = this?.trim()?.takeIf { it.isNotEmpty() }?.toFloatOrNull()
 
-private data class BodyReading(val date: String, val value: String, val note: String? = null)
-private data class BodyReadingGroup(val title: String, val color: androidx.compose.ui.graphics.Color, val readings: List<BodyReading>)
+/** [fieldId] is null for Health Connect readings, which are removed in the app that wrote them. */
+private data class BodyReading(val date: String, val value: String, val note: String? = null, val fieldId: String? = null)
+private data class BodyReadingGroup(val label: String, val title: String, val color: androidx.compose.ui.graphics.Color, val readings: List<BodyReading>)
 
 /**
  * One column per parameter: a heading, then "date — value" rows, newest first. Weight comes
@@ -299,7 +313,7 @@ private fun bodyReadingsByField(
         .sortedBy { if (it.labelRu.startsWith("Вес")) 0 else 1 }
         .mapNotNull { f ->
             val readings = history.mapNotNull { row ->
-                f.read(row)?.let { BodyReading(row.date, "${formatDraft(it).replace('.', ',')} ${f.unit}") }
+                f.read(row)?.let { BodyReading(row.date, "${formatDraft(it).replace('.', ',')} ${f.unit}", fieldId = f.id) }
             }.toMutableList()
             if (f.labelRu.startsWith("Вес")) {
                 val manualDates = readings.map { it.date }.toSet()
@@ -308,5 +322,5 @@ private fun bodyReadingsByField(
                 }
             }
             readings.takeIf { it.isNotEmpty() }
-                ?.let { BodyReadingGroup("${f.labelRu}, ${f.unit}", f.chartColor, it.sortedByDescending { r -> r.date }) }
+                ?.let { BodyReadingGroup(f.labelRu, "${f.labelRu}, ${f.unit}", f.chartColor, it.sortedByDescending { r -> r.date }) }
         }

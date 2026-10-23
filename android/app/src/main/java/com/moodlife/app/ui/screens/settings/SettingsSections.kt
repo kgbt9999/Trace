@@ -206,7 +206,15 @@ private fun SymptomsSettingsSection(state: SettingsUiState, viewModel: SettingsV
                         title = symptom.name,
                         leadingColor = parseCssColor(symptom.color),
                         trailing = {
-                            SettingsItemActions(onRestore = { viewModel.restoreSymptom(symptom) })
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                DeleteCatalogItemButton(
+                                    name = symptom.name,
+                                    marksText = R.string.settings_item_delete_marks_symptom,
+                                    countMarks = { viewModel.symptomMarks(symptom) },
+                                    onDelete = { viewModel.deleteSymptom(symptom) },
+                                )
+                                SettingsItemActions(onRestore = { viewModel.restoreSymptom(symptom) })
+                            }
                         },
                     )
                 }
@@ -412,7 +420,17 @@ private fun FactorsSettingsSection(state: SettingsUiState, viewModel: SettingsVi
                 archived.forEach { factor ->
                     SettingsListRow(
                         title = factor.name,
-                        trailing = { SettingsItemActions(onRestore = { viewModel.restoreFactor(factor) }) },
+                        trailing = {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                DeleteCatalogItemButton(
+                                    name = factor.name,
+                                    marksText = R.string.settings_item_delete_marks_factor,
+                                    countMarks = { viewModel.factorMarks(factor) },
+                                    onDelete = { viewModel.deleteFactor(factor) },
+                                )
+                                SettingsItemActions(onRestore = { viewModel.restoreFactor(factor) })
+                            }
+                        },
                     )
                 }
             }
@@ -564,7 +582,17 @@ private fun WarningsSettingsSection(state: SettingsUiState, viewModel: SettingsV
                 archived.forEach { sign ->
                     SettingsListRow(
                         title = sign.name,
-                        trailing = { SettingsItemActions(onRestore = { viewModel.restoreWarning(sign) }) },
+                        trailing = {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                DeleteCatalogItemButton(
+                                    name = sign.name,
+                                    marksText = R.string.settings_item_delete_marks_warning,
+                                    countMarks = { viewModel.warningMarks(sign) },
+                                    onDelete = { viewModel.deleteWarning(sign) },
+                                )
+                                SettingsItemActions(onRestore = { viewModel.restoreWarning(sign) })
+                            }
+                        },
                     )
                 }
             }
@@ -728,6 +756,42 @@ private fun MedsSettingsSection(state: SettingsUiState, viewModel: SettingsViewM
                 }
             }
         }
+    }
+}
+
+/**
+ * Deletes a hidden symptom, trigger or early sign for good, after a confirmation that names it and
+ * says how many diary marks go with it. Restoring stays the choice when the history matters.
+ */
+@Composable
+private fun DeleteCatalogItemButton(
+    name: String,
+    marksText: Int,
+    countMarks: suspend () -> Int,
+    onDelete: () -> Unit,
+) {
+    var confirm by remember { mutableStateOf(false) }
+    var marks by remember { mutableStateOf<Int?>(null) }
+    LaunchedEffect(confirm) { if (confirm) marks = countMarks() }
+    IconButton(onClick = { confirm = true }) {
+        Icon(
+            Icons.Outlined.Delete,
+            contentDescription = stringResource(R.string.settings_item_delete_cd, name),
+            tint = MaterialTheme.colorScheme.error,
+        )
+    }
+    if (confirm) {
+        AlertDialog(
+            onDismissRequest = { confirm = false },
+            title = { Text(stringResource(R.string.settings_item_delete_title, name)) },
+            text = { Text(stringResource(marksText, marks ?: 0)) },
+            confirmButton = {
+                TextButton(onClick = { onDelete(); confirm = false }) {
+                    Text(stringResource(R.string.settings_item_delete_confirm), color = MaterialTheme.colorScheme.error)
+                }
+            },
+            dismissButton = { TextButton(onClick = { confirm = false }) { Text(stringResource(android.R.string.cancel)) } },
+        )
     }
 }
 

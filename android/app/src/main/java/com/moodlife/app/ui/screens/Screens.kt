@@ -1100,6 +1100,28 @@ private fun TodayClinicalBanners(state: com.moodlife.app.ui.screens.today.TodayU
             },
         )
     }
+    // Kraepelin's mixed forms: mood, thinking and activity pointing different ways today.
+    val form = com.moodlife.app.domain.MixedStateForms.match(
+        com.moodlife.app.domain.MixedStateForms.axes(
+            depressed = state.depressed,
+            elevated = state.elevated,
+            energy = state.energy,
+            concentration = state.concentration,
+            marked = state.markedAxes,
+            symptoms = state.symptoms.map { com.moodlife.app.domain.MixedStateForms.Symptom(it.name, it.severity, it.scaleMax) },
+        ),
+    )
+    if (form != null) {
+        fun arrow(up: Boolean) = if (up) "↑ выше" else "↓ ниже"
+        Spacer(Modifier.height(8.dp))
+        AlertBanner(
+            title = "По отметкам похоже на «${form.name}»",
+            message = "Настроение ${arrow(form.mood)}, мысли ${arrow(form.thoughts)}, активность ${arrow(form.activity)}. " +
+                form.description + " Это смешанное состояние по классификации Крепелина — подсказка, а не диагноз. " +
+                "Такие состояния — повод связаться с врачом раньше. Подробнее: «?» вверху → «Смешанные состояния».",
+            color = mood.safety,
+        )
+    }
     val mixed = ClinicalAlerts.detectMixed(state.depressed, state.elevated)
     if (mixed != null && (state.moodEntryId == null || state.episodePhase != "mixed")) {
         Spacer(Modifier.height(8.dp))

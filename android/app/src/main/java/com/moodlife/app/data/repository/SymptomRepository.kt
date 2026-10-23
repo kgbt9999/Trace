@@ -165,4 +165,12 @@ class SymptomRepository @Inject constructor(
             ),
         )
     }
+
+    suspend fun markCount(symptomId: String): Int = symptomLogDao.countForSymptom(symptomId)
+
+    /** Removes a symptom and its marks from every day. Hiding keeps them instead. */
+    suspend fun deleteCompletely(symptomId: String) {
+        symptomLogDao.deleteAllForSymptom(symptomId)
+        symptomDao.deleteById(symptomId)
+    }
 }

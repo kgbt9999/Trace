@@ -17,6 +17,7 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
@@ -86,61 +87,36 @@ fun PhysicalScreen(
             )
         }
 
-        MoodCard(
+        // One period control for everything below it.
+        PhysicalPeriodToggles(
+            selected = state.period,
+            onSelect = viewModel::setPeriod,
             modifier = Modifier.padding(top = 8.dp),
-            tint = MaterialTheme.colorScheme.primary.copy(alpha = 0.10f),
-        ) {
-            Text(
-                stringResource(R.string.physical_tracking_card_title),
-                style = MaterialTheme.typography.titleSmall,
-            )
-            Text(
-                stringResource(R.string.physical_tracking_card_hint),
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(top = 4.dp, bottom = 8.dp),
-            )
-            Row(
-                Modifier.fillMaxWidth().heightIn(min = 48.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Text(
-                    stringResource(R.string.settings_body_measurements_enable),
-                    Modifier.weight(1f),
-                    style = MaterialTheme.typography.bodyMedium,
-                )
-                Switch(
-                    checked = state.bodyMeasurementsEnabled,
-                    onCheckedChange = viewModel::setBodyMeasurementsEnabled,
-                )
+        )
+        PhysicalDateNav(
+            label = state.rangeLabel,
+            onPrev = viewModel::prevPeriod,
+            onNext = viewModel::nextPeriod,
+        )
+
+        val latestWeight = remember(state.bodyMeasurementHistory, state.chartHcDays) {
+            val manual = state.bodyMeasurementHistory.filter { it.weightKg != null }.map { it.date to it.weightKg!! }
+            val hc = state.chartHcDays.filter { it.kind == "weight" && it.weightKg != null }.map { it.date to it.weightKg!! }
+            (manual + hc).maxByOrNull { it.first }?.let { (date, kg) ->
+                val d = com.moodlife.app.util.DateUtils.parseIso(date)
+                String.format(java.util.Locale("ru"), "%.1f кг · %d.%02d", kg, d.dayOfMonth, d.monthValue)
             }
-            Row(
-                Modifier.fillMaxWidth().heightIn(min = 48.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Text(
-                    stringResource(R.string.settings_lab_results_enable),
-                    Modifier.weight(1f),
-                    style = MaterialTheme.typography.bodyMedium,
-                )
-                Switch(
-                    checked = state.labResultsEnabled,
-                    onCheckedChange = viewModel::setLabResultsEnabled,
-                )
-            }
+        }
+        PhysicalStateSections(summary = state.summary, latestWeight = latestWeight) {
+            HealthConnectLine(
+                state = state,
+                onOpenHc = viewModel::openHealthConnect,
+                onRequest = { hcLauncher.launch(viewModel.hcPermissions) },
+                onSync = viewModel::sync,
+            )
         }
 
-        if (state.labResultsEnabled) {
-            Spacer(Modifier.height(12.dp))
-            LabResultsSection(
-                entryDate = state.anchorDate,
-                history = state.labResultHistory,
-                onSaveEntry = { name, value, unit, date, clinic, id ->
-                    viewModel.saveLabEntry(name, value, unit, date, clinic, id)
-                },
-                onDeleteEntry = viewModel::deleteLabEntry,
-            )
-        }
+        // Entry blocks start collapsed: the overview stays on screen, the forms open on demand.
         if (state.bodyMeasurementsEnabled) {
             Spacer(Modifier.height(12.dp))
             val bodyChartsVisible by viewModel.bodyChartsVisible.collectAsStateWithLifecycle()
@@ -155,109 +131,81 @@ fun PhysicalScreen(
                 onDeleteDate = viewModel::deleteBodyMeasurementDate,
             )
         }
+        if (state.labResultsEnabled) {
+            Spacer(Modifier.height(12.dp))
+            LabResultsSection(
+                entryDate = state.anchorDate,
+                history = state.labResultHistory,
+                onSaveEntry = { name, value, unit, date, clinic, id ->
+                    viewModel.saveLabEntry(name, value, unit, date, clinic, id)
+                },
+                onDeleteEntry = viewModel::deleteLabEntry,
+            )
+        }
 
         MoodCard(modifier = Modifier.padding(top = 12.dp)) {
-            Text(
-                stringResource(R.string.physical_tab_hint),
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-            PhysicalPeriodToggles(
-                selected = state.period,
-                onSelect = viewModel::setPeriod,
-                modifier = Modifier.padding(top = 10.dp),
-            )
-            if (state.period != com.moodlife.app.domain.PhysicalPeriod.DAY) {
-                PhysicalDateNav(
-                    label = state.rangeLabel,
-                    onPrev = viewModel::prevPeriod,
-                    onNext = viewModel::nextPeriod,
-                    modifier = Modifier.padding(top = 4.dp),
-                )
-            }
-            when {
-                !state.available -> {
-                    Text(
-                        stringResource(R.string.physical_hc_missing),
-                        style = MaterialTheme.typography.bodyMedium,
-                        modifier = Modifier.padding(top = 10.dp),
-                    )
-                    OutlinedButton(
-                        onClick = viewModel::openHealthConnect,
-                        modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
-                    ) {
-                        Text(stringResource(R.string.physical_open_hc))
-                    }
-                }
-                !state.hasPermissions -> {
-                    Text(
-                        stringResource(R.string.physical_hc_need_perm),
-                        style = MaterialTheme.typography.bodyMedium,
-                        modifier = Modifier.padding(top = 10.dp),
-                    )
-                    FilledTonalButton(
-                        onClick = { hcLauncher.launch(viewModel.hcPermissions) },
-                        modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
-                    ) {
-                        Text(stringResource(R.string.physical_request_perm))
-                    }
-                }
-                else -> {
-                    if (state.grantedCount < state.requiredCount) {
-                        Text(
-                            stringResource(
-                                R.string.physical_partial_perms,
-                                state.grantedCount,
-                                state.requiredCount,
-                            ),
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.padding(top = 8.dp),
-                        )
-                        OutlinedButton(
-                            onClick = { hcLauncher.launch(viewModel.hcPermissions) },
-                            modifier = Modifier.fillMaxWidth().padding(top = 6.dp),
-                        ) {
-                            Text(stringResource(R.string.settings_hc_request_more))
-                        }
-                    }
-                    state.lastSyncLabel?.let { label ->
-                        Text(
-                            stringResource(R.string.physical_last_sync, label, state.lastRows),
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.padding(top = 8.dp),
-                        )
-                    }
-                    FilledTonalButton(
-                        onClick = viewModel::sync,
-                        enabled = !state.syncing,
-                        modifier = Modifier.fillMaxWidth().padding(top = 10.dp),
-                    ) {
-                        Text(
-                            if (state.syncing) stringResource(R.string.physical_syncing)
-                            else stringResource(R.string.physical_sync),
-                        )
-                    }
-                }
-            }
-            state.message?.let { msg ->
-                Text(
-                    physicalMessage(msg),
-                    style = MaterialTheme.typography.bodySmall,
-                    modifier = Modifier.padding(top = 8.dp),
-                )
-            }
+            Text(stringResource(R.string.physical_sections_title), style = MaterialTheme.typography.titleSmall)
+            SwitchLine(stringResource(R.string.settings_body_measurements_enable), state.bodyMeasurementsEnabled, viewModel::setBodyMeasurementsEnabled)
+            SwitchLine(stringResource(R.string.settings_lab_results_enable), state.labResultsEnabled, viewModel::setLabResultsEnabled)
         }
-        Spacer(Modifier.height(12.dp))
-        PhysicalStateSections(
-            summary = state.summary,
-            onPrevDay = viewModel::prevPeriod,
-            onNextDay = viewModel::nextPeriod,
-        )
+        Spacer(Modifier.height(16.dp))
     }
 }
 
+@Composable
+private fun SwitchLine(label: String, checked: Boolean, onChange: (Boolean) -> Unit) {
+    Row(Modifier.fillMaxWidth().heightIn(min = 48.dp), verticalAlignment = Alignment.CenterVertically) {
+        Text(label, Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium)
+        Switch(checked = checked, onCheckedChange = onChange)
+    }
+}
+
+/** Where the numbers come from, in one line, with the action that applies right now. */
+@Composable
+private fun HealthConnectLine(
+    state: PhysicalUiState,
+    onOpenHc: () -> Unit,
+    onRequest: () -> Unit,
+    onSync: () -> Unit,
+) {
+    val muted = MaterialTheme.colorScheme.onSurfaceVariant
+    when {
+        !state.available -> {
+            Text(stringResource(R.string.physical_hc_missing), style = MaterialTheme.typography.bodySmall, color = muted)
+            OutlinedButton(onClick = onOpenHc, modifier = Modifier.fillMaxWidth().padding(top = 8.dp)) {
+                Text(stringResource(R.string.physical_open_hc))
+            }
+        }
+        !state.hasPermissions -> {
+            Text(stringResource(R.string.physical_hc_need_perm), style = MaterialTheme.typography.bodySmall, color = muted)
+            FilledTonalButton(onClick = onRequest, modifier = Modifier.fillMaxWidth().padding(top = 8.dp)) {
+                Text(stringResource(R.string.physical_request_perm))
+            }
+        }
+        else -> {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    state.lastSyncLabel?.let { stringResource(R.string.physical_last_sync, it, state.lastRows) }
+                        ?: stringResource(R.string.physical_tab_hint),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = muted,
+                    modifier = Modifier.weight(1f),
+                )
+                TextButton(onClick = onSync, enabled = !state.syncing) {
+                    Text(stringResource(if (state.syncing) R.string.physical_syncing else R.string.physical_sync_now))
+                }
+            }
+            if (state.grantedCount < state.requiredCount) {
+                TextButton(onClick = onRequest) {
+                    Text(stringResource(R.string.physical_partial_perms, state.grantedCount, state.requiredCount))
+                }
+            }
+        }
+    }
+    state.message?.let { msg ->
+        Text(physicalMessage(msg), style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(top = 4.dp))
+    }
+}
 
 @Composable
 private fun physicalMessage(code: String): String = when {

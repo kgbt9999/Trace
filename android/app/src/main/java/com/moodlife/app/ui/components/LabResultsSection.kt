@@ -92,9 +92,11 @@ fun LabResultsSection(
 
     CollapsibleSection(
         title = stringResource(R.string.physical_labs_title),
-        subtitle = stringResource(R.string.physical_labs_catalog_subtitle),
+        subtitle = history.maxByOrNull { it.date }?.let { last ->
+            "Последний: ${last.name} ${last.valueText}${last.unit?.takeIf { it.isNotBlank() }?.let { " $it" } ?: ""} · ${DateUtils.formatRu(DateUtils.parseIso(last.date))}"
+        } ?: "Результатов пока нет",
         helpText = stringResource(R.string.physical_labs_disclaimer),
-        initiallyExpanded = true,
+        initiallyExpanded = false,
         modifier = modifier,
     ) {
         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -138,6 +140,8 @@ fun LabResultsSection(
                                 reading = row.valueText + (row.unit?.takeIf { it.isNotBlank() }?.let { " $it" } ?: ""),
                                 note = row.clinic?.takeIf { it.isNotBlank() },
                                 onClick = { openEdit(row) },
+                                deleteLabel = "${row.name} ${row.valueText}",
+                                onDelete = { onDeleteEntry(row.id) },
                             )
                         }
                     }

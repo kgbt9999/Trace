@@ -881,11 +881,24 @@
     <string name="physical_body_delete_title">Удалить замеры за %1$s?</string>
     <string name="physical_body_delete_text">Будут удалены все значения этой даты: вес и обхваты. Вес из Health Connect останется — его удаляют в приложении, которое его записало. Отменить нельзя.</string>
     <string name="physical_body_delete_confirm">Удалить замеры</string>
-    <string name="physical_list_edit_hint">Нажмите дату, чтобы исправить значение или удалить замеры за этот день. Одно значение убирается, если стереть поле и сохранить.</string>
+    <string name="physical_list_edit_hint">Корзина справа удаляет одно значение. Нажмите на дату, чтобы исправить его в форме выше.</string>
     <string name="settings_med_delete_cd">Удалить «%1$s»</string>
     <string name="settings_med_delete_title">Удалить «%1$s»?</string>
     <string name="settings_med_delete_text">Препарат и все отметки приёма (дней с записями: %1$d) будут удалены из календаря и отчётов. Отменить нельзя.</string>
     <string name="settings_med_delete_hint">Если препарат просто больше не принимаете — выключите «Показывать»: история сохранится.</string>
     <string name="settings_med_delete_confirm">Удалить препарат</string>
+    <string name="settings_item_delete_cd">Удалить «%1$s» насовсем</string>
+    <string name="settings_item_delete_title">Удалить «%1$s» насовсем?</string>
+    <string name="settings_item_delete_marks_symptom">Симптом пропадёт из справочника, а его отметки (%1$d) — из всех дней дневника и отчётов. Отменить нельзя.</string>
+    <string name="settings_item_delete_marks_factor">Триггер пропадёт из справочника, а его отметки (%1$d) — из всех дней дневника и отчётов. Отменить нельзя.</string>
+    <string name="settings_item_delete_marks_warning">Признак пропадёт из справочника, а его отметки (%1$d) — из всех дней дневника и отчётов. Отменить нельзя.</string>
+    <string name="settings_item_delete_confirm">Удалить насовсем</string>
+    <string name="physical_overview_sleep_hours">Длительность</string>
+    <string name="physical_overview_sleep_window">Отбой–подъём</string>
+    <string name="physical_overview_activity_body">Активность и тело</string>
+    <string name="physical_overview_cycle">День и фаза</string>
+    <string name="physical_overview_cycle_off">не настроен</string>
+    <string name="physical_sections_title">Разделы вкладки</string>
+    <string name="physical_sync_now">Обновить</string>
 </resources>
 

@@ -328,6 +328,24 @@ class SettingsViewModel @Inject constructor(
         symptomRepository.setActive(symptom, false)
     }
 
+    suspend fun symptomMarks(symptom: SymptomEntity): Int = symptomRepository.markCount(symptom.id)
+
+    fun deleteSymptom(symptom: SymptomEntity) = viewModelScope.launch {
+        symptomRepository.deleteCompletely(symptom.id)
+    }
+
+    suspend fun factorMarks(factor: FactorEntity): Int = factorRepository.markCount(factor.id)
+
+    fun deleteFactor(factor: FactorEntity) = viewModelScope.launch {
+        factorRepository.deleteCompletely(factor.id)
+    }
+
+    suspend fun warningMarks(sign: EarlyWarningSignEntity): Int = warningSignRepository.markCount(sign.id)
+
+    fun deleteWarning(sign: EarlyWarningSignEntity) = viewModelScope.launch {
+        warningSignRepository.deleteCompletely(sign.id)
+    }
+
     fun restoreSymptom(symptom: SymptomEntity) = viewModelScope.launch {
         symptomRepository.setActive(symptom, true)
     }

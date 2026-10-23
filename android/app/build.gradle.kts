@@ -56,6 +56,11 @@ android {
             ndk {
                 abiFilters += listOf("armeabi-v7a", "arm64-v8a", "x86_64")
             }
+            // Same key as releases: once a phone has a key-rotated release, only that key can
+            // update it, so Android Studio builds must use it too to install over without wiping data.
+            if (keystorePropertiesFile.exists()) {
+                signingConfig = signingConfigs.getByName("release")
+            }
         }
         release {
             // Real phones only — fewer ABIs = less RAM during release merge
@@ -80,8 +85,8 @@ android {
         // installs *over* the debug build and keeps the diary. Debug builds of Compose apps are
         // noticeably janky; use this one on a real phone: ./gradlew installStaging
         create("staging") {
+            // Release optimizations and the release key (from initWith), plus x86_64 for the emulator.
             initWith(getByName("release"))
-            signingConfig = signingConfigs.getByName("debug")
             matchingFallbacks += listOf("release")
             // Also runs on the x86_64 emulator, so release optimizations can be checked there.
             ndk { abiFilters += listOf("x86_64") }

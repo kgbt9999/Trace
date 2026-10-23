@@ -21,46 +21,14 @@ import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import com.moodlife.app.domain.MixedStateForms
 import com.moodlife.app.ui.theme.LocalMoodColors
 
 /**
  * Psychoeducation on mixed states: Kraepelin's six forms along three axes
  * (mood, thinking, activity), with ICD codes. Reference text, not a diagnosis.
  */
-private data class MixedForm(
-    val name: String,
-    val mood: Boolean,
-    val thoughts: Boolean,
-    val activity: Boolean,
-    val description: String,
-)
-
-private val FORMS = listOf(
-    MixedForm(
-        "Депрессивная (тревожная) мания", mood = false, thoughts = true, activity = true,
-        "Тоска и пустота внутри, но мысли несутся, человек суетлив и много говорит.",
-    ),
-    MixedForm(
-        "Депрессивное возбуждение", mood = false, thoughts = false, activity = true,
-        "Мысли вязкие, на душе тревога и безнадёжность, а тело не может успокоиться: хождение, нервные движения.",
-    ),
-    MixedForm(
-        "Депрессия со скачкой мыслей", mood = false, thoughts = true, activity = false,
-        "Идей много и они быстро сменяются, но сил нет даже встать; настроение подавленное.",
-    ),
-    MixedForm(
-        "Маниакальный ступор", mood = true, thoughts = false, activity = false,
-        "Приподнятое настроение при заторможенном мышлении и почти полной неподвижности.",
-    ),
-    MixedForm(
-        "Заторможенная мания", mood = true, thoughts = true, activity = false,
-        "В голове много планов, настроение приподнятое, но действовать физически не получается.",
-    ),
-    MixedForm(
-        "Непродуктивная мания", mood = true, thoughts = false, activity = true,
-        "Энергии много, настроение приподнятое, но мысли путаются — действия хаотичные и не дают результата.",
-    ),
-)
+private val FORMS = MixedStateForms.FORMS
 
 const val MIXED_STATES_TITLE = "Смешанные состояния"
 
@@ -100,8 +68,10 @@ fun MixedStatesGuide() {
             style = MaterialTheme.typography.bodyMedium,
         )
         Text(
-            "В дневнике смешанное состояние выглядит как одновременно высокие «Спад» и «Подъём» " +
-                "или как спад вместе с ускоренными мыслями и беспокойством. Справка — не диагноз; " +
+            "На экране «Сегодня» приложение сверяет ваши отметки с этой таблицей: «Спад»/«Подъём» — " +
+                "настроение, «Как работала голова» и симптомы вроде скачки мыслей — мышление, " +
+                "«Сколько было сил» и двигательное беспокойство или упадок сил — активность. " +
+                "Если оси расходятся, вы увидите, на какую форму это похоже. Это подсказка, не диагноз; " +
                 "оценивает состояние врач.",
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
