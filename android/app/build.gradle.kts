@@ -22,8 +22,8 @@ android {
         applicationId = "com.moodlife.app"
         minSdk = 30
         targetSdk = 36
-        versionCode = 7
-        versionName = "0.6.0"
+        versionCode = 8
+        versionName = "0.6.1"
 
         testInstrumentationRunner = "com.moodlife.app.HiltTestRunner"
         vectorDrawables { useSupportLibrary = true }
@@ -169,3 +169,47 @@ dependencies {
 kotlin {
     compilerOptions { jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17) }
 }
+
+// Releases are signed with the release key plus a rotation lineage from the old debug key
+// (signing/rotation.lineage). One APK then installs on a clean phone and over every earlier
+// build — the debug-signed 0.1–0.3 releases and Android Studio installs included — keeping data.
+val signReleaseWithLineage by tasks.registering {
+    dependsOn("packageRelease")
+    doLast {
+        val lineage = rootProject.file("signing/rotation.lineage")
+        val debugKs = File(System.getProperty("user.home"), ".android/debug.keystore")
+        if (!keystorePropertiesFile.exists() || !lineage.exists() || !debugKs.exists()) {
+            logger.warn("Lineage signing skipped: keystore.properties, signing/rotation.lineage or ~/.android/debug.keystore is missing")
+            return@doLast
+        }
+        val apk = layout.buildDirectory.file("outputs/apk/release/app-release.apk").get().asFile
+        val windows = System.getProperty("os.name").lowercase().contains("windows")
+        val apksigner = android.sdkDirectory.resolve("build-tools/${android.buildToolsVersion}/apksigner" + if (windows) ".bat" else "")
+        fun run(vararg args: String) {
+            val pb = ProcessBuilder(apksigner.absolutePath, *args).redirectErrorStream(true)
+            // Passwords go through the environment, not the command line.
+            pb.environment()["TRACE_RELEASE_STORE_PASS"] = keystoreProperties["storePassword"] as String
+            pb.environment()["TRACE_RELEASE_KEY_PASS"] = keystoreProperties["keyPassword"] as String
+            val p = pb.start()
+            val out = p.inputStream.bufferedReader().readText()
+            check(p.waitFor() == 0) { "apksigner ${args.first()} failed:\n$out" }
+        }
+        run(
+            "sign",
+            "--ks", debugKs.absolutePath, "--ks-key-alias", "androiddebugkey",
+            "--ks-pass", "pass:android", "--key-pass", "pass:android",
+            "--next-signer",
+            "--ks", rootProject.file(keystoreProperties["storeFile"] as String).absolutePath,
+            "--ks-key-alias", keystoreProperties["keyAlias"] as String,
+            "--ks-pass", "env:TRACE_RELEASE_STORE_PASS", "--key-pass", "env:TRACE_RELEASE_KEY_PASS",
+            "--lineage", lineage.absolutePath,
+            // Rotate on every supported Android (minSdk 30), not only 13+ as apksigner does by default.
+            "--rotation-min-sdk-version", "28",
+            apk.absolutePath,
+        )
+        run("verify", apk.absolutePath)
+        apk.copyTo(apk.resolveSibling("Trace-${android.defaultConfig.versionName}.apk"), overwrite = true)
+        logger.lifecycle("Signed with key rotation: ${apk.resolveSibling("Trace-${android.defaultConfig.versionName}.apk")}")
+    }
+}
+tasks.matching { it.name == "assembleRelease" }.configureEach { finalizedBy(signReleaseWithLineage) }
